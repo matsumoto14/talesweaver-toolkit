@@ -18,6 +18,7 @@
 import type { DamageResult, EffectiveStats, Skill } from "./api/types";
 import { fmtInt, fmtSignedPct } from "./format";
 import type { InquiryDraft } from "./inquiry";
+// 下書きは問い合わせと同じく受け手(日本語)向けなので、表示言語で訳さない(ADR-022)。
 
 export interface MeasurementConditions {
   gameCharacterId: string;

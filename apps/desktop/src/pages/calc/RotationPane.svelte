@@ -12,6 +12,7 @@
   // チップ行は段のいちばん上に置く —— 押して下の行数が変わっても、押した場所は動かない(§00 ③)。
   import type { Rotation, RotationChoices, Skill } from "../../api/types";
   import { fmtInt, fmtNum, fmtPct } from "../../format";
+  import { t } from "../../i18n";
   import RotationChips from "../../RotationChips.svelte";
   import Icon from "../../ui/Icon.svelte";
   import Value from "../../ui/Value.svelte";
@@ -42,7 +43,7 @@
   const channelingOf = (id: string) => skills.find((s) => s.id === id)?.channeling ?? null;
   const tickNote = (id: string) => {
     const c = channelingOf(id);
-    return c === null ? "" : ` ・ 1 回 = ${fmtInt(c.ticks)} tick(${fmtNum(c.tick_seconds, 2, "s")} 毎)`;
+    return c === null ? "" : t(" ・ 1 回 = {n} tick({s} 毎)", { n: fmtInt(c.ticks), s: fmtNum(c.tick_seconds, 2, "s") });
   };
 
   /** 区画の色(§03「内訳の色」)。連打技は土台、差し込みは流れの順に並べて取る。
@@ -76,16 +77,20 @@
       list.push({
         key: `insert:${insert.skill_id}`,
         skillId: insert.skill_id,
-        name: insert.skill_name,
+        name: t(insert.skill_name),
         color: INSERT_COLORS[index % INSERT_COLORS.length],
-        role: `${fmtNum(insert.interval_seconds, 1, "s")} に 1 回`,
+        role: t("{v} に 1 回", { v: fmtNum(insert.interval_seconds, 1, "s") }),
         // 陣は「置く + 精霊の呼び直し」で 1 回(どちらの秒も Rust が返す)
         detail: insert.resummon_seconds > 0
-          ? `1 回 ${fmtNum(insert.seconds, 2, "s")}(置く ${fmtNum(insert.cast_seconds, 2, "s")} + ${insert.resummon_skill_name ?? "召喚"} ${fmtNum(insert.resummon_seconds, 2, "s")})`
-          : `1 回 ${fmtNum(insert.seconds, 2, "s")}` + tickNote(insert.skill_id)
+          ? t("1 回 {v}(置く {cast} + {resummon} {resummonS})", {
+              v: fmtNum(insert.seconds, 2, "s"), cast: fmtNum(insert.cast_seconds, 2, "s"),
+              resummon: insert.resummon_skill_name ? t(insert.resummon_skill_name) : t("召喚"),
+              resummonS: fmtNum(insert.resummon_seconds, 2, "s"),
+            })
+          : t("1 回 {v}", { v: fmtNum(insert.seconds, 2, "s") }) + tickNote(insert.skill_id)
             // 自分のダメージは 0。得は精霊の側に入る(額は精霊の鎖と合計の精霊の行)
             + (insert.summon_hit_bonus_seconds > 0
-              ? ` ・ 精霊に ${fmtNum(insert.summon_hit_bonus_seconds, 0, "s")} 追加ダメージ`
+              ? t(" ・ 精霊に {v} 追加ダメージ", { v: fmtNum(insert.summon_hit_bonus_seconds, 0, "s") })
               : ""),
         expectedDps: insert.expected_dps,
         dpsShare: insert.dps_share,
@@ -97,10 +102,10 @@
       list.push({
         key: `filler:${filler.skill_id}`,
         skillId: filler.skill_id,
-        name: filler.skill_name,
+        name: t(filler.skill_name),
         color: FILLER_COLOR,
-        role: single && single.filler_uses > 0 ? `合間に × ${fmtInt(single.filler_uses)} 回` : "連打",
-        detail: `${fmtNum(filler.uses_per_minute, 1)} 回/分 ・ 1 回 ${fmtNum(filler.seconds, 2, "s")}`
+        role: single && single.filler_uses > 0 ? t("合間に × {n} 回", { n: fmtInt(single.filler_uses) }) : t("連打"),
+        detail: t("{v} 回/分 ・ 1 回 {s}", { v: fmtNum(filler.uses_per_minute, 1), s: fmtNum(filler.seconds, 2, "s") })
           + tickNote(filler.skill_id),
         expectedDps: filler.expected_dps,
         dpsShare: filler.dps_share,
@@ -145,22 +150,22 @@
       if (seg.kind === "insert" || seg.kind === "resummon") {
         const insert = rotation.inserts[seg.slot];
         if (seg.kind === "resummon") {
-          const name = insert?.resummon_skill_name ?? "召喚";
-          return { key, kind: "resummon", pct, color: "", text: `${name} ${sec}`, title: `${name} ${sec}(精霊の呼び直し)`, uses: 0, ticked: false };
+          const name = insert?.resummon_skill_name ? t(insert.resummon_skill_name) : t("召喚");
+          return { key, kind: "resummon", pct, color: "", text: `${name} ${sec}`, title: t("{name} {sec}(精霊の呼び直し)", { name, sec }), uses: 0, ticked: false };
         }
-        const name = insert?.skill_name ?? "";
+        const name = insert?.skill_name ? t(insert.skill_name) : "";
         return {
           key, kind: "insert", pct, color: INSERT_COLORS[seg.slot % INSERT_COLORS.length],
           text: `${name} ${sec}`, title: `${name} ${sec}`, uses: 0, ticked: false,
         };
       }
       if (seg.kind === "filler") {
-        const name = rotation.filler?.skill_name ?? "";
+        const name = rotation.filler?.skill_name ? t(rotation.filler.skill_name) : "";
         const perUsePx = seg.uses > 0 ? (trackWidth * pct) / 100 / seg.uses : 0;
-        const text = `${name} × ${fmtInt(seg.uses)}(${sec})`;
+        const text = t("{name} × {n}({sec})", { name, n: fmtInt(seg.uses), sec });
         return { key, kind: "filler", pct, color: FILLER_COLOR, text, title: text, uses: seg.uses, ticked: perUsePx >= TICK_MIN_PX };
       }
-      return { key, kind: "idle", pct, color: "", text: "待ち", title: `待ち ${sec}(CT が明くのを待つ)`, uses: 0, ticked: false };
+      return { key, kind: "idle", pct, color: "", text: t("待ち"), title: t("待ち {sec}(CT が明くのを待つ)", { sec }), uses: 0, ticked: false };
     });
   });
   /** 同じ軸での召喚獣の状態(陣で不在 / 追加ダメージ中 / 攻撃中)と、状態ごとの合計秒 */
@@ -168,11 +173,11 @@
     rotation ? rotation.timeline.summon.map((s) => ({ ...s, pct: pctOf(s.seconds, rotation!.timeline.total_seconds) })) : [],
   );
   const summonTotals = $derived.by(() => {
-    const t = { present: 0, absent: 0, bonus: 0 };
-    for (const s of summonZones) t[s.state] += s.seconds;
-    return t;
+    const totals = { present: 0, absent: 0, bonus: 0 };
+    for (const s of summonZones) totals[s.state] += s.seconds;
+    return totals;
   });
-  const SUMMON_LABEL = { present: "攻撃中", absent: "不在", bonus: "追加ダメージ" } as const;
+  const SUMMON_LABEL = { present: t("攻撃中"), absent: t("不在"), bonus: t("追加ダメージ") } as const;
 
   const candidates = $derived(choices?.candidates ?? []);
   // 候補が「差し込むと DPS が下がる技」だけなら段ごと出さない(§00 ②。選ぶ意味のある技が無い)。
@@ -188,7 +193,7 @@
     <!-- 押した場所は動かない(§00 ③): チップ行は段のいちばん上。下の行数が変わっても動かない -->
     <div class="rot-pick">
       <span class="rot-title">
-        スキル回し
+        {t("スキル回し")}
         <!-- 上限は無いので「n / 候補数」を値の隣に常設する(§07)。候補が無い回しでは出さない -->
         {#if candidates.length > 0}
           <Value
@@ -208,12 +213,12 @@
         temporary
       >
         {#snippet dropHint()}
-          <p class="rot-note dim">ここの技は、差し込むと連打していたぶんが減って DPS が下がります。</p>
+          <p class="rot-note dim">{t("ここの技は、差し込むと連打していたぶんが減って DPS が下がります。")}</p>
         {/snippet}
       </RotationChips>
       {#if overridden}
-        <button type="button" class="rot-reset badge-in" title="キャラに保存した組み合わせに戻す" onclick={onReset}>
-          保存値に戻す
+        <button type="button" class="rot-reset badge-in" title={t("キャラに保存した組み合わせに戻す")} onclick={onReset}>
+          {t("保存値に戻す")}
         </button>
       {/if}
     </div>
@@ -227,7 +232,7 @@
           {#if rotation}
             <div class="rot-line">
               <span class="line-head">
-                本体のスキル回し
+                {t("本体のスキル回し")}
                 <Value class="line-total" motion={() => rotation?.timeline.total_seconds ?? 0} value={fmtNum(rotation.timeline.total_seconds, 1, "s")} />
               </span>
               <span class="track inset">
@@ -246,7 +251,7 @@
                 <!-- 精霊の帯: 同じ時間軸で、陣で不在 / 追加ダメージ中 / 攻撃中。合計の増減の出どころ -->
                 <span class="track inset spirit">
                   {#each summonZones as s (s.start_seconds)}
-                    <span class="zone {s.state}" style="width: {s.pct}%;" title="精霊 {SUMMON_LABEL[s.state]} {fmtNum(s.seconds, 1, 's')}"></span>
+                    <span class="zone {s.state}" style="width: {s.pct}%;" title={t("精霊 {state} {v}", { state: SUMMON_LABEL[s.state], v: fmtNum(s.seconds, 1, "s") })}></span>
                   {/each}
                 </span>
               {/if}
@@ -255,7 +260,7 @@
                 <span class="mark start"><Value value="0s" /></span>
                 {#if hasSummon && summonZones.length > 0}
                   <span class="mark center spirit-note num">
-                    精霊
+                    {t("精霊")}
                     {#each ["absent", "bonus", "present"] as const as state (state)}
                       {#if summonTotals[state] > 0}
                         <span class="sw {state}"></span>{SUMMON_LABEL[state]} {fmtNum(summonTotals[state], 1, "s")}
@@ -284,11 +289,11 @@
           {/each}
         </div>
         {#if rotation?.crowded}
-          <p class="rot-note dim">差し込む技だけで時間が埋まり、連打する余裕がありません(全部は CT どおりに撃てません)。</p>
+          <p class="rot-note dim">{t("差し込む技だけで時間が埋まり、連打する余裕がありません(全部は CT どおりに撃てません)。")}</p>
         {/if}
       </div>
     {:else}
-      <p class="rot-note dim">差し込む技を選ぶと、連打の合間に差し込んだときの DPS を出します。</p>
+      <p class="rot-note dim">{t("差し込む技を選ぶと、連打の合間に差し込んだときの DPS を出します。")}</p>
     {/if}
   </div>
 {/if}

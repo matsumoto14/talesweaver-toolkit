@@ -17,6 +17,7 @@
   import Value from "../../../ui/Value.svelte";
   import type { SourceId } from "../sourceId";
   import ExternalSourceList, { type ExternalSource } from "./ExternalSourceList.svelte";
+  import { t } from "../../../i18n";
 
   interface Props {
     draft: Draft;
@@ -41,7 +42,7 @@
   // (§00「要らないものを見せない」)
   const elementSourceDefs = $derived(app.elementSources);
   const elementOptions = [
-    { value: "", label: "なし" },
+    { value: "", label: t("なし") },
     ...ELEMENTS.map((e) => ({ value: e, label: ELEMENT_LABELS[e] })),
   ];
   /** 供給源が全部同じ属性ならそれが主属性。ばらけていたら "" を返す */
@@ -121,9 +122,9 @@
    * 「属性値が足りないのは登録の抜け」だと画面で分かる(Rust 側が 0 の行も返す)
    */
   const ABILITY_PART_NOTE: Partial<Record<PartSlot, string>> = {
-    helm: "月石の本体(N +5 / R +10 / L +15 / G +20)と、G- の別属性枠 +20",
-    shield_plus: "カフスのアビリティのランダム追加枠(属性 +10〜30)",
-    relic_pendant: "レリック(ペンダント)のランダム追加枠(属性 +20〜30)",
+    helm: t("月石の本体(N +5 / R +10 / L +15 / G +20)と、G- の別属性枠 +20"),
+    shield_plus: t("カフスのアビリティのランダム追加枠(属性 +10〜30)"),
+    relic_pendant: t("レリック(ペンダント)のランダム追加枠(属性 +20〜30)"),
   };
 
   /** 装備から自動で入る分(部位ごとの属性強化と、部位ごとの装備アビリティ) */
@@ -133,14 +134,14 @@
       : [
           {
             id: "equipment" as SourceId,
-            name: "装備の属性強化",
+            name: t("装備の属性強化"),
             value: elements?.equipment[activeElement] ?? 0,
             format: (v: number) => fmtSigned(v),
-            note: "1 部位 1 属性・最大 9(盾+・レリックは対象外)",
+            note: t("1 部位 1 属性・最大 9(盾+・レリックは対象外)"),
           },
           ...(elements?.ability_by_part ?? []).map((part) => ({
             id: "equipment" as SourceId,
-            name: `${PART_SLOT_LABELS[part.slot]}のアビリティ`,
+            name: t("{slot}のアビリティ", { slot: PART_SLOT_LABELS[part.slot] }),
             value: part.values[activeElement],
             format: (v: number) => fmtSigned(v),
             note: ABILITY_PART_NOTE[part.slot],
@@ -159,30 +160,30 @@
       : [
           {
             id: "lumina" as SourceId,
-            name: "ルミナの回廊",
+            name: t("ルミナの回廊"),
             value: elements?.corridor[activeElement] ?? 0,
             format: (v: number) => fmtSigned(v),
-            note: "回廊効果「全属性増加」(Lv1 ごとに全属性 +1・最大 +10)",
+            note: t("回廊効果「全属性増加」(Lv1 ごとに全属性 +1・最大 +10)"),
           },
           ...elementSourceDefs.map((def) => ({
-            name: def.name,
+            name: t(def.name),
             value:
               draft.statSources.elements[def.id] === activeElement ? def.value : 0,
             format: (v: number) => fmtSigned(v),
-            note: "主属性に選んだ属性へ乗ります(上の「主属性」で切り替え)",
+            note: t("主属性に選んだ属性へ乗ります(上の「主属性」で切り替え)"),
           })),
           {
-            name: "バフ(全属性 +15)",
+            name: t("バフ(全属性 +15)"),
             value: elements?.buff[activeElement] ?? 0,
             format: (v: number) => fmtSigned(v),
-            note: "イルミネーション祭りのドリンク・ユキダルマン族の特製ポーション・迅速の秘薬。バフタブで選びます",
+            note: t("イルミネーション祭りのドリンク・ユキダルマン族の特製ポーション・迅速の秘薬。バフタブで選びます"),
           },
         ],
   );
 </script>
 
 <div class="card">
-  <div class="card-title">主属性</div>
+  <div class="card-title">{t("主属性")}</div>
   <!-- 属性はふつう主軸スキルで決まる。無属性のときだけ「何を乗せるか」を選ばせる -->
   {#if (elementFromSkill || mainElement !== "") && !elementPickOpen}
     {@const displayedElement = (elementFromSkill && elementOverrideForSkill !== draft.mainSkillId ? skillElement : mainElement) as Element}
@@ -192,17 +193,17 @@
       >
       <span class="dim">
         {elementFromSkill && elementOverrideForSkill !== draft.mainSkillId
-          ? `— 主軸スキル「${mainSkill?.name}」で決まります`
-          : "— アンプルなどで乗せる属性"}
+          ? t("— 主軸スキル「{name}」で決まります", { name: t(mainSkill?.name ?? "") })
+          : t("— アンプルなどで乗せる属性")}
       </span>
-      <Chip class="quiet" onclick={() => (elementPickOpen = true)}>変更</Chip>
+      <Chip class="quiet" onclick={() => (elementPickOpen = true)}>{t("変更")}</Chip>
     </p>
   {:else}
     {#if skillElement === "neutral"}
-      <p class="hint dim">主軸スキルが無属性なので、アンプルなどで乗せる属性を選びます。</p>
+      <p class="hint dim">{t("主軸スキルが無属性なので、アンプルなどで乗せる属性を選びます。")}</p>
     {/if}
     <Choose
-      label="乗せる属性"
+      label={t("乗せる属性")}
       options={elementOptions}
       cols={elementOptions.length}
       tone={(v) => (v === "" ? undefined : `elem-${v}`)}
@@ -210,50 +211,52 @@
     />
   {/if}
   <p class="hint dim">
-    ペット・モンスターカード・ルーンスキルの {fmtSigned(elementSourceTotal)} をまとめて乗せます。
-    月石・カフス・レリックの属性は装備に登録したものから自動で入ります。
+    {t("ペット・モンスターカード・ルーンスキルの {v} をまとめて乗せます。 月石・カフス・レリックの属性は装備に登録したものから自動で入ります。", { v: fmtSigned(elementSourceTotal) })}
   </p>
 </div>
 
 {#if elements}
   <div class="card">
-    <div class="card-title">属性値</div>
+    <div class="card-title">{t("属性値")}</div>
     {#each shownElements as e (e)}
       <div class="element-row" class:active={e === activeElement}>
         <b class="element-picked elem-{e}">{ELEMENT_LABELS[e]}</b>
         <Value class="element-total" motion={() => elements.total[e]} value={fmtInt(elements.total[e])} />
         <span class="dim">
-          キャラ {fmtInt(elements.base[e])} + 装備 {fmtInt(elements.equipment[e])}
-          + 装備アビリティ {fmtInt(elements.ability[e])} + 主属性 {fmtInt(elements.sources[e])}
-          + 回廊 {fmtInt(elements.corridor[e])} + バフ {fmtInt(elements.buff[e])}
+          {t("キャラ {a} + 装備 {b} + 装備アビリティ {c} + 主属性 {d} + 回廊 {e} + バフ {f}", {
+            a: fmtInt(elements.base[e]), b: fmtInt(elements.equipment[e]),
+            c: fmtInt(elements.ability[e]), d: fmtInt(elements.sources[e]),
+            e: fmtInt(elements.corridor[e]), f: fmtInt(elements.buff[e]),
+          })}
         </span>
       </div>
     {:else}
-      <p class="hint dim">まだどの属性も乗っていません。</p>
+      <p class="hint dim">{t("まだどの属性も乗っていません。")}</p>
     {/each}
     {#if activeTotal > 0}
       <!-- 合計そのものより「敵に対して何 % か」が知りたい値。よくある閾値の 2 つで出す -->
       <div class="element-versus inset num">
         {#each ENEMY_THRESHOLDS as threshold (threshold)}
           <span class="versus-term">
-            <span class="dim">敵 {threshold}</span>
+            <span class="dim">{t("敵 {v}", { v: threshold })}</span>
             <b><Value motion={() => bonusPercent(activeTotal, threshold)} value={fmtSignedPct(bonusPercent(activeTotal, threshold) / 100)} /></b>
           </span>
         {/each}
       </div>
     {/if}
     <p class="hint dim">
-      与ダメージに効くのは<b>攻撃側 − 敵</b>の差で、差 +1 ごとに
-      {fmtSigned(limits.element_bonus_percent_per_point, { max: 2 }, "%")}、
-      {fmtSigned(limits.element_bonus_max / (limits.element_bonus_percent_per_point / 100))} で上限
-      {fmtSignedPct(limits.element_bonus_max)}(敵は 120 / 125 が多い)。属性値そのものの上限は
-      {fmtInt(limits.element_value_max)} です。
+      {t("与ダメージに効くのは")}<b>{t("攻撃側 − 敵")}</b>{t("の差で、差 +1 ごとに {a}、 {b} で上限 {c}(敵は 120 / 125 が多い)。属性値そのものの上限は {d} です。", {
+        a: fmtSigned(limits.element_bonus_percent_per_point, { max: 2 }, "%"),
+        b: fmtSigned(limits.element_bonus_max / (limits.element_bonus_percent_per_point / 100)),
+        c: fmtSignedPct(limits.element_bonus_max),
+        d: fmtInt(limits.element_value_max),
+      })}
     </p>
   </div>
 {/if}
 
-<ExternalSourceList rows={fromEquipment} title="装備から自動で入る分" {onOpenSource} />
-<ExternalSourceList rows={fromOthers} title="装備以外から入る分" {onOpenSource} />
+<ExternalSourceList rows={fromEquipment} title={t("装備から自動で入る分")} {onOpenSource} />
+<ExternalSourceList rows={fromOthers} title={t("装備以外から入る分")} {onOpenSource} />
 
 <style>
   .element-row {

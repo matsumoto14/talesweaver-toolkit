@@ -19,6 +19,7 @@
   } from "../../enchant";
   import { equipmentIconId, polishAmount, selectedEquipmentPartOrNeutral, selectedWeapon } from "../../equipment";
   import { fmtInt, fmtRate, fmtSigned, fmtSignedPct } from "../../format";
+  import { t } from "../../i18n";
   import {
     EQUIPMENT_STAT_KINDS, EQUIPMENT_STAT_SHORT, PART_SLOT_LABELS, PART_SLOTS,
     POLISH_ALLOWED_SLOTS, POLISH_KIND_LABELS, ULTIMATE_SKILLS, ULTIMATE_SKILL_LABELS,
@@ -83,15 +84,15 @@
   const partDisplayName = (part: EquipmentPart): string =>
     part.label
       || app.equipmentCatalog.find((i) => i.id === part.item_id)?.name
-      || (part.custom_name ? `${part.custom_name} [仮]` : `装備 ${part.id}`);
+      || (part.custom_name ? t("{name} [仮]", { name: part.custom_name }) : t("装備 {id}", { id: part.id }));
   /** 切り替え候補の「選ぶのに要る値」: 強化 Lv とアビリティ数(同名の 2 本を見分ける手がかり) */
   const partSwitchMeta = (part: EquipmentPart): string =>
-    `${part.enhance_level > 0 ? `+${part.enhance_level}` : "強化なし"} ・ アビ ${part.abilities.length}`;
+    `${part.enhance_level > 0 ? `+${part.enhance_level}` : t("強化なし")} ・ ${t("アビ {n}", { n: part.abilities.length })}`;
   const switchableSlots = $derived(
     payload ? PART_SLOTS.filter((slot) => payload.equipment.parts[slot].registered.length > 1) : [],
   );
   const equipmentHeadNote = $derived(
-    switchableSlots.length === 0 ? "切替なし" : `${switchableSlots.length} 部位で切替可`,
+    switchableSlots.length === 0 ? t("切替なし") : t("{n} 部位で切替可", { n: switchableSlots.length }),
   );
   function selectEquipmentPart(slot: PartSlot, id: number) {
     sim.edit((p) => (p.equipment.parts[slot].selected_id = id));
@@ -109,11 +110,11 @@
     // 装着中の称号が所持の外でも、外す先として行に残す
     return currentTitle && !owned.some((t) => t.id === currentTitle.id) ? [currentTitle, ...owned] : owned;
   });
-  const titleHeadNote = $derived(currentTitle?.name ?? "なし");
-  const titleNote = (t: TitleDef): string => {
-    const vals = EQUIPMENT_STAT_KINDS.filter((k) => t.values[k] !== 0).map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(t.values[k])}`);
-    if (t.attack_damage_percent > 0) vals.push(`ダメ ${fmtSigned(t.attack_damage_percent, { max: 2 }, "%")}`);
-    if (t.added_damage_percent > 0) vals.push(`追加ダメ ${fmtSigned(t.added_damage_percent, { max: 2 }, "%")}`);
+  const titleHeadNote = $derived(currentTitle ? t(currentTitle.name) : t("なし"));
+  const titleNote = (title: TitleDef): string => {
+    const vals = EQUIPMENT_STAT_KINDS.filter((k) => title.values[k] !== 0).map((k) => `${EQUIPMENT_STAT_SHORT[k]}${fmtInt(title.values[k])}`);
+    if (title.attack_damage_percent > 0) vals.push(t("ダメ {v}", { v: fmtSigned(title.attack_damage_percent, { max: 2 }, "%") }));
+    if (title.added_damage_percent > 0) vals.push(t("追加ダメ {v}", { v: fmtSigned(title.added_damage_percent, { max: 2 }, "%") }));
     return vals.join(" ") || "—";
   };
   function selectTitle(id: string | null) {
@@ -142,7 +143,7 @@
     return [...sum.entries()].map(([k, v]) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(v)}`).join(" ・ ");
   });
   const polishHeadNote = $derived(
-    polishRows.length === 0 ? "未登録" : `${polishOn ? "ON" : "OFF"} ・ ${polishTotalsLabel}`,
+    polishRows.length === 0 ? t("未登録") : `${polishOn ? "ON" : "OFF"} ・ ${polishTotalsLabel}`,
   );
   // --- 極限スキル(試し変更)。2 枠のうち何を選ぶかだけをこの画面で切り替える -----------
   // スーパーリミット・ハイパーリミットの Lv はキャラタブ(共通スキル)の設定が正。ここでは触らない。
@@ -199,9 +200,9 @@
   function ultimateChipNote(skillId: UltimateSkill): string {
     const e = ultimateEffects;
     if (!e) return "";
-    if (skillId === "scope_eye") return `クリダメ ${fmtSignedPct(e.critical_damage_rate)}`;
-    if (skillId === "full_throttle") return `中ディレイ ${fmtSignedPct(-e.actual_delay_reduction)}`;
-    return `範囲 ${fmtSigned(e.skill_range_bonus)}(火力には効きません)`;
+    if (skillId === "scope_eye") return t("クリダメ {v}", { v: fmtSignedPct(e.critical_damage_rate) });
+    if (skillId === "full_throttle") return t("中ディレイ {v}", { v: fmtSignedPct(-e.actual_delay_reduction) });
+    return t("範囲 {v}(火力には効きません)", { v: fmtSigned(e.skill_range_bonus) });
   }
 
   // --- 地力(試し変更)。装備ではなく育てて上がるもののうち、効きが大きい 3 つ -----------
@@ -239,7 +240,7 @@
     result?.trace.categories.find((c) => c.category === "awakening_damage")?.factor ?? null,
   );
   const awakeningHeadNote = $derived(
-    payload ? `覚醒 ${payload.awakening.stage} / エタ Lv${payload.awakening.eternal_level}` : "",
+    payload ? t("覚醒 {stage} / エタ Lv{lv}", { stage: payload.awakening.stage, lv: payload.awakening.eternal_level }) : "",
   );
 
   /** 正は crates/domain/src/common_skill.rs の SHARPNESS_VISION(limits 経由で引く) */
@@ -264,9 +265,9 @@
 
   /** ダメージ式に効くリンクステータス 5〜7 だけ(1〜4 は装備値、8 は追加HPなのでここでは出さない) */
   const SOUL_LINK_ROWS = [
-    { field: "critical_damage_level", label: "クリダメ", max: limits.soul_link_critical_damage_level_max },
-    { field: "final_damage_level", label: "最終ダメ", max: limits.soul_link_final_damage_level_max },
-    { field: "weapon_enhance_level", label: "武器強化", max: limits.soul_link_weapon_enhance_level_max },
+    { field: "critical_damage_level", label: t("クリダメ"), max: limits.soul_link_critical_damage_level_max },
+    { field: "final_damage_level", label: t("最終ダメ"), max: limits.soul_link_final_damage_level_max },
+    { field: "weapon_enhance_level", label: t("武器強化"), max: limits.soul_link_weapon_enhance_level_max },
   ] as const;
   type SoulLinkDamageField = (typeof SOUL_LINK_ROWS)[number]["field"];
   /** 効いている量は Rust の preview(soulLinkPreview)から引く。倍率の式をここに写経しない */
@@ -291,7 +292,7 @@
   });
   const soulLinkHeadNote = $derived(
     payload
-      ? `Lv ${SOUL_LINK_ROWS.map((r) => payload.stat_sources.soul_link[r.field]).join("/")}`
+      ? t("Lv {v}", { v: SOUL_LINK_ROWS.map((r) => payload.stat_sources.soul_link[r.field]).join("/") })
       : "",
   );
 
@@ -421,7 +422,7 @@
         <div class="sim-bar" class:active={sim.dirty}>
           <div class="sim-line">
             <span class="sim-dot" class:active={sim.dirty}></span>
-            <span class="sim-title">{sim.dirty ? "装備・スキルを試し変更中" : "装備・スキルはキャラ登録どおり"}</span>
+            <span class="sim-title">{sim.dirty ? t("装備・スキルを試し変更中") : t("装備・スキルはキャラ登録どおり")}</span>
             <!-- 差分の枠も常に確保する。出た瞬間に行が 1px 伸びて下がずれる(§09 規則 4) -->
             <span class="num sim-delta" class:on={sim.dirty} class:up={deltaPct > 0} class:down={deltaPct < 0}
             >{sim.dirty ? deltaText(deltaPct) : ""}</span>
@@ -436,7 +437,7 @@
                (実機で押した MAX ボタン自身が 11px 逃げた。§00 03 / §09 規則 1)。
                高さを確保する手も試したが、1 行の状態で下に空きが出て §00 02 を崩す。
                状態は上のタイトルと帯の色が伝えるので、ここは動かない 1 行だけ置く -->
-          <div class="sim-note-text dim">ここでの変更は保存されません。</div>
+          <div class="sim-note-text dim">{t("ここでの変更は保存されません。")}</div>
           <!-- ボタンは常に置き、登録どおりのときは隠すだけにする(§00 03 / §09 規則 1)。
                {#if} で出し入れすると、枠の min-height とボタンの実高(padding 7+7 + border 1+1
                + 行高 ≒ 33px)が食い違い、出た瞬間に 3px 伸びて**下の材料が流れる**。実機の
@@ -444,8 +445,8 @@
                ので、本物のボタンで枠を満たして構造的に一致させる。
                inert は隠しているあいだフォーカスもクリックも通さない(押せるものは見せない) -->
           <div class="sim-actions" class:idle={!sim.dirty} inert={!sim.dirty}>
-            <button type="button" class="btn" onclick={() => sim.reset()}>ぜんぶ戻す</button>
-            <button type="button" class="btn primary" disabled={sim.saving} onclick={() => sim.save()}>{sim.saving ? "保存中…" : "キャラに保存"}</button>
+            <button type="button" class="btn" onclick={() => sim.reset()}>{t("ぜんぶ戻す")}</button>
+            <button type="button" class="btn primary" disabled={sim.saving} onclick={() => sim.save()}>{sim.saving ? t("保存中…") : t("キャラに保存")}</button>
           </div>
         </div>
 
@@ -456,7 +457,7 @@
           {#each sim.changed as k (k.id)}
             <span class="sim-mark badge-in" use:changed={() => k.get(app.sim!)}>
               <span>{k.label(app.sim!, sim.saved)}</span>
-              <button type="button" class="sim-revert" title="この変更だけ戻す" onclick={() => sim.revert(k)}>✕</button>
+              <button type="button" class="sim-revert" title={t("この変更だけ戻す")} onclick={() => sim.revert(k)}>✕</button>
             </span>
           {/each}
         </div>
@@ -465,9 +466,9 @@
              押したものが流れる -->
         <div class="sim-limit" class:hit={sim.limited}>
           {#if sim.limited}
-            試し変更は同時 {SIM_LIMIT} 件までです。どれかを ✕ で戻すか、「キャラに保存」で確定してください。
+            {t("試し変更は同時 {n} 件までです。どれかを ✕ で戻すか、「キャラに保存」で確定してください。", { n: SIM_LIMIT })}
           {:else if sim.changed.length > 0}
-            同時に試せるのは {sim.changed.length} / {SIM_LIMIT} 件です。
+            {t("同時に試せるのは {a} / {b} 件です。", { a: sim.changed.length, b: SIM_LIMIT })}
           {/if}
         </div>
 
@@ -476,8 +477,8 @@
           {#snippet summary()}
             <!-- 見出しの顔。中身を代表する 1 つを置く(名前と併記なので §08 の単独表示にあたらない)。
                  画像が未収録なら破線 + ? になるだけで、幅は変わらない -->
-            <Icon kind="skill" id="scope_eye" size={20} label="極限スキル" />
-            <span class="card-title">極限スキル</span>
+            <Icon kind="skill" id="scope_eye" size={20} label={t("極限スキル")} />
+            <span class="card-title">{t("極限スキル")}</span>
             <Value class="dim small" motion={() => ultimatePickedCount} value={`${ultimatePickedCount} / ${ultimateSlotCount}`} />
           {/snippet}
           {#snippet children(open)}
@@ -491,7 +492,7 @@
                 {on}
                 tone="temp"
                 disabled={!on && ultimateFull}
-                title={!on && ultimateFull ? `${ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。` : undefined}
+                title={!on && ultimateFull ? t("{n} 枠まで選べます。ほかを外してから選んでください。", { n: ultimateSlotCount }) : undefined}
                 onToggle={() => toggleUltimate(u)}
               >
                 {#snippet icon()}<Icon kind="skill" id={u} size={20} label={ULTIMATE_SKILL_LABELS[u]} />{/snippet}
@@ -499,9 +500,9 @@
             {/each}
           </div>
           {#if ultimateFull}
-            <p class="eq-note dim badge-in">{ultimateSlotCount} 枠まで選べます。ほかを外してから選んでください。</p>
+            <p class="eq-note dim badge-in">{t("{n} 枠まで選べます。ほかを外してから選んでください。", { n: ultimateSlotCount })}</p>
           {/if}
-          <p class="eq-note dim">スーパーリミット・ハイパーリミットの Lv は<b>キャラ</b>タブ(共通スキル)の設定を使います。</p>
+          <p class="eq-note dim">{t("スーパーリミット・ハイパーリミットの Lv は")}<b>{t("キャラ")}</b>{t("タブ(共通スキル)の設定を使います。")}</p>
           {/if}
           {/snippet}
         </Disclosure>
@@ -509,17 +510,17 @@
         <!-- 覚醒・エタの意志(試し変更)。カテゴリN の倍率と、ダメージ・能力値の上限を動かす -->
         <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
-            <Icon kind="skill" id="awakening" size={20} label="覚醒・エタの意志" />
-            <span class="card-title">覚醒・エタの意志</span>
+            <Icon kind="skill" id="awakening" size={20} label={t("覚醒・エタの意志")} />
+            <span class="card-title">{t("覚醒・エタの意志")}</span>
             <Value class="dim small" value={awakeningHeadNote} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
           <div class="basics-rows">
             <div class="basics-row">
-              <span class="basics-label">エタ Lv</span>
+              <span class="basics-label">{t("エタ Lv")}</span>
               <NumberField
-                label="エタの意志 Lv"
+                label={t("エタの意志 Lv")}
                 max={limits.eternal_level_max}
                 bind:value={
                   () => payload.awakening.eternal_level,
@@ -528,10 +529,10 @@
               />
             </div>
             <div class="basics-row">
-              <span class="basics-label">節目</span>
+              <span class="basics-label">{t("節目")}</span>
               <div class="basics-seg">
                 <Choose
-                  label="エタの意志の節目"
+                  label={t("エタの意志の節目")}
                   options={eternalMilestoneOptions}
                   cols={eternalMilestoneOptions.length}
                   bind:value={
@@ -542,10 +543,10 @@
               </div>
             </div>
             <div class="basics-row">
-              <span class="basics-label">覚醒段階</span>
+              <span class="basics-label">{t("覚醒段階")}</span>
               <div class="basics-seg">
                 <Choose
-                  label="覚醒段階"
+                  label={t("覚醒段階")}
                   options={stageOptionsNow}
                   cols={stageOptionsNow.length}
                   bind:value={
@@ -559,13 +560,13 @@
                    隣の段の幅が動く**ので、置いたまま押せなくする -->
               <Chip class="quiet" on={stageAllOpen} disabled={stageIsLow}
  onToggle={() => (stageAllOpen = !stageAllOpen)}
-              >{stageAllOpen || stageIsLow ? "4 / 5 だけ" : "それ以外"}</Chip>
+              >{stageAllOpen || stageIsLow ? t("4 / 5 だけ") : t("それ以外")}</Chip>
             </div>
           </div>
           <p class="eq-note dim">
-            覚醒ダメージ <b><Value value={String(awakeningFactor)}>{#snippet children()}{awakeningFactor !== null ? fmtRate(awakeningFactor) : "—"}{/snippet}</Value></b>
-            ・ ダメージ上限 <b><Value motion={() => result?.damage_cap ?? null} value={result ? fmtInt(result.damage_cap) : "—"} delta={{}} /></b>。
-            節目(20 / 40 / 60 / 80 / 90)を超えると上限の伸びが一段上がります。Lv を入れると覚醒は 5 になります。
+            {t("覚醒ダメージ")} <b><Value value={String(awakeningFactor)}>{#snippet children()}{awakeningFactor !== null ? fmtRate(awakeningFactor) : "—"}{/snippet}</Value></b>
+            {t("・ ダメージ上限")} <b><Value motion={() => result?.damage_cap ?? null} value={result ? fmtInt(result.damage_cap) : "—"} delta={{}} /></b>{t("。")}
+            {t("節目(20 / 40 / 60 / 80 / 90)を超えると上限の伸びが一段上がります。Lv を入れると覚醒は 5 になります。")}
           </p>
           {/if}
           {/snippet}
@@ -574,11 +575,11 @@
         <!-- シャープネスビジョン(試し変更)。§5「新-割合」の割合追加ダメージ -->
         <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
-            <Icon kind="skill" id="sharpness_vision" size={20} label="シャープネスビジョン" />
-            <span class="card-title">シャープネスビジョン</span>
+            <Icon kind="skill" id="sharpness_vision" size={20} label={t("シャープネスビジョン")} />
+            <span class="card-title">{t("シャープネスビジョン")}</span>
             <Value
               class="dim small" motion={() => sharpnessRatePercent}
-              value={sharpnessLevel === 0 ? "未習得" : `Lv${sharpnessLevel} ${fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}`}
+              value={sharpnessLevel === 0 ? t("未習得") : t("Lv{lv} {v}", { lv: sharpnessLevel, v: fmtSigned(sharpnessRatePercent, { max: 2 }, "%") })}
             />
           {/snippet}
           {#snippet children(open)}
@@ -590,7 +591,7 @@
               <span class="basics-label">Lv</span>
               <div class="basics-seg">
                 <Choose
-                  label="シャープネスビジョン Lv"
+                  label={t("シャープネスビジョン Lv")}
                   options={sharpnessOptionsNow}
                   cols={sharpnessOptionsNow.length}
                   bind:value={
@@ -606,15 +607,15 @@
                    隣のチップが動く**ので、置いたまま押せなくする(§09 規則 4) -->
               <Chip class="quiet" on={sharpnessAllOpen} disabled={sharpnessIsLow}
  onToggle={() => (sharpnessAllOpen = !sharpnessAllOpen)}
-              >{sharpnessAllOpen || sharpnessIsLow ? "5 以上" : "1〜4"}</Chip>
+              >{sharpnessAllOpen || sharpnessIsLow ? t("5 以上") : t("1〜4")}</Chip>
               <Chip class="quiet"
  disabled={sharpnessLevel === 0}
  onclick={() => sim.edit((p) => (p.common_skills.sharpness_vision_level = 0))}
-              >未習得</Chip>
+              >{t("未習得")}</Chip>
             </div>
           </div>
           <p class="eq-note dim">
-            割合追加ダメージは<b>合計ダメージ</b>に乗ります(1 発ごとではないので、表記ダメージ = この一発は動きません)。
+            {t("割合追加ダメージは")}<b>{t("合計ダメージ")}</b>{t("に乗ります(1 発ごとではないので、表記ダメージ = この一発は動きません)。")}
           </p>
           {/if}
           {/snippet}
@@ -623,8 +624,8 @@
         <!-- ソウルリンク(試し変更)。ダメージ式に効くリンクステータス 5〜7 だけ -->
         <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
-            <Icon kind="skill" id="soul_link" size={20} label="ソウルリンク" />
-            <span class="card-title">ソウルリンク</span>
+            <Icon kind="skill" id="soul_link" size={20} label={t("ソウルリンク")} />
+            <span class="card-title">{t("ソウルリンク")}</span>
             <Value class="dim small" value={soulLinkHeadNote} />
           {/snippet}
           {#snippet children(open)}
@@ -634,7 +635,7 @@
               <div class="basics-row">
                 <span class="basics-label">{row.label}</span>
                 <NumberField
-                  label="{row.label}リンクステータス Lv"
+                  label={t("{label}リンクステータス Lv", { label: row.label })}
                   max={row.max}
                   bind:value={
                     () => payload.stat_sources.soul_link[row.field],
@@ -646,8 +647,10 @@
             {/each}
           </div>
           <p class="eq-note dim">
-            クリダメはクリティカル時だけ、最終ダメージはカテゴリL の上限{finalDamageCapPercent !== null ? ` ${fmtSigned(finalDamageCapPercent, { max: 2 }, "%")}` : ""}まで。
-            武器強化は追加固定ダメージに掛かるので、<b>合計ダメージ</b>だけが動きます。
+            {t("クリダメはクリティカル時だけ、最終ダメージはカテゴリL の上限{cap}まで。", {
+              cap: finalDamageCapPercent !== null ? ` ${fmtSigned(finalDamageCapPercent, { max: 2 }, "%")}` : "",
+            })}
+            {t("武器強化は追加固定ダメージに掛かるので、")}<b>{t("合計ダメージ")}</b>{t("だけが動きます。")}
           </p>
           {/if}
           {/snippet}
@@ -657,15 +660,15 @@
         <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <!-- 見出しの顔は装着中の武器(名前と併記) -->
-            <Icon kind="equipment" id={equipmentIconId(selectedWeapon(payload).item_id, app.equipmentCatalog)} size={20} label="装備の切り替え" />
-            <span class="card-title">装備の切り替え</span>
+            <Icon kind="equipment" id={equipmentIconId(selectedWeapon(payload).item_id, app.equipmentCatalog)} size={20} label={t("装備の切り替え")} />
+            <span class="card-title">{t("装備の切り替え")}</span>
             <Value class="dim small" value={equipmentHeadNote} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
           {#if switchableSlots.length === 0}
             <button type="button" class="source-jump" onclick={() => focusCharacterSource("equipment")}>
-              <span class="dim small">2 件以上登録した部位がありません。登録はキャラタブの装備ペイン</span>
+              <span class="dim small">{t("2 件以上登録した部位がありません。登録はキャラタブの装備ペイン")}</span>
               <span class="chev dim">›</span>
             </button>
           {:else}
@@ -676,7 +679,7 @@
                   <span class="enchant-row-label">{PART_SLOT_LABELS[slot]}</span>
                   <div class="switch-picker">
                     <Picker
-                      label="{PART_SLOT_LABELS[slot]}に装着する登録"
+                      label={t("{slot}に装着する登録", { slot: PART_SLOT_LABELS[slot] })}
                       options={list.registered.map((part) => ({
                         value: String(part.id), name: partDisplayName(part), meta: partSwitchMeta(part),
                         iconId: equipmentIconId(part.item_id, app.equipmentCatalog), iconKind: "equipment" as const,
@@ -688,7 +691,7 @@
               {/each}
             </div>
           {/if}
-          <p class="eq-note dim">装着中の装備を登録済みの別の 1 件に替えます。登録・編集はキャラタブの装備ペイン。</p>
+          <p class="eq-note dim">{t("装着中の装備を登録済みの別の 1 件に替えます。登録・編集はキャラタブの装備ペイン。")}</p>
           {/if}
           {/snippet}
         </Disclosure>
@@ -697,17 +700,17 @@
         <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <!-- †エクリプスウィング(体)。エンチャントは装備を伸ばす話なので、その顔として置く -->
-            <Icon kind="equipment" id="wiki-af444f9bf21d" size={20} label="エンチャントの伸びしろ" />
-            <span class="card-title">エンチャントの伸びしろ</span>
+            <Icon kind="equipment" id="wiki-af444f9bf21d" size={20} label={t("エンチャントの伸びしろ")} />
+            <span class="card-title">{t("エンチャントの伸びしろ")}</span>
             <!-- 見出しの注記は件数 1 つだけ。アイコンぶん幅が減っていて、主軸を並べると
                  右端の件数が切れる(§00 05: 読めない文字は出さない)。主軸は中に出す -->
-            <Value class="dim small" motion={() => visibleEnchantRows.length} value={`${visibleEnchantRows.length} 件`} />
+            <Value class="dim small" motion={() => visibleEnchantRows.length} value={t("{n} 件", { n: visibleEnchantRows.length })} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
-            <p class="enchant-dep dim">主軸: {enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・") || "—"}</p>
+            <p class="enchant-dep dim">{t("主軸: {v}", { v: enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・") || "—" })}</p>
           {#if visibleEnchantRows.length === 0}
-            <p class="eq-note dim">主軸スキルの依存ステを盛れる部位がないか、すでに上限です。</p>
+            <p class="eq-note dim">{t("主軸スキルの依存ステを盛れる部位がないか、すでに上限です。")}</p>
           {:else}
             <div class="enchant-rows">
               {#each visibleEnchantRows as { row, keys } (row.slot)}
@@ -715,7 +718,7 @@
                   <span class="enchant-row-label">{ENCHANT_SLOT_LABELS[row.slot]}</span>
                   {#if row.capUnknown}
                     <button type="button" class="source-jump" onclick={() => focusCharacterSource("equipment", row.slot)}>
-                      <span class="badge unknown" title="カタログ外(カスタム名)装備でエンチャント上限が未入力です">上限未入力</span>
+                      <span class="badge unknown" title={t("カタログ外(カスタム名)装備でエンチャント上限が未入力です")}>{t("上限未入力")}</span>
                       <span class="chev dim">›</span>
                     </button>
                   {:else}
@@ -726,7 +729,7 @@
                       <div class="enchant-stat">
                         <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
                         <NumberField
-                          label="{EQUIPMENT_STAT_SHORT[k]}のエンチャント"
+                          label={t("{stat}のエンチャント", { stat: EQUIPMENT_STAT_SHORT[k] })}
                           max={cap}
                           bind:value={
                             () => row.part.enchant[k],
@@ -735,7 +738,7 @@
                         />
                         <Value
                           class="enchant-gain" tone={(gain ?? 0) > 0 ? "up" : null} motion={() => gain ?? null}
-                          value={gain !== undefined ? `MAX で ${fmtSigned(gain, { max: 2 }, "%")}` : ""}
+                          value={gain !== undefined ? t("MAX で {v}", { v: fmtSigned(gain, { max: 2 }, "%") }) : ""}
                         />
                       </div>
                     {/each}
@@ -754,14 +757,14 @@
         <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
             <!-- 職人の装備研磨剤(クライアント資産 item 1044778)。バフ「装備研磨」と同じ絵 -->
-            <Icon kind="buff" id="equipment_polish" size={20} label="研磨" />
-            <span class="card-title">研磨</span>
+            <Icon kind="buff" id="equipment_polish" size={20} label={t("研磨")} />
+            <span class="card-title">{t("研磨")}</span>
             <Value class="dim small" value={polishHeadNote} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
           <ToggleRow
-            name="研磨を効かせる"
+            name={t("研磨を効かせる")}
             on={polishOn}
             tone="temp"
             disabled={polishDef === null}
@@ -769,8 +772,8 @@
           />
           {#if polishRows.length === 0}
             <button type="button" class="source-jump" onclick={() => focusCharacterSource("polish")}>
-              <span class="badge unknown">未登録</span>
-              <span class="dim small">登録はキャラタブの研磨ペイン</span>
+              <span class="badge unknown">{t("未登録")}</span>
+              <span class="dim small">{t("登録はキャラタブの研磨ペイン")}</span>
               <span class="chev dim">›</span>
             </button>
           {:else}
@@ -786,7 +789,7 @@
             </div>
           {/if}
           <p class="eq-note dim">
-            研磨は<b>基本能力値</b>に合流します。記録の追加・変更はキャラタブの研磨ペイン。ON/OFF はバフ「装備研磨」と同じで、この計算だけの試し変更です(残すなら「試し変更を保存」)。
+            {t("研磨は")}<b>{t("基本能力値")}</b>{t("に合流します。記録の追加・変更はキャラタブの研磨ペイン。ON/OFF はバフ「装備研磨」と同じで、この計算だけの試し変更です(残すなら「試し変更を保存」)。")}
           </p>
           {/if}
           {/snippet}
@@ -796,36 +799,36 @@
         <!-- 称号(試し変更)。所持している称号(キャラタブの称号ペインで登録)を並べる -->
         <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
-            <Icon kind="title" id="title" size={20} label="称号" />
-            <span class="card-title">称号</span>
+            <Icon kind="title" id="title" size={20} label={t("称号")} />
+            <span class="card-title">{t("称号")}</span>
             <span class="dim small title-head-note" use:changed={() => titleHeadNote}>{titleHeadNote}</span>
           {/snippet}
           {#snippet children(open)}
           {#if open}
           {#if titleChoices.length === 0}
             <button type="button" class="source-jump" onclick={() => focusCharacterSource("title")}>
-              <span class="badge unknown">未登録</span>
-              <span class="dim small">所持称号はキャラタブの称号ペインで登録</span>
+              <span class="badge unknown">{t("未登録")}</span>
+              <span class="dim small">{t("所持称号はキャラタブの称号ペインで登録")}</span>
               <span class="chev dim">›</span>
             </button>
           {:else}
             <!-- 所持称号から 1 つ選ぶ(§07「1 つ選ぶ」)。「なし」も候補の 1 行 -->
             <div class="title-picker">
               <Picker
-                label="付ける称号"
+                label={t("付ける称号")}
                 options={[
-                  { value: "", name: "なし", meta: "称号を付けない" },
-                  ...titleChoices.map((t) => ({ value: t.id, name: t.name, meta: titleNote(t) })),
+                  { value: "", name: t("なし"), meta: t("称号を付けない") },
+                  ...titleChoices.map((title) => ({ value: title.id, name: t(title.name), meta: titleNote(title) })),
                 ]}
                 bind:value={() => currentTitle?.id ?? "", (v) => selectTitle(v === "" ? null : v)}
               />
             </div>
             <button type="button" class="source-jump" onclick={() => focusCharacterSource("title")}>
-              <span class="dim small">所持称号の追加・変更はキャラタブの称号ペインで</span>
+              <span class="dim small">{t("所持称号の追加・変更はキャラタブの称号ペインで")}</span>
               <span class="chev dim">›</span>
             </button>
           {/if}
-          <p class="eq-note dim">称号は<b>基本能力値</b>に合流します。条件付き効果は記録するだけで計算に入りません。</p>
+          <p class="eq-note dim">{t("称号は")}<b>{t("基本能力値")}</b>{t("に合流します。条件付き効果は記録するだけで計算に入りません。")}</p>
           {/if}
           {/snippet}
         </Disclosure>
@@ -838,23 +841,23 @@
              代わりに**成立条件**(間に通常攻撃を挟む)を ON のときだけ添える(§00 05 考えさせない) -->
         <div class="combo">
           <ToggleRow
-            name="コンボする"
+            name={t("コンボする")}
             value={fmtSignedPct(limits.combo_bonus_rate)}
             on={combo}
             tone="temp"
             onToggle={() => (combo = !combo)}
           />
           <p class="combo-note dim">
-            ダメージ {fmtSignedPct(limits.combo_bonus_rate)} ・ 中ディレイ半分。
-            <b>スキル → 通常攻撃 → スキル</b>のように、間に通常攻撃を挟むと成立します。
+            {t("ダメージ {v} ・ 中ディレイ半分。", { v: fmtSignedPct(limits.combo_bonus_rate) })}
+            <b>{t("スキル → 通常攻撃 → スキル")}</b>{t("のように、間に通常攻撃を挟むと成立します。")}
           </p>
           {#if combo}
             {#if normalAttackOptions.length > 0}
               <div class="combo-normal">
                 <div class="field">
-                  <span class="field-label">挟む通常攻撃</span>
+                  <span class="field-label">{t("挟む通常攻撃")}</span>
                   <Choose
-                    label="挟む通常攻撃"
+                    label={t("挟む通常攻撃")}
                     options={normalAttackOptions}
                     cols={2}
                     bind:value={
@@ -866,12 +869,12 @@
               </div>
             {:else}
               <p class="combo-note dim">
-                <span class="badge unknown">未収録</span>
-                このキャラの通常攻撃は未収録なので、挟む通常攻撃ぶんの時間とダメージを出せません。
+                <span class="badge unknown">{t("未収録")}</span>
+                {t("このキャラの通常攻撃は未収録なので、挟む通常攻撃ぶんの時間とダメージを出せません。")}
               </p>
             {/if}
             <p class="combo-note dim">
-              1 秒あたりの火力は、挟む通常攻撃ぶんの時間とダメージも入れた 1 サイクルで出しています。
+              {t("1 秒あたりの火力は、挟む通常攻撃ぶんの時間とダメージも入れた 1 サイクルで出しています。")}
             </p>
           {/if}
         </div>

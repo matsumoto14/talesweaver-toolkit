@@ -11,6 +11,7 @@ import { fmtPct, fmtSigned } from "./format";
 import { ELEMENT_LABELS, STAT_LABELS } from "./labels";
 import { tables } from "./tables.svelte";
 import type { PickerOption } from "./ui/Picker.svelte";
+import { t } from "./i18n";
 
 /** 与ダメージ式のカテゴリの日本語名。唯一の正は Rust の DamageCategory::label
  * (StatLimits.damage_category_labels 経由。crates/domain/src/category.rs)。 */
@@ -22,33 +23,35 @@ export const damageCategoryLabel = (c: DamageCategory): string =>
 export function singleEffectLabel(e: SkillEffect): string | null {
   if (e === "record_only") return null;
   // Rust の SkillEffect::label と同じ文言。計算はしているが与ダメージ式には入らない
-  if (e === "separate_damage") return "技とは別枠のダメージ";
+  if (e === "separate_damage") return t("技とは別枠のダメージ");
   if ("stat_rate" in e) {
     const stats = e.stat_rate.stats.map((k) => STAT_LABELS[k]).join(" / ");
     return `${stats} ${fmtSigned(e.stat_rate.percent, { max: 2 }, "%")}`;
   }
-  if ("actual_delay" in e) return `中ディレイ ${fmtSigned(-e.actual_delay.percent, { max: 2 }, "%")}`;
-  if ("accuracy_point" in e) return `命中P ${fmtSigned(e.accuracy_point.value)}`;
-  if ("min_evasion_rate" in e) return `最小回避率補正 ${fmtSigned(e.min_evasion_rate.value, { max: 2 }, "%")}`;
+  if ("actual_delay" in e) return t("中ディレイ {v}", { v: fmtSigned(-e.actual_delay.percent, { max: 2 }, "%") });
+  if ("accuracy_point" in e) return t("命中P {v}", { v: fmtSigned(e.accuracy_point.value) });
+  if ("min_evasion_rate" in e) return t("最小回避率補正 {v}", { v: fmtSigned(e.min_evasion_rate.value, { max: 2 }, "%") });
   // Rust の SkillEffect::label と同じ文言
-  if ("accuracy_rate" in e) return `命中P割合増加(SLv×${fmtPct(e.accuracy_rate.per_level, { max: 2 })})`;
+  if ("accuracy_rate" in e) {
+    return t("命中P割合増加(SLv×{v})", { v: fmtPct(e.accuracy_rate.per_level, { max: 2 }) });
+  }
   if ("added_damage_rate" in e) {
-    return `追加ダメージ(割合) ${fmtSigned(e.added_damage_rate.percent, { max: 2 }, "%")}`;
+    return t("追加ダメージ(割合) {v}", { v: fmtSigned(e.added_damage_rate.percent, { max: 2 }, "%") });
   }
   if ("damage_per_level" in e) {
     const { category, percent } = e.damage_per_level;
     if (category === "taken_damage_reduction" && percent < 0) {
-      return `敵被ダメージ ${fmtSigned(-percent, { max: 2 }, "%")} × スタック`;
+      return t("敵被ダメージ {v} × スタック", { v: fmtSigned(-percent, { max: 2 }, "%") });
     }
-    return `${damageCategoryLabel(category)} ${fmtSigned(percent, { max: 2 }, "%")} × SLv`;
+    return t("{cat} {v} × SLv", { cat: t(damageCategoryLabel(category)), v: fmtSigned(percent, { max: 2 }, "%") });
   }
   const { category, percent } = e.damage;
   // 敵にかけるデバフは S(被ダメージ減少)に負値で積む。画面はプレイヤーの語彙で出す
   // (「被ダメージ減少 −10%」は意味が逆に読める)。唯一の正は Rust の SkillEffect::label
   if (category === "taken_damage_reduction" && percent < 0) {
-    return `敵被ダメージ ${fmtSigned(-percent, { max: 2 }, "%")}`;
+    return t("敵被ダメージ {v}", { v: fmtSigned(-percent, { max: 2 }, "%") });
   }
-  return `${damageCategoryLabel(category)} ${fmtSigned(percent, { max: 2 }, "%")}`;
+  return `${t(damageCategoryLabel(category))} ${fmtSigned(percent, { max: 2 }, "%")}`;
 }
 
 /** 効き先の要約(1 行)。`effects` はマスタリー解決済み(resolve_character_skill_effects の結果)。
@@ -68,7 +71,7 @@ export const resolvedEffectsOf = (id: string, resolved: CharacterSkillEffectsVie
 export const isRecordOnly = (effects: SkillEffect[]): boolean =>
   effects.length > 0 && effects.every((e) => e === "record_only");
 /** 記録のみの行に出す文言。マスタリーの record-only 表現と合わせる */
-export const RECORD_ONLY_LABEL = "記録のみ(計算に入りません)";
+export const RECORD_ONLY_LABEL = t("記録のみ(計算に入りません)");
 
 // --- 主軸スキル(攻撃力の依存種別を決める、Skill 由来)------------------------
 // キャラ登録(RegisterPane)とキャラワークスペース(StatusPane)で同じ選び方をする。
@@ -77,9 +80,9 @@ export const RECORD_ONLY_LABEL = "記録のみ(計算に入りません)";
 
 /** 名前だけでは選べない。単 / 範・段数・属性を名前の隣に出す */
 export const skillMeta = (s: Skill): string =>
-  `${s.target === null ? "?" : s.target === "single" ? "単" : "範"} ・ ` +
-  `${s.hit_count} 段 ・ ${ELEMENT_LABELS[s.element]} ・ ` +
-  `中 ${s.base_actual_delay === null ? "?" : `${s.base_actual_delay}s`}`;
+  `${s.target === null ? "?" : s.target === "single" ? t("単") : t("範")} ・ ` +
+  `${t("{n} 段", { n: s.hit_count })} ・ ${ELEMENT_LABELS[s.element]} ・ ` +
+  `${t("中 {v}", { v: s.base_actual_delay === null ? "?" : `${s.base_actual_delay}s` })}`;
 
 /** 主軸に選ばれるのはほぼ火力上位。この件数をチップで手前に固定し、それ以外は候補面に送る */
 export const MAIN_SKILL_PINNED = 3;

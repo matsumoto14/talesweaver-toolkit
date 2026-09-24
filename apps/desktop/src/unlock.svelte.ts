@@ -12,6 +12,7 @@ import {
   listDownloadedEquipmentIds,
   listEquipmentCatalog,
 } from "./api/commands";
+import { t } from "./i18n";
 import { app } from "./state.svelte";
 
 const STORAGE_KEY = "tw-v4-unlocked";
@@ -72,7 +73,7 @@ const EXTRA_EQUIPMENT_ENDPOINT = "https://dl.tw-context.dev/data/extra-equipment
  */
 export async function fetchLockedEquipment(): Promise<number> {
   const response = await fetch(EXTRA_EQUIPMENT_ENDPOINT, { cache: "no-cache" });
-  if (!response.ok) throw new Error(`追加装備の取得に失敗しました(${response.status})`);
+  if (!response.ok) throw new Error(t("追加装備の取得に失敗しました({status})", { status: response.status }));
   const json = await response.text();
   const count = await installDownloadedEquipment(json);
   await refreshDownloadedEquipmentIds();

@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import { errorMessage, getAppInfo } from "../../api/commands";
   import { fmtInt, fmtMonthDay } from "../../format";
+  import { t } from "../../i18n";
   import { BUNDLED_NEWS, CHANGE_LABELS, fetchNews, type News } from "../../news";
   import { reportError } from "../../toast.svelte";
   import { checkForUpdate, installUpdate, restartApp, updater } from "../../update.svelte";
@@ -38,21 +39,21 @@
     {#if updater.status !== "idle" && updater.status !== "checking" && updater.status !== "current"}
       <div class="update" class:done={updater.status === "ready"} class:failed={updater.status === "failed"}>
         <div class="update-head">
-          <span class="rn-flag update-flag">更新</span>
+          <span class="rn-flag update-flag">{t("更新")}</span>
           {#if updater.status === "ready"}
-            <b class="update-title">v{updater.version} を入れました</b>
-            <span class="update-note">再起動すると新しい版になります</span>
-            <button type="button" class="btn primary" onclick={() => void restartApp()}>再起動して使う</button>
+            <b class="update-title">{t("v{version} を入れました", { version: updater.version })}</b>
+            <span class="update-note">{t("再起動すると新しい版になります")}</span>
+            <button type="button" class="btn primary" onclick={() => void restartApp()}>{t("再起動して使う")}</button>
           {:else if updater.status === "failed"}
-            <b class="update-title">更新できませんでした</b>
+            <b class="update-title">{t("更新できませんでした")}</b>
             <span class="update-note">{updater.error}</span>
-            <button type="button" class="btn" onclick={() => void installUpdate()}>もう一度</button>
+            <button type="button" class="btn" onclick={() => void installUpdate()}>{t("もう一度")}</button>
           {:else if updater.status === "available"}
-            <b class="update-title">新しい版 v{updater.version} があります</b>
-            <span class="update-note">いまの版は v{currentVersion}</span>
-            <button type="button" class="btn primary" onclick={() => void installUpdate()}>更新する</button>
+            <b class="update-title">{t("新しい版 v{version} があります", { version: updater.version })}</b>
+            <span class="update-note">{t("いまの版は v{version}", { version: currentVersion })}</span>
+            <button type="button" class="btn primary" onclick={() => void installUpdate()}>{t("更新する")}</button>
           {:else}
-            <b class="update-title">v{updater.version} を{updater.status === "installing" ? "入れています" : "落としています"}</b>
+            <b class="update-title">{t("v{version} を{action}", { version: updater.version, action: updater.status === "installing" ? t("入れています") : t("落としています") })}</b>
             <Value class="update-note" motion={() => updater.percent} value={updater.percent >= 0 ? `${updater.percent}%` : "…"} />
           {/if}
         </div>
@@ -71,18 +72,18 @@
          予定と不具合は「まだ版に入っていない」ので破線 + 専用バッジで公開済みと区別する -->
     <div class="section">
       <div class="area-head">
-        <span class="area-name">更新内容</span>
+        <span class="area-name">{t("更新内容")}</span>
         <span class="area-rule"></span>
         <!-- 起動時に圏外だった人がここからもう一度見に行ける。押した先は上の更新カード -->
         <button
           type="button" class="btn quiet" disabled={updater.status === "checking"}
           onclick={() => void checkForUpdate(true)}
         >
-          {updater.status === "checking" ? "確認しています…" : "更新を確認"}
+          {updater.status === "checking" ? t("確認しています…") : t("更新を確認")}
         </button>
       </div>
       {#if updater.status === "current"}
-        <p class="up-to-date dim">いまの版が最新です。</p>
+        <p class="up-to-date dim">{t("いまの版が最新です。")}</p>
       {/if}
       {#each news.releases as note, index (note.version)}
         <Disclosure class="fold rn-fold" open={index === 0}>
@@ -90,7 +91,7 @@
             <span class="rn-version meta-pill">v{note.version}</span>
             <span class="rn-date num">{fmtMonthDay(note.date)}</span>
             {#if note.headline}<span class="rn-headline">{note.headline}</span>{/if}
-            <span class="rn-count">{fmtInt(note.changes.length)} 件</span>
+            <span class="rn-count">{t("{n} 件", { n: fmtInt(note.changes.length) })}</span>
           {/snippet}
           <div class="fold-body rn-list">
             {#each note.changes as change (change.text)}
@@ -105,14 +106,14 @@
     {#if news.planned.length > 0}
       <div class="section">
         <div class="area-head">
-          <span class="area-name">これから</span>
-          <span class="rn-flag planned">予定</span>
+          <span class="area-name">{t("これから")}</span>
+          <span class="rn-flag planned">{t("予定")}</span>
           <span class="area-rule"></span>
-          <span class="rn-count">{fmtInt(news.planned.length)} 件</span>
+          <span class="rn-count">{t("{n} 件", { n: fmtInt(news.planned.length) })}</span>
         </div>
         <div class="rn-list pending">
           {#each news.planned as item (item.text)}
-            {@render backlogRow("予定", item.title, item.text)}
+            {@render backlogRow(t("予定"), item.title, item.text)}
           {/each}
         </div>
       </div>
@@ -121,21 +122,21 @@
     {#if news.knownIssues.length > 0}
       <div class="section">
         <div class="area-head">
-          <span class="area-name">既知の不具合</span>
-          <span class="rn-flag issue">不具合</span>
+          <span class="area-name">{t("既知の不具合")}</span>
+          <span class="rn-flag issue">{t("不具合")}</span>
           <span class="area-rule"></span>
-          <span class="rn-count">{fmtInt(news.knownIssues.length)} 件</span>
+          <span class="rn-count">{t("{n} 件", { n: fmtInt(news.knownIssues.length) })}</span>
         </div>
         <div class="rn-list pending">
           {#each news.knownIssues as item (item.text)}
-            {@render backlogRow("不具合", item.title, item.text)}
+            {@render backlogRow(t("不具合"), item.title, item.text)}
           {/each}
         </div>
       </div>
     {/if}
 
     <p class="foot dim">
-      更新内容はツール自身の変更履歴です。ゲーム側の情報(公式・韓国)はまだ扱っていません。
+      {t("更新内容はツール自身の変更履歴です。ゲーム側の情報(公式・韓国)はまだ扱っていません。")}
     </p>
   </div>
 </div>

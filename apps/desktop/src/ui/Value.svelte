@@ -7,6 +7,7 @@
   // `ui/ReadRow.svelte` はこの上に載っている(行に載る値)。行に載らない値がこれを直接使う。
   import { getContext, type Snippet } from "svelte";
   import { bump, changed, DELTA_SCOPE, delta as deltaAction, type DeltaScope } from "./motion.svelte";
+  import { t } from "../i18n";
 
   interface Props {
     /** 書式済みの値(format.ts を通したもの)。null = 未収録 → 「?」を出す。0 や空白にしない(§00)。
@@ -76,7 +77,7 @@
        出なくなっていた。実機 2026-09-20) -->
   <span
     class="delta num {deltaClass}"
-    title={onDelta ? "変わったところを開く" : undefined}
+    title={onDelta ? t("変わったところを開く") : undefined}
     onclick={onDelta}
     use:deltaAction={{ get: motion, unit: delta.unit, digits: delta.digits, scope: deltaScope }}></span>
 {/if}

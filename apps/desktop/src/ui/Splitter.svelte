@@ -2,6 +2,8 @@
   // グリッドの列境界に置く、縦のドラッグ可能な区切り線。
   // `controls: "prev"` はこのスプリッターの左の列を制御する(右にドラッグすると増える)。
   // `controls: "next"` は右の列を制御する(右にドラッグすると減る。列が右側にあるレイアウト用)。
+  import { t } from "../i18n";
+
   interface Props {
     value: number;
     min: number;
@@ -97,7 +99,7 @@
   aria-valuemin={min}
   aria-valuemax={max ?? 9999}
   aria-label={label}
-  title="{label} — ドラッグで幅を変えます(ダブルクリックで既定に戻ります)"
+  title={t("{label} — ドラッグで幅を変えます(ダブルクリックで既定に戻ります)", { label })}
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
   onpointerup={handlePointerUp}

@@ -10,6 +10,7 @@
   import Icon from "../../../ui/Icon.svelte";
   import NumberField from "../../../ui/NumberField.svelte";
   import ToggleRow from "../../../ui/ToggleRow.svelte";
+  import { t } from "../../../i18n";
 
   interface Props {
     draft: Draft;
@@ -73,7 +74,7 @@
   }
   /** 効き先の要約。記録のみは wiki の効果だけ出し、未収録の理由は title に回す
       (カードは 3 列なので、理由まで入れると行が伸びて段の高さがそろわない) */
-  const masteryEffectLabel = (m: MasteryDef): string => singleEffectLabel(m.effect) ?? m.note.split(" — ")[0];
+  const masteryEffectLabel = (m: MasteryDef): string => singleEffectLabel(m.effect) ?? t(m.note.split(" — ")[0]);
   const masteryIsModeled = (m: MasteryDef): boolean => m.effect !== "record_only";
 </script>
 
@@ -82,31 +83,31 @@
      チェックの列ではなく段の選択にする(§07 形態 2)。グレーは記録するだけ -->
 <div class="card">
   <div class="card-title inline">
-    マスタリー
-    <span class="dim normal">段ごとに 1 つ ・ もう一度押すと外す</span>
+    {t("マスタリー")}
+    <span class="dim normal">{t("段ごとに 1 つ ・ もう一度押すと外す")}</span>
   </div>
   {#if masteryTiers.length === 0}
-    <p class="empty dim">このキャラのマスタリーは未収録です(wiki の Skill ページから取り込み予定)。</p>
+    <p class="empty dim">{t("このキャラのマスタリーは未収録です(wiki の Skill ページから取り込み予定)。")}</p>
   {:else}
-    {#each masteryTiers as t (t.tier)}
-      {@const picked = pickedMastery(t.tier)}
+    {#each masteryTiers as tier (tier.tier)}
+      {@const picked = pickedMastery(tier.tier)}
       <!-- どの段も 3 択。列をそろえて横に並べる(§00 01)。ゲームに「未取得」という
            選択肢は無いので出さず、選んだものをもう一度押して外す -->
       <div class="mastery-row">
-        <span class="mastery-tier num">M{t.tier}</span>
+        <span class="mastery-tier num">M{tier.tier}</span>
         <div class="mastery-options">
-          {#each t.options as m (m.id)}
+          {#each tier.options as m (m.id)}
             <button
               type="button"
               class="mastery-option"
               class:on={picked?.id === m.id}
               class:record-only={!masteryIsModeled(m)}
-              title={m.note}
-              onclick={() => pickMastery(t.tier, picked?.id === m.id ? null : m.id)}
+              title={t(m.note)}
+              onclick={() => pickMastery(tier.tier, picked?.id === m.id ? null : m.id)}
             >
-              <Icon kind="mastery" id={m.id} size={28} label={m.name} />
+              <Icon kind="mastery" id={m.id} size={28} label={t(m.name)} />
               <span class="mastery-text">
-                <span class="mastery-name">{m.name}</span>
+                <span class="mastery-name">{t(m.name)}</span>
                 <span class="mastery-effect num">{masteryEffectLabel(m)}</span>
               </span>
             </button>
@@ -117,16 +118,15 @@
   {/if}
 </div>
 <div class="card">
-  <div class="card-title">このキャラのスキル</div>
+  <div class="card-title">{t("このキャラのスキル")}</div>
   <p class="hint dim">
-    スキルの効果は<b>取っているマスタリーで変わります</b>(wiki の各カテゴリ表がその形)。
-    上のマスタリーを選び直すと、ここの値も一緒に動きます。
+    {t("スキルの効果は")}<b>{t("取っているマスタリーで変わります")}</b>{t("(wiki の各カテゴリ表がその形)。 上のマスタリーを選び直すと、ここの値も一緒に動きます。")}
   </p>
   <!-- 自分のスキルは行チップ(ToggleRow)。ゲーム内と同じスキルアイコンを名前の左に置き、
        効果はマスタリー込みの実数を右端に出す。適用中かどうかは面の色だけで言う(§07) -->
   <div class="toggle-list">
     {#if ownCharacterSkills.length === 0}
-      <p class="empty dim">このキャラのスキルデータは未収録です。</p>
+      <p class="empty dim">{t("このキャラのスキルデータは未収録です。")}</p>
     {/if}
     {#each ownCharacterSkills as def (def.id)}
       {@const effects = resolvedEffectsOf(def.id, resolvedSkillEffects)}
@@ -134,14 +134,14 @@
       {@const label = effectLabel(effects) ?? (isRecordOnly(effects) ? RECORD_ONLY_LABEL : null)}
       {@const checked = skillChecked(def.id)}
       <ToggleRow
-        name={def.name}
-        cond={def.note || undefined}
-        value={label ?? "マスタリー未取得"}
-        title={def.note || undefined}
+        name={t(def.name)}
+        cond={def.note ? t(def.note) : undefined}
+        value={label ?? t("マスタリー未取得")}
+        title={def.note ? t(def.note) : undefined}
         on={checked}
         onToggle={() => toggleCharSkill(def.id, !checked)}
       >
-        {#snippet icon()}<Icon kind="skill" id={def.id} size={20} label={def.name} />{/snippet}
+        {#snippet icon()}<Icon kind="skill" id={def.id} size={20} label={t(def.name)} />{/snippet}
         <!-- 重ねがけの数を持つ自分のスキル(<フラグ> のスタック)。0 = OFF。
              判定は効果の種類(`hasStacks`)で、どの id が持つかの表は画面に持たない。
              SLv(極・的中剣)はここでは入力させない(ユーザー判断 2026-09-21) -->
@@ -149,7 +149,7 @@
           {#if hasStacks(def)}
             <span class="stack">
               <NumberField
-                label="{def.name}のスタック"
+                label={t("{name}のスタック", { name: t(def.name) })}
                 min={0}
                 max={def.max_level}
                 bind:value={() => stackOf(def), (v) => setStack(def, v)}
@@ -160,55 +160,55 @@
       </ToggleRow>
     {/each}
   </div>
-  <div class="card-title space">味方から受けるスキル</div>
+  <div class="card-title space">{t("味方から受けるスキル")}</div>
   <div class="toggle-list">
     {#if allyCharacterSkills.length === 0}
-      <p class="empty dim">味方から受けるスキルデータは未収録です。</p>
+      <p class="empty dim">{t("味方から受けるスキルデータは未収録です。")}</p>
     {/if}
     {#each allyCharacterSkills as def (def.id)}
       {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
       {@const sourceCharacter = app.gameCharacters.find((c) => c.id === def.game_character_id)}
       {@const checked = skillChecked(def.id)}
       <ToggleRow
-        name={def.name}
-        cond={def.note || undefined}
+        name={t(def.name)}
+        cond={def.note ? t(def.note) : undefined}
         value={label ?? "—"}
-        title={def.note || undefined}
+        title={def.note ? t(def.note) : undefined}
         on={checked}
         onToggle={() => toggleCharSkill(def.id, !checked)}
       >
         {#snippet icon()}
-          <Icon kind="character" id={def.game_character_id} size={20} label={sourceCharacter?.name ?? def.game_character_id} />
+          <Icon kind="character" id={def.game_character_id} size={20} label={t(sourceCharacter?.name ?? def.game_character_id)} />
         {/snippet}
       </ToggleRow>
     {/each}
   </div>
-  <div class="card-title space">敵にかけるデバフ</div>
-  <p class="hint dim">同行者が敵にかけている前提なので、誰でも ON にできます(敵の被ダメージが増える = 自分の火力が上がる)。</p>
+  <div class="card-title space">{t("敵にかけるデバフ")}</div>
+  <p class="hint dim">{t("同行者が敵にかけている前提なので、誰でも ON にできます(敵の被ダメージが増える = 自分の火力が上がる)。")}</p>
   <div class="toggle-list">
     {#if enemyCharacterSkills.length === 0}
-      <p class="empty dim">敵にかけるデバフのデータは未収録です。</p>
+      <p class="empty dim">{t("敵にかけるデバフのデータは未収録です。")}</p>
     {/if}
     {#each enemyCharacterSkills as def (def.id)}
       {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
       {@const sourceCharacter = app.gameCharacters.find((c) => c.id === def.game_character_id)}
       {@const checked = skillChecked(def.id)}
       <ToggleRow
-        name={def.name}
-        cond={def.note || undefined}
+        name={t(def.name)}
+        cond={def.note ? t(def.note) : undefined}
         value={label ?? "—"}
-        title={def.note || undefined}
+        title={def.note ? t(def.note) : undefined}
         on={checked}
         onToggle={() => toggleCharSkill(def.id, !checked)}
       >
         {#snippet icon()}
-          <Icon kind="character" id={def.game_character_id} size={20} label={sourceCharacter?.name ?? def.game_character_id} />
+          <Icon kind="character" id={def.game_character_id} size={20} label={t(sourceCharacter?.name ?? def.game_character_id)} />
         {/snippet}
         {#snippet extra()}
           {#if hasStacks(def)}
             <span class="stack">
               <NumberField
-                label="{def.name}のスタック数"
+                label={t("{name}のスタック数", { name: t(def.name) })}
                 min={0}
                 max={def.max_level}
                 bind:value={() => stackOf(def), (v) => setStack(def, v)}

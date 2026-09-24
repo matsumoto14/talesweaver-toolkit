@@ -10,14 +10,15 @@
 // 許可先は capabilities の `http:default`(dl.tw-context.dev だけ)で縛っている。
 import { fetch } from "@tauri-apps/plugin-http";
 
+import { t } from "./i18n";
 import bundled from "./data/news.json";
 
 export type ReleaseChangeKind = "added" | "changed" | "fixed";
 
 export const CHANGE_LABELS: Record<ReleaseChangeKind, string> = {
-  added: "追加",
-  changed: "変更",
-  fixed: "修正",
+  added: t("追加"),
+  changed: t("変更"),
+  fixed: t("修正"),
 };
 
 export interface ReleaseChange {

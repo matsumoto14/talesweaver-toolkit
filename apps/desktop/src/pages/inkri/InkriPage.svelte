@@ -11,6 +11,7 @@
     EquipmentInkriState, EtaScrollPrice, InkriKind, InkriRunLimit, InkriStep, InkriTarget,
   } from "../../api/types";
   import { fmtInt } from "../../format";
+  import { t } from "../../i18n";
   import { PART_SLOT_LABELS } from "../../labels";
   import { reportError } from "../../toast.svelte";
   import NumberField from "../../ui/NumberField.svelte";
@@ -153,7 +154,7 @@
   async function run(limit: InkriRunLimit) {
     if (!target || asking) return;
     if (itemState.destroyed) {
-      showNotice("インクリを進行する装備がありません。");
+      showNotice(t("インクリを進行する装備がありません。"));
       return;
     }
     const batch = !("until_success" in limit && limit.until_success.max_attempts === 1);
@@ -169,7 +170,7 @@
         seed: randomSeed(),
       });
       if (result.attempts_made === 0) {
-        showNotice("これ以上インクリを進行できません。");
+        showNotice(t("これ以上インクリを進行できません。"));
         return;
       }
       itemState = result.final_state;
@@ -187,7 +188,7 @@
         successPlay = 0;
         failPlay++;
         play(seFail);
-        if (result.last_outcome === "failure_destroyed") showNotice("インクリに失敗しました。アイテムが破壊されました。");
+        if (result.last_outcome === "failure_destroyed") showNotice(t("インクリに失敗しました。アイテムが破壊されました。"));
       }
     } catch (e) {
       reportError(errorMessage(e));
@@ -244,7 +245,7 @@
   function seedText(n: number | null): string | null {
     if (n === null) return null;
     if (n === 0) return "0";
-    const units = ["", "万", "億", "兆", "京"];
+    const units = ["", t("万"), t("億"), t("兆"), t("京")];
     const parts: string[] = [];
     let rest = Math.floor(n);
     let i = 0;
@@ -289,19 +290,19 @@
 
 
   const seriesOptions = $derived(
-    seriesList.map((s) => ({ value: s, name: s, meta: `${targets.filter((t) => t.series === s).length}件` })),
+    seriesList.map((s) => ({ value: s, name: s, meta: t("{n}件", { n: targets.filter((t) => t.series === s).length }) })),
   );
 
   const itemOptions = $derived(
     targets
-      .filter((t) => t.series === series)
-      .map((t) => ({
-        value: String(t.client_item_id),
-        name: t.name,
-        iconId: String(t.client_item_id),
+      .filter((it) => it.series === series)
+      .map((it) => ({
+        value: String(it.client_item_id),
+        name: it.name,
+        iconId: String(it.client_item_id),
         iconKind: "equipment" as const,
-        iconSource: iconOf(t.client_item_id),
-        meta: `${PART_SLOT_LABELS[t.part]} · ${t.bianu_seed_cost === null ? "費用 ?" : seedText(t.bianu_seed_cost)}`,
+        iconSource: iconOf(it.client_item_id),
+        meta: `${PART_SLOT_LABELS[it.part]} · ${it.bianu_seed_cost === null ? t("費用 ?") : seedText(it.bianu_seed_cost)}`,
       })),
   );
 
@@ -334,81 +335,81 @@
 
   <div class="side" bind:this={picker}>
     <div class="section">
-      <div class="area-head"><span class="area-name">装備</span><span class="area-rule"></span></div>
+      <div class="area-head"><span class="area-name">{t("装備")}</span><span class="area-rule"></span></div>
       <!-- 系列と今の回数は短いので横に並べ、装備は名前が長いので 1 行を使う -->
       <div class="equip-head">
         <div class="field">
-          <span class="field-label">系列</span>
-          <Picker label="系列" options={seriesOptions} bind:value={series} />
+          <span class="field-label">{t("系列")}</span>
+          <Picker label={t("系列")} options={seriesOptions} bind:value={series} />
         </div>
         <div class="field">
-          <span class="field-label">今のインクリ回数</span>
-          <NumberField label="今のインクリ回数" max={START_MAX} bind:value={() => saved.value.startCount, setStartCount} />
+          <span class="field-label">{t("今のインクリ回数")}</span>
+          <NumberField label={t("今のインクリ回数")} max={START_MAX} bind:value={() => saved.value.startCount, setStartCount} />
         </div>
       </div>
       <div class="field">
-        <span class="field-label">装備</span>
+        <span class="field-label">{t("装備")}</span>
         <Picker
-          label="装備"
+          label={t("装備")}
           bind:value={() => (target && target.series === series ? String(target.client_item_id) : ""), (v) => pickItem(Number(v))}
-          options={target && target.series === series ? itemOptions : [{ value: "", name: "選んでください", meta: series }, ...itemOptions]}
+          options={target && target.series === series ? itemOptions : [{ value: "", name: t("選んでください"), meta: series }, ...itemOptions]}
         />
       </div>
     </div>
 
     <div class="section">
-      <div class="area-head"><span class="area-name">まとめて試す</span><span class="area-rule"></span></div>
+      <div class="area-head"><span class="area-name">{t("まとめて試す")}</span><span class="area-rule"></span></div>
       <!-- 上の 3 つは成功したら止まる。予算は成功しても続けて、予算を使い切る手前まで回す -->
       <div class="batch">
-        <button type="button" class="btn" disabled={busy} onclick={() => run(untilSuccess(10))}>10回</button>
-        <button type="button" class="btn" disabled={busy} onclick={() => run(untilSuccess(100))}>100回</button>
+        <button type="button" class="btn" disabled={busy} onclick={() => run(untilSuccess(10))}>{t("10回")}</button>
+        <button type="button" class="btn" disabled={busy} onclick={() => run(untilSuccess(100))}>{t("100回")}</button>
         <button type="button" class="btn primary" disabled={busy} onclick={() => run(untilSuccess(1_000_000))}>
-          次の成功まで
+          {t("次の成功まで")}
         </button>
       </div>
       <div class="field">
-        <span class="field-label">予算(億 SEED)</span>
+        <span class="field-label">{t("予算(億 SEED)")}</span>
         <div class="budget">
           <NumberField
-            label="予算(億 SEED)"
+            label={t("予算(億 SEED)")}
             min={1}
             digits={5}
             bind:value={() => saved.value.budgetOku, (v) => (saved.value = { ...saved.value, budgetOku: v })}
-            format={() => (budgetAttempts === null ? "費用なし" : `${fmtInt(budgetAttempts)}回分`)}
-            reason="手持ちに合わせて"
+            format={() => (budgetAttempts === null ? t("費用なし") : t("{n}回分", { n: fmtInt(budgetAttempts) }))}
+            reason={t("手持ちに合わせて")}
           />
-          <button type="button" class="btn" disabled={busy || !budgetAttempts} onclick={() => run({ budget: { seed: budgetSeed } })}>予算まで回す</button>
+          <button type="button" class="btn" disabled={busy || !budgetAttempts} onclick={() => run({ budget: { seed: budgetSeed } })}>{t("予算まで回す")}</button>
         </div>
       </div>
       <p class="note dim">
-        10回・100回は成功した時点で止まり、予算は成功しても使い切るまで回します(演出は省略)。
-        <kbd>←</kbd> 長押しでゲームと同じように連続インクリ。
+        {t("10回・100回は成功した時点で止まり、予算は成功しても使い切るまで回します(演出は省略)。")}
+        <kbd>←</kbd> {t("長押しでゲームと同じように連続インクリ。")}
       </p>
     </div>
 
     <div class="toggles">
-      <ToggleRow name="ハッピーアワー" cond="インクリ費用" value="-20%" on={saved.value.happyHour} tone="saved" onToggle={() => (saved.value = { ...saved.value, happyHour: !saved.value.happyHour })} />
-      <ToggleRow name="音を出す" on={saved.value.sound} tone="saved" onToggle={() => (saved.value = { ...saved.value, sound: !saved.value.sound })} />
+      <ToggleRow name={t("ハッピーアワー")} cond={t("インクリ費用")} value="-20%" on={saved.value.happyHour} tone="saved" onToggle={() => (saved.value = { ...saved.value, happyHour: !saved.value.happyHour })} />
+      <ToggleRow name={t("音を出す")} on={saved.value.sound} tone="saved" onToggle={() => (saved.value = { ...saved.value, sound: !saved.value.sound })} />
     </div>
 
     <!-- 最後の面。一覧(.ladder)だけが残りの高さを使ってスクロールし、上の数字とボタンは動かない -->
     <div class="section stack">
       <div class="area-head">
-        <span class="area-name">積み上げ</span><span class="area-rule"></span>
-        <button type="button" class="btn" disabled={busy || totals.attempts === 0} onclick={reset}>最初から</button>
+        <span class="area-name">{t("積み上げ")}</span><span class="area-rule"></span>
+        <button type="button" class="btn" disabled={busy || totals.attempts === 0} onclick={reset}>{t("最初から")}</button>
       </div>
       <div class="rows">
-        <ReadRow label="インクリ回数" value="{fmtInt(itemState.inkri_count)}回" motion={() => itemState.inkri_count} />
-        <ReadRow label="今の成功率" value={rateText(rate)} motion={() => rate}>
-          {#snippet note()}{#if rate !== null}平均 {fmtInt(Math.round(100_000 / rate))}回{/if}{/snippet}
+        <ReadRow label={t("インクリ回数")} value={t("{n}回", { n: fmtInt(itemState.inkri_count) })} motion={() => itemState.inkri_count} />
+        <ReadRow label={t("今の成功率")} value={rateText(rate)} motion={() => rate}>
+          {#snippet note()}{#if rate !== null}{t("平均 {n}回", { n: fmtInt(Math.round(100_000 / rate)) })}{/if}{/snippet}
         </ReadRow>
-        <ReadRow label="試行" value="{fmtInt(totals.attempts)}回" motion={() => totals.attempts} />
-        <ReadRow label="消費 SEED" value={seedText(totals.seed)} motion={() => totals.seed} />
+        <ReadRow label={t("試行")} value={t("{n}回", { n: fmtInt(totals.attempts) })} motion={() => totals.attempts} />
+        <ReadRow label={t("消費 SEED")} value={seedText(totals.seed)} motion={() => totals.seed} />
         {#if saved.value.kind === "eta"}
-          <ReadRow label="呪文書" value="{fmtInt(totals.attempts)}枚" motion={() => totals.attempts} />
+          <ReadRow label={t("呪文書")} value={t("{n}枚", { n: fmtInt(totals.attempts) })} motion={() => totals.attempts} />
           <!-- 呪文書代。フォレスト(SEED)を主にし、トードー(ELSO)・ルイノの袋(TP)を注記に -->
-          <ReadRow label="呪文書代" value={scrollPrice ? seedText(scrollPrice.seed * totals.attempts) : null} motion={() => totals.attempts}>
-            {#snippet note()}{#if scrollPrice}または {fmtInt(scrollPrice.elso * totals.attempts)} ELSO / {fmtInt(scrollPrice.tp * totals.attempts)} TP{/if}{/snippet}
+          <ReadRow label={t("呪文書代")} value={scrollPrice ? seedText(scrollPrice.seed * totals.attempts) : null} motion={() => totals.attempts}>
+            {#snippet note()}{#if scrollPrice}{t("または {seed} ELSO / {tp} TP", { seed: fmtInt(scrollPrice.elso * totals.attempts), tp: fmtInt(scrollPrice.tp * totals.attempts) })}{/if}{/snippet}
           </ReadRow>
         {/if}
       </div>
@@ -417,8 +418,8 @@
         <div class="ladder readrows inset">
           {#each steps as step (step.from_count)}
             <div class="step swap-in" class:open={!step.succeeded}>
-              <ReadRow label="{fmtInt(step.from_count + 1)}回目" value="{fmtInt(step.attempts)}回" motion={() => step.attempts}>
-                {#snippet note()}{step.succeeded ? (seedText(step.seed) ?? "?") : "試行中"}{/snippet}
+              <ReadRow label={t("{n}回目", { n: fmtInt(step.from_count + 1) })} value={t("{n}回", { n: fmtInt(step.attempts) })} motion={() => step.attempts}>
+                {#snippet note()}{step.succeeded ? (seedText(step.seed) ?? "?") : t("試行中")}{/snippet}
               </ReadRow>
             </div>
           {/each}

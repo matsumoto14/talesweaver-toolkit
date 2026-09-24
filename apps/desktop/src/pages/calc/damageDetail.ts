@@ -6,10 +6,14 @@ import type {
   StatKind,
 } from "../../api/types";
 import { fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct, formatLayerValue } from "../../format";
+import { t } from "../../i18n";
 import { EQUIPMENT_STAT_LABELS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
 import { limits } from "../../limits.svelte";
 import { swapNote, type Presence } from "../../ui/presence";
 import type { Detail, DetailStore, Mat } from "./detailStore.svelte";
+
+/** `t()` の undefined 許容版。値が無いときは undefined のまま通す */
+const tOrUndef = (text: string | undefined): string | undefined => (text === undefined ? undefined : t(text));
 
 /** 主役がクリティカル前提なら、段も到達値もクリティカル側でそろえる */
 export const pick = <T extends { max: number; critical: number }>(
@@ -47,9 +51,9 @@ export interface AtkRow {
 export function attackRows(atk: AttackPowerBreakdown | null): AtkRow[] {
   if (atk === null) return [];
   const raw = [
-    { k: "ステ攻撃力", v: atk.stat_attack, c: "var(--flow-base)", note: "素ステ・補正源から" },
-    { k: "装備攻撃力", v: atk.equipment_attack, c: "var(--flow-1)", note: "基本/強化 × 依存別係数" },
-    { k: "装備攻撃力強化倍率", v: atk.enhance_bonus, c: "var(--flow-2)", note: "パワーW・ストロングW" },
+    { k: "ステ攻撃力", v: atk.stat_attack, c: "var(--flow-base)", note: t("素ステ・補正源から") },
+    { k: "装備攻撃力", v: atk.equipment_attack, c: "var(--flow-1)", note: t("基本/強化 × 依存別係数") },
+    { k: "装備攻撃力強化倍率", v: atk.enhance_bonus, c: "var(--flow-2)", note: t("パワーW・ストロングW") },
   ].filter((x) => x.v > 0);
   const total = raw.reduce((a, x) => a + x.v, 0) || 1;
   let running = 0;
@@ -161,7 +165,7 @@ export function catMat(
       changed: store.changes.touch("cat:attack_power", c.value, result),
       key: "cat:attack_power",
       subs: atkRows.map((a) => ({
-        label: a.k,
+        label: t(a.k),
         value: fmtInt(Math.round(a.v)),
         sub: a.note,
         n: Math.round(a.v),
@@ -175,23 +179,23 @@ export function catMat(
   const n = c.kind === "rate" ? c.value * 100 : c.value;
   return {
     changed: store.changes.touch(`cat:${c.category}`, n, result) || contributions.some((x) => x.state !== "same"),
-    label: `${c.symbol} ${c.label}`,
+    label: `${c.symbol} ${t(c.label)}`,
     mult: c.kind === "rate" ? `×${fmtNum(c.factor)}` : undefined,
     value: fmtCatValue(c),
     n,
     unit: c.kind === "rate" ? "%" : undefined,
-    sub: catLoss(c) > 1e-9 ? `上限で ${fmtCatLoss(c)}` : undefined,
+    sub: catLoss(c) > 1e-9 ? t("上限で {loss}", { loss: fmtCatLoss(c) }) : undefined,
     note: swapNote(names("gone"), names("added")),
     key: contributions.length > 0 ? `cat:${c.category}` : undefined,
     subs:
       contributions.length > 0
         ? contributions.map(({ item: x, state, key }) => ({
             id: key,
-            label: x.source,
+            label: t(x.source),
             value: fmtContributionValue(c.kind, x.value),
             n: c.kind === "rate" ? x.value * 100 : x.value,
             unit: c.kind === "rate" ? "%" : undefined,
-            sub: x.category === c.category ? undefined : categoryOf(result, x.category)?.label,
+            sub: x.category === c.category ? undefined : tOrUndef(categoryOf(result, x.category)?.label),
             state,
           }))
         : undefined,
@@ -225,12 +229,12 @@ export function statFactorMats(result: DamageResult | null, kind: StatKind): Mat
   const st = result?.trace.stats.find((s) => s.kind === kind);
   if (!st) return [];
   const mats: Mat[] = [
-    { label: "素ステ(振り分け)", value: fmtInt(st.base), n: st.base },
+    { label: t("素ステ(振り分け)"), value: fmtInt(st.base), n: st.base },
   ];
   for (const c of result?.trace.stat_source_effects ?? []) {
     if (c.kind !== kind) continue;
     mats.push({
-      label: c.source,
+      label: t(c.source),
       value: fmtSigned(c.effect, { max: 3 }),
       sub: `${STAT_LAYER_LABELS[c.layer]} ${formatLayerValue(c.layer, c.value)}`,
       n: c.effect,
@@ -238,24 +242,24 @@ export function statFactorMats(result: DamageResult | null, kind: StatKind): Mat
   }
   if (st.capped_loss > 0) {
     mats.push({
-      label: "上限で捨てた分",
+      label: t("上限で捨てた分"),
       value: fmtSigned(-st.capped_loss, { max: 3 }),
-      sub: `上限 ${fmtInt(st.stat_cap)}`,
+      sub: t("上限 {cap}", { cap: fmtInt(st.stat_cap) }),
       n: -st.capped_loss,
     });
   }
   if (st.pinned_from !== null) {
     mats.push({
-      label: "一時調整で固定",
+      label: t("一時調整で固定"),
       value: fmtInt(st.effective),
-      sub: `固定前 ${fmtInt(st.pinned_from)}`,
+      sub: t("固定前 {v}", { v: fmtInt(st.pinned_from) }),
       n: st.effective,
     });
   }
   return mats;
 }
 
-const EQUIPMENT_ATTACK_LAYER_LABELS: Record<string, string> = { base: "基本", enhanced: "強化" };
+const EQUIPMENT_ATTACK_LAYER_LABELS: Record<string, string> = { base: t("基本"), enhanced: t("強化") };
 
 /**
  * 熊(魔法人形)の係数行 — wiki 計算式まとめ `STAB(熊)` の 1 行を、トレースに載っている係数から
@@ -263,15 +267,18 @@ const EQUIPMENT_ATTACK_LAYER_LABELS: Record<string, string> = { base: "基本", 
  * 断っている行なので、実測と合わないときに真っ先に疑う場所として掘り下げの先頭に置く(ADR-016)。
  * 本体(player)には無い行。
  */
-const MAGIC_DOLL_SOURCE_NOTE =
-  "熊の係数は wiki 計算式まとめ STAB(熊) の行(2026/4/1 以前の情報)。実測と合わなければ、敵の値より先にこの行を疑う";
+const MAGIC_DOLL_SOURCE_NOTE = t(
+  "熊の係数は wiki 計算式まとめ STAB(熊) の行(2026/4/1 以前の情報)。実測と合わなければ、敵の値より先にこの行を疑う",
+);
 /** 係数はラベル列(唯一の広い列)に載せる。数値列は 64px 固定で文字列が折り返す */
 function magicDollCoefficientMat(result: DamageResult | null, row: AtkRow["k"]): Mat | null {
   if (row === "ステ攻撃力") {
     const parts = result?.trace.stat_attack_parts ?? [];
     if (parts.length === 0) return null;
     return {
-      label: `係数 STAB(熊): ${parts.map((p) => `${STAT_LABELS[p.kind]} ×${fmtNum(p.coefficient)}`).join(" / ")}`,
+      label: t("係数 STAB(熊): {list}", {
+        list: parts.map((p) => `${STAT_LABELS[p.kind]} ×${fmtNum(p.coefficient)}`).join(" / "),
+      }),
       value: "",
     };
   }
@@ -283,7 +290,9 @@ function magicDollCoefficientMat(result: DamageResult | null, row: AtkRow["k"]):
     const rate = (kind: (typeof kinds)[number], layer: "base" | "enhanced") =>
       fmtNum(parts.find((p) => p.value === kind && p.layer === layer)?.coefficient ?? 0);
     return {
-      label: `係数 STAB(熊)(基本/強化): ${kinds.map((k) => `${EQUIPMENT_STAT_LABELS[k]} ${rate(k, "base")}/${rate(k, "enhanced")}`).join("・")}`,
+      label: t("係数 STAB(熊)(基本/強化): {list}", {
+        list: kinds.map((k) => `${EQUIPMENT_STAT_LABELS[k]} ${rate(k, "base")}/${rate(k, "enhanced")}`).join("・"),
+      }),
       value: "",
     };
   }
@@ -304,7 +313,7 @@ export function atkDetail(
         label: STAT_LABELS[p.kind],
         mult: `×${fmtNum(p.coefficient)}`,
         value: fmtInt(Math.round(p.contribution)),
-        sub: `能力値 ${fmtInt(p.effective)}`,
+        sub: t("能力値 {v}", { v: fmtInt(p.effective) }),
         n: Math.round(p.contribution),
         key: `atkstat:${p.kind}`,
         subs: statFactorMats(result, p.kind),
@@ -316,14 +325,14 @@ export function atkDetail(
         label: `${EQUIPMENT_ATTACK_LAYER_LABELS[p.layer]} ${EQUIPMENT_STAT_LABELS[p.value]}`,
         mult: `×${fmtNum(p.coefficient)}`,
         value: fmtInt(Math.round(p.contribution)),
-        sub: `装備値 ${fmtInt(p.amount)}`,
+        sub: t("装備値 {v}", { v: fmtInt(p.amount) }),
         n: Math.round(p.contribution),
         key: `eqatk:${p.layer}:${p.value}`,
         subs: p.sources.map((s) => ({
-          label: s.source,
+          label: t(s.source),
           mult: `×${fmtNum(p.coefficient)}`,
           value: fmtInt(Math.round(s.contribution)),
-          sub: `装備値 ${fmtInt(s.amount)}`,
+          sub: t("装備値 {v}", { v: fmtInt(s.amount) }),
           n: Math.round(s.contribution),
         })),
       });
@@ -331,7 +340,7 @@ export function atkDetail(
   } else if (a.k === "装備攻撃力強化倍率") {
     for (const s of result?.trace.equipment_enhance_sources ?? []) {
       mats.push({
-        label: s.source,
+        label: t(s.source),
         mult: fmtSignedPct(s.value, { max: 4 }),
         value: fmtSignedPct(s.value, { max: 4 }),
         n: s.value * 100,
@@ -376,7 +385,7 @@ export function lostRowsOf(
     if (s.capped_loss > 1e-9) {
       const before = s.effective + s.capped_loss;
       out.push({
-        k: `能力値上限 ${STAT_LABELS[s.kind]}`,
+        k: t("能力値上限 {stat}", { stat: STAT_LABELS[s.kind] }),
         raw: fmtInt(before),
         val: fmtInt(s.stat_cap),
         loss: fmtInt(s.capped_loss),
@@ -387,7 +396,7 @@ export function lostRowsOf(
   // カテゴリ上限。合算してから切るので、積んだのに効いていない量が数値で見えないと詰み手前が分からない
   for (const c of activeCategoriesOf(result).filter((x) => catLoss(x) > 1e-9)) {
     out.push({
-      k: `カテゴリ上限 ${c.label}`,
+      k: t("カテゴリ上限 {cat}", { cat: t(c.label) }),
       raw: fmtCatRaw(c),
       val: fmtCatValue(c),
       loss: fmtCatLoss(c),
@@ -400,7 +409,7 @@ export function lostRowsOf(
     if (loss > 0) {
       const before = perHit + loss;
       out.push({
-        k: "ダメージ上限(1 段ごと)",
+        k: t("ダメージ上限(1 段ごと)"),
         raw: fmtInt(before),
         val: fmtInt(result.damage_cap),
         loss: fmtInt(loss),
@@ -411,15 +420,15 @@ export function lostRowsOf(
   // 防御力上限。防御タブと同じ値だが、棚卸しのために回らせない
   if (defense !== null) {
     const rows: [string, number, number][] = [
-      ["物理", defense.physical_defense, defense.physical_defense_loss],
-      ["魔法", defense.magic_defense, defense.magic_defense_loss],
-      ["複合", defense.composite_defense, defense.composite_defense_loss],
+      [t("物理"), defense.physical_defense, defense.physical_defense_loss],
+      [t("魔法"), defense.magic_defense, defense.magic_defense_loss],
+      [t("複合"), defense.composite_defense, defense.composite_defense_loss],
     ];
     for (const [name, value, loss] of rows) {
       if (loss > 1e-9) {
         const before = value + loss;
         out.push({
-          k: `防御力上限 ${name}`,
+          k: t("防御力上限 {kind}", { kind: name }),
           raw: fmtInt(before),
           val: fmtInt(defense.defense_cap),
           loss: fmtInt(loss),
@@ -433,7 +442,7 @@ export function lostRowsOf(
   if (ad !== null) {
     if (ad.reduction_raw > ad.reduction + 1e-9) {
       out.push({
-        k: `中ディレイ減少の上限(${fmtPct(limits.actual_delay_reduction_max)})`,
+        k: t("中ディレイ減少の上限({pct})", { pct: fmtPct(limits.actual_delay_reduction_max) }),
         raw: fmtPct(ad.reduction_raw),
         val: fmtPct(ad.reduction),
         loss: fmtPct(ad.reduction_raw - ad.reduction),
@@ -443,10 +452,10 @@ export function lostRowsOf(
     if (ad.floored) {
       const want = ad.raw;
       out.push({
-        k: `中ディレイの下限(${fmtNum(limits.actual_delay_min, 1, "s")})`,
+        k: t("中ディレイの下限({s})", { s: fmtNum(limits.actual_delay_min, 1, "s") }),
         raw: fmtNum(want, 2, "s"),
         val: fmtNum(ad.value, 2, "s"),
-        loss: `${fmtNum(ad.value - want, 2, "s")} ぶん遅い`,
+        loss: t("{v} ぶん遅い", { v: fmtNum(ad.value - want, 2, "s") }),
         kept: ad.value > 0 ? want / ad.value : 1,
       });
     }

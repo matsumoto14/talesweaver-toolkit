@@ -23,6 +23,7 @@
   } from "../../labels";
   import { app, focusCharacterSource, payloadOf, refreshEvaluation, syncCalcBuffs, selectedCharacter, upsertCharacter } from "../../state.svelte";
   import { reportError, reportUndo } from "../../toast.svelte";
+  import { t } from "../../i18n";
   import { changed } from "../../ui/motion.svelte";
   import Value from "../../ui/Value.svelte";
   import ReadRow from "../../ui/ReadRow.svelte";
@@ -36,14 +37,14 @@
 
   const PURPOSES = BUFF_PURPOSES;
   const ORIGIN_LABELS: Record<BuffOrigin, string> = {
-    item: "アイテム", event: "イベント", club: "クラブ", skill: "スキル",
-    rune: "ルーン", soul_link: "ソウルリンク", battle_state: "戦闘中", minigame: "ミニゲーム",
+    item: t("アイテム"), event: t("イベント"), club: t("クラブ"), skill: t("スキル"),
+    rune: t("ルーン"), soul_link: t("ソウルリンク"), battle_state: t("戦闘中"), minigame: t("ミニゲーム"),
   };
   const DAMAGE_GROUPS: { id: BuffDamageGroup; label: string }[] = [
-    { id: "general", label: "一般" },
+    { id: "general", label: t("一般") },
     { id: "isabel", label: "イザベル" },
-    { id: "japan", label: "日本独自" },
-    { id: "other", label: "その他" },
+    { id: "japan", label: t("日本独自") },
+    { id: "other", label: t("その他") },
   ];
   /** バフ未選択・キャラ未選択のときの `buff_stat_amplification` 初期値(全ステ 0) */
   const ZERO_STATS: EffectiveStats = Object.fromEntries(STAT_KINDS.map((kind) => [kind, 0])) as EffectiveStats;
@@ -51,7 +52,7 @@
   let selectedId = $state<number | null>(null);
   let newName = $state("");
   /** 新しいセットの自動の名前。空欄で考えさせない(ux-guidelines「初期値は常に埋まっている」) */
-  const autoSetName = $derived(`セット ${app.buffSets.length + 1}`);
+  const autoSetName = $derived(t("セット {n}", { n: app.buffSets.length + 1 }));
   let saving = $state(false);
   let persisting = false;
   let pendingPersist: BuffSet | null = null;
@@ -208,7 +209,7 @@
     (targetStatGains[def.id] ?? []).filter((g) => g.gain === 0).map((g) => g.kind);
   const cappedTitle = (def: BuffDefinition) => (value: string) =>
     cappedStats(def).includes(value as StatKind)
-      ? `${STAT_LABELS[value as StatKind]} は上限に達しているので、選んでも最終能力値は動きません`
+      ? t("{stat} は上限に達しているので、選んでも最終能力値は動きません", { stat: STAT_LABELS[value as StatKind] })
       : undefined;
   /** ON にしたときの既定の対象ステ = いちばん効くもの(初期値は実用値、ux-guidelines) */
   const bestStatFor = (def: BuffDefinition): StatKind | undefined => {
@@ -368,7 +369,7 @@
       }
       if (app.calcBuffSetId === deletedId) syncCalcBuffs(selectedCharacter());
       await Promise.all(app.characters.filter((character) => affected.has(character.id)).map(refreshEvaluation));
-      reportUndo(`「${snapshot.name}」を削除しました`, () => restore(snapshot, affectedIds));
+      reportUndo(t("「{name}」を削除しました", { name: snapshot.name }), () => restore(snapshot, affectedIds));
     } catch (e) { reportError(errorMessage(e)); }
     finally { saving = false; }
   }
@@ -391,19 +392,19 @@
   const on = (def: BuffDefinition) => selected?.choices.choices.some((choice) => choice.buff_id === def.id) ?? false;
   const needsInput = (def: BuffDefinition) =>
     isUserSelectedTarget(def.target) || isChoiceValue(def.value) || userInputRange(def.value) !== null;
-  const exclusive = (def: BuffDefinition) => def.exclusive_slots.length > 0 ? def.exclusive_slots.join(" / ") : "独立";
+  const exclusive = (def: BuffDefinition) => def.exclusive_slots.length > 0 ? def.exclusive_slots.join(" / ") : t("独立");
 
   function targetLabel(target: BuffTarget): string {
-    if (target === "all_stats") return "全ステータス";
-    if (target === "user_selected") return "選択したステータス";
-    if (target === "user_selected_multi") return "選択したステータス(複数可)";
+    if (target === "all_stats") return t("全ステータス");
+    if (target === "user_selected") return t("選択したステータス");
+    if (target === "user_selected_multi") return t("選択したステータス(複数可)");
     if ("stat" in target) return STAT_LABELS[target.stat];
     return target.stats.map((stat) => STAT_LABELS[stat]).join(" / ");
   }
 
   /** 全属性への加算の表示(無ければ空)。ダメージ効果と同じ並びに足す */
   const elementLabels = (def: BuffDefinition): string[] =>
-    def.element_bonus > 0 ? [`全属性 ${fmtSigned(def.element_bonus)}`] : [];
+    def.element_bonus > 0 ? [t("全属性 {v}", { v: fmtSigned(def.element_bonus) })] : [];
 
   function effectSummary(def: BuffDefinition): string {
     if (isFixedValue(def.value)) return `${STAT_LAYER_LABELS[def.layer]} ${formatLayerValue(def.layer, def.value.fixed)}`;
@@ -414,7 +415,7 @@
       ...def.damage_effects.map(singleEffectLabel).filter((label): label is string => label !== null),
       ...elementLabels(def),
     ];
-    return damage.join(" ・ ") || "効果を記録";
+    return damage.join(" ・ ") || t("効果を記録");
   }
 
   /** 選べない理由(同じ重複枠を占めている、いまセットに入っているバフの名前)。
@@ -428,19 +429,22 @@
   }
   function blockReason(def: BuffDefinition): string {
     const names = blockingBuffNames(def);
-    return names ? `${names} と選べません` : "選択不可";
+    return names ? t("{names} と選べません", { names }) : t("選択不可");
   }
 
   function buffTooltip(def: BuffDefinition, blocked: boolean): string {
     const purposes = def.purposes.map((purpose) => PURPOSES.find((item) => item.id === purpose)?.label ?? purpose).join(" / ");
-    const lines = [def.name, `目的: ${purposes}`, `種類: ${ORIGIN_LABELS[def.origin]}`, `主効果: ${effectSummary(def)}`, `対象: ${targetLabel(def.target)}`];
+    const lines = [
+      t(def.name), t("目的: {v}", { v: purposes }), t("種類: {v}", { v: ORIGIN_LABELS[def.origin] }),
+      t("主効果: {v}", { v: effectSummary(def) }), t("対象: {v}", { v: targetLabel(def.target) }),
+    ];
     const damage = [
       ...def.damage_effects.map(singleEffectLabel).filter((label): label is string => label !== null),
       ...elementLabels(def),
     ];
-    if (damage.length > 0 && !isRecordOnly(def.value)) lines.push(`追加効果: ${damage.join(" ・ ")}`);
-    lines.push(`重複: ${exclusive(def)}`);
-    if (def.note) lines.push(`補足: ${def.note}`);
+    if (damage.length > 0 && !isRecordOnly(def.value)) lines.push(t("追加効果: {v}", { v: damage.join(" ・ ") }));
+    lines.push(t("重複: {v}", { v: exclusive(def) }));
+    if (def.note) lines.push(t("補足: {v}", { v: t(def.note) }));
     if (blocked) lines.unshift(blockReason(def), "");
     return lines.join("\n");
   }
@@ -502,6 +506,8 @@
       .filter((c) => c.source === def.name && c.effect !== 0)
       .map((c) => ({ label: `${STAT_LABELS[c.kind]} ${fmtSigned(c.effect, { max: 3 })}`, value: c.effect }));
   }
+  /** カテゴリ名の日本語プレフィックスを取り除く整形(damageRowLabel)は原語(日本語)の
+   *  カテゴリラベルに対してのみ働く判定ロジックなので、訳した文字列には適用しない。 */
   /** ステ増分行を最大の 1 件 + ほか n(の件数)に絞ったもの。「ほか n」は別枠のボタンとして
    *  出すので topRowsText(1 行テキスト化)ではなく構造化された topRows を使う。
    *  行は 2 列並びで 1 列 290px ほどしか無く、2 件 + ダメージ効果を載せると値が「ほか n」の
@@ -531,10 +537,14 @@
     activePurpose === "damage" && GROUP_CATEGORY[activeDamageGroup] === category;
   /** 火力タブの行に載せるカテゴリ名。「攻撃ダメージ(基本発動) +10%」は 1 列 290px の行で % が
    *  切れる(実機 2026-09-16)ので、火力タブでは「攻撃ダメージ」「ダメージ」を落として
-   *  「基本発動 +10%」「最終 +15%」にする。全文は title(buffTooltip)で読める。 */
+   *  「基本発動 +10%」「最終 +15%」にする。全文は title(buffTooltip)で読める。
+   *  訳してから削る(韓国語は「공격 대미지(…)」「… 대미지」の形)。 */
   function damageRowLabel(label: string): string {
-    if (activePurpose !== "damage") return label;
-    return label.replace(/^攻撃ダメージ\((.+)\)$/, "$1").replace(/ダメージ$/, "");
+    const shown = t(label);
+    if (activePurpose !== "damage") return shown;
+    return shown
+      .replace(/^攻撃ダメージ\((.+)\)$/, "$1").replace(/ダメージ$/, "")
+      .replace(/^공격 대미지\((.+)\)$/, "$1").replace(/ ?대미지$/, "");
   }
   /** ON バフ 1 件のダメージ効果行。攻撃ダメージ効果は多くても 1〜2 件なので、そのまま並べる。 */
   function damageText(def: BuffDefinition): string | null {
@@ -543,7 +553,7 @@
     return damageRows
       .map((e) => inActiveGroup(e.category)
         ? fmtSignedPct(e.effect)
-        : `${damageRowLabel(categoryLabel.get(e.category) ?? e.category)} ${fmtSignedPct(e.effect)}`)
+        : `${(damageRowLabel(categoryLabel.get(e.category) ?? e.category))} ${fmtSignedPct(e.effect)}`)
       .join(" ・ ");
   }
   /** aria-label や値調整フォーム(.config-effect)向けの 1 行版。こちらは視覚的な幅制約が
@@ -567,8 +577,8 @@
       .map((e) => typeof e === "object" && "damage" in e
         ? inActiveGroup(e.damage.category)
           ? fmtSigned(e.damage.percent, { max: 2 }, "%")
-          : `${damageRowLabel(damageCategoryLabel(e.damage.category))} ${fmtSigned(e.damage.percent, { max: 2 }, "%")}`
-        : singleEffectLabel(e))
+          : `${(damageRowLabel(damageCategoryLabel(e.damage.category)))} ${fmtSigned(e.damage.percent, { max: 2 }, "%")}`
+        : (singleEffectLabel(e) === null ? null : t(singleEffectLabel(e)!)))
       .filter((label): label is string => label !== null)
       .concat(elementLabels(def));
     if (activePurpose === "damage" && damage.length > 0) return damage.join(" ・ ");
@@ -578,10 +588,10 @@
 
 <div class="buff-page">
   <aside class="sets">
-    <div class="bar">バフセット <Value motion={() => app.buffSets.length} value={String(app.buffSets.length)} /></div>
+    <div class="bar">{t("バフセット")} <Value motion={() => app.buffSets.length} value={String(app.buffSets.length)} /></div>
     <div class="create-row">
-      <TextField label="新しいバフセット名" bind:value={newName} max={40} auto={autoSetName} autoNote="自動の名前" disabled={saving} onEnter={create} />
-      <button class="btn primary" disabled={saving} onclick={create}>作成</button>
+      <TextField label={t("新しいバフセット名")} bind:value={newName} max={40} auto={autoSetName} autoNote={t("自動の名前")} disabled={saving} onEnter={create} />
+      <button class="btn primary" disabled={saving} onclick={create}>{t("作成")}</button>
     </div>
     <div class="set-list">
       {#each app.buffSets as set (set.id)}
@@ -593,7 +603,7 @@
           />
         </button>
       {/each}
-      {#if app.buffSets.length === 0}<p>セットを作ると、キャラや計算で使えます。</p>{/if}
+      {#if app.buffSets.length === 0}<p>{t("セットを作ると、キャラや計算で使えます。")}</p>{/if}
     </div>
     <!-- 削除の確認は**消える対象(セット一覧)の隣**に出す。削除ボタンの真下だと目的タブに
          重なって押せなくなるうえ、何が消えるのかは対象から離れたところで読むことになる。
@@ -601,32 +611,32 @@
     {#if pendingDelete}
       {@const users = charactersUsing(pendingDelete.id)}
       <div class="delete-confirm" role="alert">
-        <strong>「{pendingDelete.name}」を削除します</strong>
+        <strong>{t("「{name}」を削除します", { name: pendingDelete.name })}</strong>
         {#if users.length > 0}
-          <small>{users.map((character) => character.name).join(" / ")} の「いつものバフ」が外れます</small>
+          <small>{t("{names} の「いつものバフ」が外れます", { names: users.map((character) => character.name).join(" / ") })}</small>
         {/if}
         <div class="confirm-actions">
-          <button class="btn danger" disabled={saving} onclick={remove}>削除する</button>
-          <button class="btn" disabled={saving} onclick={cancelRemove}>やめる</button>
+          <button class="btn danger" disabled={saving} onclick={remove}>{t("削除する")}</button>
+          <button class="btn" disabled={saving} onclick={cancelRemove}>{t("やめる")}</button>
         </div>
       </div>
     {/if}
   </aside>
 
   <section class="catalog">
-    <div class="bar">セットに入れるバフ</div>
+    <div class="bar">{t("セットに入れるバフ")}</div>
     {#if selected}
       <div class="set-tools">
-        <TextField label="バフセット名" value={selected.name} max={40} disabled={saving} onCommit={(name) => { if (selected && name.trim() && name !== selected.name) persist({ ...selected, name }); }} />
-        <button class="btn" onclick={duplicate}>複製</button>
-        <button class="btn danger delete-set" disabled={saving} onclick={requestRemove}>削除</button>
+        <TextField label={t("バフセット名")} value={selected.name} max={40} disabled={saving} onCommit={(name) => { if (selected && name.trim() && name !== selected.name) persist({ ...selected, name }); }} />
+        <button class="btn" onclick={duplicate}>{t("複製")}</button>
+        <button class="btn danger delete-set" disabled={saving} onclick={requestRemove}>{t("削除")}</button>
       </div>
       <div class="groups">
         <div class="search-row">
-          <TextField label="バフ名・効果のキーワードで探す" count={activeDefinitions.length} bind:value={buffQuery} />
+          <TextField label={t("バフ名・効果のキーワードで探す")} count={activeDefinitions.length} bind:value={buffQuery} />
         </div>
         <Choose
-          label="バフの目的"
+          label={t("バフの目的")}
           class="chiprow category-switch"
           options={PURPOSES.map((p) => ({ value: p.id, label: p.label }))}
           bind:value={() => activePurpose, (v) => choosePurpose(v as BuffPurpose)}
@@ -643,19 +653,19 @@
         <section class="buff-group inset swap-in" use:changed={() => searching ? "search" : `${activePurpose}:${activeDamageGroup}`}>
           <div class="group-summary">
             {#if searching}
-              <span class="group-copy"><strong>検索結果</strong><small>目的をまたいで全バフから探しています</small></span>
+              <span class="group-copy"><strong>{t("検索結果")}</strong><small>{t("目的をまたいで全バフから探しています")}</small></span>
             {:else}
               <span class="group-copy"><strong>{activePurposeMeta.label}</strong><small>{activePurposeMeta.description}</small></span>
             {/if}
             {#if !searching && activePurpose === "stats"}
               <button class="guide-link" type="button" onclick={() => focusCharacterSource("commonSkill")}>
-                アンリーシュはキャラ設定 <span aria-hidden="true">›</span>
+                {t("アンリーシュはキャラ設定")} <span aria-hidden="true">›</span>
               </button>
             {/if}
           </div>
           {#if !searching && activePurpose === "damage"}
             <Choose
-              label="ダメージバフの群"
+              label={t("ダメージバフの群")}
               class="chiprow damage-switch"
               options={DAMAGE_GROUPS.map((g) => ({ value: g.id, label: g.label }))}
               bind:value={() => activeDamageGroup, (v) => chooseDamageGroup(v as BuffDamageGroup)}
@@ -683,7 +693,7 @@
                 ? rowLead(def, top, dmg)
                 : blocked ? blockReason(def) : effectLine(def)}
               <ToggleRow
-                name={def.name}
+                name={t(def.name)}
                 value={rowValue}
                 cond={ORIGIN_LABELS[def.origin]}
                 on={isOn}
@@ -692,7 +702,7 @@
                 title={buffTooltip(def, blocked)}
                 onToggle={() => toggle(def)}
               >
-                {#snippet icon()}<Icon kind="buff" id={def.id} size={20} label={def.name} />{/snippet}
+                {#snippet icon()}<Icon kind="buff" id={def.id} size={20} label={t(def.name)} />{/snippet}
                 {#snippet extra()}
                   <!-- 押せる面は名前側(.face)だけ。「設定」「ほか n」は別の的として名前の外に置く
                        (§09 規則 3: 押した場所は動かない)。値の調整が要るバフは「設定」
@@ -702,11 +712,11 @@
                          適用ボタンは無く、触った瞬間に確定する(§07)。割愛した増分の内訳も
                          ここに入れて、押す的を 1 つに保つ。 -->
                     <Popover
-                      label={`${def.name} の設定`}
+                      label={t("{name} の設定", { name: t(def.name) })}
                       triggerClass="rest-link"
                       panelClass="rest-popover editor-popover"
                     >
-                      {#snippet trigger()}設定{/snippet}
+                      {#snippet trigger()}{t("設定")}{/snippet}
                       {#snippet children(close)}
                     <div class="choice-editor">
                       {#if isMultiTarget(def.target)}
@@ -716,11 +726,11 @@
                         {@const range = userInputRange(def.value)}
                         <div class="field">
                           <span class="field-head">
-                            <span class="field-label">対象ステ</span>
+                            <span class="field-label">{t("対象ステ")}</span>
                             <Value class="field-count" motion={() => picked.length} value={`${picked.length}/${STAT_KINDS.length}`} />
                           </span>
                           <Choose
-                            label="対象ステ"
+                            label={t("対象ステ")}
                             options={statOptionsFor(def)}
                             cols={STAT_KINDS.length}
                             max={STAT_KINDS.length}
@@ -738,7 +748,7 @@
                               <div class="stat-value-row">
                                 <span class="stat-value-label">{STAT_LABELS[stat]}</span>
                                 <NumberField
-                                  label="{STAT_LABELS[stat]}の値"
+                                  label={t("{stat}の値", { stat: STAT_LABELS[stat] })}
                                   min={range.min * scale}
                                   max={range.max * scale}
                                   bind:value={() => (liveChoice(def, stat)?.value ?? def.default_value ?? range.min) * scale,
@@ -751,23 +761,23 @@
                       {:else}
                         {#if isUserSelectedTarget(def.target)}
                           <div class="field">
-                            <span class="field-label">対象ステ</span>
-                            <Choose label="対象ステ" options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
+                            <span class="field-label">{t("対象ステ")}</span>
+                            <Choose label={t("対象ステ")} options={statOptionsFor(def)} cols={STAT_KINDS.length} disabledValues={cappedStats(def)} bind:value={() => liveChoice(def)?.stat ?? STAT_KINDS[0], (value) => updateChoice(def, (c) => (c.stat = value as StatKind))} />
                           </div>
                         {/if}
                         {#if isChoiceValue(def.value)}
                           {@const options = def.value.choice.map((value, index) => ({ value: String(index), label: formatLayerValue(def.layer, value) }))}
                           <div class="field">
-                            <span class="field-label">段階</span>
-                            <Choose label="段階" {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
+                            <span class="field-label">{t("段階")}</span>
+                            <Choose label={t("段階")} {options} bind:value={() => String(liveChoice(def)?.choice_index ?? 0), (value) => updateChoice(def, (c) => (c.choice_index = Number(value)))} />
                           </div>
                         {/if}
                         {#if userInputRange(def.value)}
                           {@const range = userInputRange(def.value)!}
                           {@const scale = isPercentLayer(def.layer) ? 100 : 1}
                           <div class="stat-value-row">
-                            <span class="stat-value-label">{isPercentLayer(def.layer) ? "値 (%)" : "値"}</span>
-                            <NumberField label={isPercentLayer(def.layer) ? "値 (%)" : "値"} min={range.min * scale} max={range.max * scale} bind:value={() => (liveChoice(def)?.value ?? def.default_value ?? range.min) * scale, (value) => updateChoice(def, (c) => (c.value = value / scale))} />
+                            <span class="stat-value-label">{isPercentLayer(def.layer) ? t("値 (%)") : t("値")}</span>
+                            <NumberField label={isPercentLayer(def.layer) ? t("値 (%)") : t("値")} min={range.min * scale} max={range.max * scale} bind:value={() => (liveChoice(def)?.value ?? def.default_value ?? range.min) * scale, (value) => updateChoice(def, (c) => (c.value = value / scale))} />
                           </div>
                         {/if}
                       {/if}
@@ -780,46 +790,46 @@
                         {/each}
                       </div>
                     {/if}
-                        <button type="button" class="popover-close" onclick={close}>閉じる</button>
+                        <button type="button" class="popover-close" onclick={close}>{t("閉じる")}</button>
                       {/snippet}
                     </Popover>
                   {:else if isOn && rest.length > 0}
                     <!-- 「ほか n」= 行に出し切れなかったステ増分。押した的の直下に出す -->
-                    <Popover label={`${def.name} の全ステ増分`} triggerClass="rest-link" panelClass="rest-popover">
-                      {#snippet trigger()}ほか {rest.length}{/snippet}
+                    <Popover label={t("{name} の全ステ増分", { name: t(def.name) })} triggerClass="rest-link" panelClass="rest-popover">
+                      {#snippet trigger()}{t("ほか {n}", { n: rest.length })}{/snippet}
                       {#snippet children(close)}
                         {#each rest as line (line)}
                           <div class="num">{line}</div>
                         {/each}
-                        <button type="button" class="popover-close" onclick={close}>閉じる</button>
+                        <button type="button" class="popover-close" onclick={close}>{t("閉じる")}</button>
                       {/snippet}
                     </Popover>
                   {/if}
                 {/snippet}
               </ToggleRow>
             {/each}
-            {#if activeDefinitions.length === 0}<p class="no-hit">「{buffQuery.trim()}」に当たるバフはありません。</p>{/if}
+            {#if activeDefinitions.length === 0}<p class="no-hit">{t("「{q}」に当たるバフはありません。", { q: buffQuery.trim() })}</p>{/if}
           </div>
         </section>
       </div>
     {:else}
-      <div class="empty">左でバフセットを作ってください。</div>
+      <div class="empty">{t("左でバフセットを作ってください。")}</div>
     {/if}
   </section>
 
   <aside class="summary">
-    <div class="bar">現在の効果<Spinner active={summaryLoading} label="バフの効果を集計しています" /></div>
+    <div class="bar">{t("現在の効果")}<Spinner active={summaryLoading} label={t("バフの効果を集計しています")} /></div>
     {#if selected}
       <!-- 跳ねるのは**変わった数字だけ**(§10 型 1)。カード全体に跳ねを付けると
            scale(1.07) が面ごと掛かり、カードの幅が 264 → 282px に膨らんで戻る。
            数字側は 2 桁ぶんの幅を先に取ってあるので、桁が増えても「件 ON」は動かない -->
       <div class="count inset">
-        <Value class="count-value" motion={() => selected.choices.choices.length} value={String(selected.choices.choices.length)} /><small>件 ON</small>
+        <Value class="count-value" motion={() => selected.choices.choices.length} value={String(selected.choices.choices.length)} /><small>{t("件 ON")}</small>
       </div>
       <div class="summary-block inset">
         <div class="summary-head">
-          <strong>ステータス</strong>
-          {#if hasAmplification}<small class="amp-caption">( )は他の補正と重なって増えた分</small>{/if}
+          <strong>{t("ステータス")}</strong>
+          {#if hasAmplification}<small class="amp-caption">{t("( )は他の補正と重なって増えた分")}</small>{/if}
         </div>
         {#if statAfter && baseStats}
           <!-- ゲーム内の数字と突き合わせるとき、要るのは「バフでいくつ伸びたか」だけでなく
@@ -830,10 +840,10 @@
           <table class="grid ro stat-table">
             <thead>
               <tr>
-                <th>ステ</th>
-                <th class="n">素</th>
+                <th>{t("ステ")}</th>
+                <th class="n">{t("素")}</th>
                 {#each STAT_SOURCE_GROUPS as group (group)}<th class="n">{STAT_SOURCE_GROUP_LABELS[group]}</th>{/each}
-                <th class="n">最終</th>
+                <th class="n">{t("最終")}</th>
               </tr>
             </thead>
             <tbody>
@@ -857,21 +867,21 @@
               {/each}
             </tbody>
           </table>
-        {:else}<p>キャラを選ぶと、いまの能力値とバフを足した着地点を表示します。</p>{/if}
+        {:else}<p>{t("キャラを選ぶと、いまの能力値とバフを足した着地点を表示します。")}</p>{/if}
       </div>
       <div class="summary-block inset">
-        <strong>攻撃ダメージ</strong>
+        <strong>{t("攻撃ダメージ")}</strong>
         {#if damageSummary.length > 0}
           <div class="readrows">
             {#each damageSummary as row (row.category)}
-              <ReadRow label={row.label} value={fmtSignedPct(row.value)} motion={() => row.value} tone="up" />
-              {#if row.raw > row.value}<small class="capped">上限で {fmtPct(row.raw - row.value)} は未反映</small>{/if}
+              <ReadRow label={t(row.label)} value={fmtSignedPct(row.value)} motion={() => row.value} tone="up" />
+              {#if row.raw > row.value}<small class="capped">{t("上限で {v} は未反映", { v: fmtPct(row.raw - row.value) })}</small>{/if}
             {/each}
           </div>
-        {:else}<p>選択中のバフによる攻撃ダメージ増加はありません。</p>{/if}
+        {:else}<p>{t("選択中のバフによる攻撃ダメージ増加はありません。")}</p>{/if}
       </div>
       <div class="summary-block inset">
-        <strong>耐久</strong>
+        <strong>{t("耐久")}</strong>
         {#if defenseBefore && defenseAfter}
           {@const physical = defenseAfter.physical_defense - defenseBefore.physical_defense}
           {@const magic = defenseAfter.magic_defense - defenseBefore.magic_defense}
@@ -880,14 +890,14 @@
           <div class="readrows">
             <!-- 変わったのは数値なので、動かすのは数値だけ(§10 型 1)。ブロックごと
                  badge-in で膨らませると、どの行が動いたのか読めなくなる -->
-            <ReadRow label="物理防御力" value={fmtSigned(physical)} motion={() => physical} />
-            <ReadRow label="魔法防御力" value={fmtSigned(magic)} motion={() => magic} />
-            <ReadRow label="複合防御力" value={fmtSigned(composite)} motion={() => composite} />
-            <ReadRow label="コンボ回避" value={fmtSigned(evasion, 1, "%")} motion={() => evasion} />
+            <ReadRow label={t("物理防御力")} value={fmtSigned(physical)} motion={() => physical} />
+            <ReadRow label={t("魔法防御力")} value={fmtSigned(magic)} motion={() => magic} />
+            <ReadRow label={t("複合防御力")} value={fmtSigned(composite)} motion={() => composite} />
+            <ReadRow label={t("コンボ回避")} value={fmtSigned(evasion, 1, "%")} motion={() => evasion} />
           </div>
-        {:else}<p>キャラを選ぶと、防御力などの変化を表示します。</p>{/if}
+        {:else}<p>{t("キャラを選ぶと、防御力などの変化を表示します。")}</p>{/if}
         {#if selected.choices.choices.some((choice) => choice.buff_id === "boiled_mimic")}
-          <div class="unmodeled">被ダメージ -30%（記録のみ・耐久計算には未反映）</div>
+          <div class="unmodeled">{t("被ダメージ -30%（記録のみ・耐久計算には未反映）")}</div>
         {/if}
       </div>
     {/if}

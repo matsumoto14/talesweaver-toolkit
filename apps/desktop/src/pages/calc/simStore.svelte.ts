@@ -4,6 +4,7 @@
 import { errorMessage } from "../../api/commands";
 import type { EquipmentValues, NewCharacter, UltimateSkill } from "../../api/types";
 import { selectedWeapon } from "../../equipment";
+import { t } from "../../i18n";
 import { PART_SLOTS, PART_SLOT_LABELS, ULTIMATE_SKILL_LABELS } from "../../labels";
 import {
   app, enqueueCharacterSave, payloadOf, selectedCharacter, simIsDirty, upsertCharacter,
@@ -20,13 +21,13 @@ export interface Knob {
 export const KNOBS: Knob[] = [
   {
     id: "pw",
-    label: (p) => `パワーW ${p.common_skills.power_weapon ? "ON" : "OFF"}`,
+    label: (p) => `${t("パワーW")} ${p.common_skills.power_weapon ? "ON" : "OFF"}`,
     get: (p) => String(p.common_skills.power_weapon),
     set: (p, v) => (p.common_skills.power_weapon = v === "true"),
   },
   {
     id: "sw",
-    label: (p) => `ストロングW ${p.common_skills.strong_weapon_level > 0 ? `Lv${p.common_skills.strong_weapon_level}` : "なし"}`,
+    label: (p) => `${t("ストロングW")} ${p.common_skills.strong_weapon_level > 0 ? `Lv${p.common_skills.strong_weapon_level}` : t("なし")}`,
     get: (p) => String(p.common_skills.strong_weapon_level),
     set: (p, v) => (p.common_skills.strong_weapon_level = Number(v)),
   },
@@ -35,7 +36,7 @@ export const KNOBS: Knob[] = [
     // 登録 ID で持つ(装着中の 1 件ではなく)。装着を切り替えても、切り替え先のエンチャントが
     // 「変えた」ことにならないようにする — 切り替えは equipment_select の 1 チップで戻す
     id: "enchant",
-    label: () => "エンチャント",
+    label: () => t("エンチャント"),
     get: (p) => JSON.stringify(PART_SLOTS.map((s) => p.equipment.parts[s].registered.map((x) => [x.id, x.enchant]))),
     set: (p, v) => {
       const values = JSON.parse(v) as [number, EquipmentValues][][];
@@ -54,7 +55,7 @@ export const KNOBS: Knob[] = [
       const changed = saved
         ? PART_SLOTS.filter((s) => p.equipment.parts[s].selected_id !== saved.equipment.parts[s].selected_id)
         : [];
-      return `装備切替 ${changed.map((s) => PART_SLOT_LABELS[s]).join("・")}`.trim();
+      return `${t("装備切替")} ${changed.map((s) => PART_SLOT_LABELS[s]).join("・")}`.trim();
     },
     get: (p) => JSON.stringify(PART_SLOTS.map((s) => p.equipment.parts[s].selected_id)),
     set: (p, v) => {
@@ -64,26 +65,29 @@ export const KNOBS: Knob[] = [
   },
   {
     id: "title",
-    label: (p) => `称号 ${app.titles.find((t) => t.id === p.equipment.title)?.name ?? "なし"}`,
+    label: (p) => {
+      const title = app.titles.find((x) => x.id === p.equipment.title);
+      return t("称号 {name}", { name: title ? t(title.name) : t("なし") });
+    },
     get: (p) => String(p.equipment.title),
     set: (p, v) => (p.equipment.title = v === "null" ? null : v),
   },
   {
     id: "ultimate",
     label: (p) =>
-      `極限 ${
-        p.common_skills.ultimate.slots
+      t("極限 {v}", {
+        v: p.common_skills.ultimate.slots
           .filter((s): s is UltimateSkill => s !== null)
           .map((s) => ULTIMATE_SKILL_LABELS[s])
-          .join("・") || "未選択"
-      }`,
+          .join("・") || t("未選択"),
+      }),
     get: (p) => JSON.stringify(p.common_skills.ultimate.slots),
     set: (p, v) => (p.common_skills.ultimate.slots = JSON.parse(v)),
   },
   {
     // 覚醒段階とエタの意志 Lv は 1 つの育ち方(エタは覚醒 5 の先)なので 1 チップで戻す
     id: "awakening",
-    label: (p) => `覚醒 ${p.awakening.stage} / エタ Lv${p.awakening.eternal_level}`,
+    label: (p) => t("覚醒 {stage} / エタ Lv{lv}", { stage: p.awakening.stage, lv: p.awakening.eternal_level }),
     get: (p) => JSON.stringify(p.awakening),
     set: (p, v) => (p.awakening = JSON.parse(v)),
   },
@@ -91,15 +95,15 @@ export const KNOBS: Knob[] = [
     id: "sharpness",
     label: (p) =>
       p.common_skills.sharpness_vision_level > 0
-        ? `シャープネス Lv${p.common_skills.sharpness_vision_level}`
-        : "シャープネス 未習得",
+        ? t("シャープネス Lv{lv}", { lv: p.common_skills.sharpness_vision_level })
+        : t("シャープネス 未習得"),
     get: (p) => String(p.common_skills.sharpness_vision_level),
     set: (p, v) => (p.common_skills.sharpness_vision_level = Number(v)),
   },
   {
     // リンクステータスは 8 種まとめて 1 チップ。この画面で触るのはダメージ式に効く 5〜7 だけ
     id: "soul_link",
-    label: () => "ソウルリンク",
+    label: () => t("ソウルリンク"),
     get: (p) => JSON.stringify(p.stat_sources.soul_link),
     set: (p, v) => (p.stat_sources.soul_link = JSON.parse(v)),
   },
@@ -108,10 +112,9 @@ export const KNOBS: Knob[] = [
     id: "weapon_item",
     label: (p) => {
       const weapon = selectedWeapon(p);
-      const name = app.equipmentCatalog.find((i) => i.id === weapon.item_id)?.name
-        ?? weapon.custom_name
-        ?? "未装着";
-      return `武器 ${name}`;
+      const catalogName = app.equipmentCatalog.find((i) => i.id === weapon.item_id)?.name;
+      const name = catalogName ? t(catalogName) : (weapon.custom_name ?? t("未装着"));
+      return t("武器 {name}", { name });
     },
     // 登録 ID ごとに持つ(装着の切り替えで「武器が変わった」ことにしない。enchant と同じ)
     get: (p) => JSON.stringify(p.equipment.parts.weapon.registered.map((w) => [w.id, w.item_id, w.custom_name, w.base])),
@@ -129,13 +132,13 @@ export const KNOBS: Knob[] = [
   // 「試し変更中なのにチップが空」にならないよう網羅する(独立レビュー指摘)。
   {
     id: "base_stats",
-    label: () => "素ステータス",
+    label: () => t("素ステータス"),
     get: (p) => JSON.stringify(p.base_stats),
     set: (p, v) => (p.base_stats = JSON.parse(v)),
   },
   {
     id: "permanent",
-    label: () => "恒常補正(ペット/ルーン/クラウン/聖物)",
+    label: () => t("恒常補正(ペット/ルーン/クラウン/聖物)"),
     get: (p) =>
       JSON.stringify([
         p.stat_sources.pet_skills,
@@ -153,7 +156,7 @@ export const KNOBS: Knob[] = [
   },
   {
     id: "identity",
-    label: (p) => `名前・キャラ種(${p.name})`,
+    label: (p) => t("名前・キャラ種({name})", { name: p.name }),
     get: (p) => JSON.stringify([p.name, p.game_character_id]),
     set: (p, v) => {
       const [name, gid] = JSON.parse(v);

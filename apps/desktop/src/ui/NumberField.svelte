@@ -25,6 +25,7 @@
   // value との比較ではなく専用変数で判定する)。
   import { bump } from "./motion.svelte";
   import { fmtInt } from "../format";
+  import { t } from "../i18n";
 
   interface Props {
     /** 何の欄か。読み上げ用(aria-label)。見えるラベルは呼ぶ側の行が持つ */
@@ -76,7 +77,7 @@
    * 形態 5 の理由。出どころがある値(形態 1)には出さない — その値にとっては
    * 出どころそのものが理由なので、青枠と破線チップを重ねると例外が二重になる。
    */
-  const why = $derived(capped || isAuto ? null : (reason ?? "上限なし · 手入力"));
+  const why = $derived(capped || isAuto ? null : (reason ?? t("上限なし · 手入力")));
   /** 桁区切りのカンマを含めた文字数(セル幅の根拠) */
   const chars = $derived(digits === undefined ? null : digits + Math.floor((digits - 1) / 3));
   /** 形態 5 の 0 は「まだ入れていない」なので、0 と読ませず空表示にする(押せば 0 が選択された編集に入る) */
@@ -181,7 +182,7 @@
   }}
 >
   {#if capped}
-    <button type="button" class="step" onclick={() => commit(clamp(value - step))} disabled={value <= min} aria-label="{label} を減らす">−</button>
+    <button type="button" class="step" onclick={() => commit(clamp(value - step))} disabled={value <= min} aria-label={t("{label} を減らす", { label })}>−</button>
   {/if}
   <!-- 値と上限は**同じセルに同居**する(§07「値・上限・進捗・MAX がひとつのセルに同居」)。
        上限を行の右端に飛ばすと、値の隣に無いので「何に対しての上限か」が読めない。
@@ -222,7 +223,7 @@
         type="button"
         class="num val read"
         class:blank
-        aria-label="{label} を編集"
+        aria-label={t("{label} を編集", { label })}
         title={autoNote}
         use:bump={() => value}
         onclick={() => (editing = true)}
@@ -239,7 +240,7 @@
   <!-- 形態 5 の理由チップ(§07「ここまで降りたら理由を書く」)。値の隣に常設し、出たり消えたりしない -->
   {#if why !== null}<span class="why">{why}</span>{/if}
   {#if capped}
-    <button type="button" class="step" onclick={() => commit(clamp(value + step))} disabled={value >= max!} aria-label="{label} を増やす">＋</button>
+    <button type="button" class="step" onclick={() => commit(clamp(value + step))} disabled={value >= max!} aria-label={t("{label} を増やす", { label })}>＋</button>
   {/if}
   <!-- よく使う値。MAX と同じく常設する -->
   {#each presets as p (p.value)}
@@ -256,7 +257,7 @@
       class="increment num"
       onclick={() => commit(clamp(value + amount))}
       disabled={full}
-      aria-label="{label}に{amount}加算"
+      aria-label={t("{label}に{amount}加算", { label, amount })}
     >+{amount}</button>
   {/each}
   <!-- MAX は**常設**。押して編集に入ってからでは 2 タップになる(§12「MAX を 1 タップで置く」) -->

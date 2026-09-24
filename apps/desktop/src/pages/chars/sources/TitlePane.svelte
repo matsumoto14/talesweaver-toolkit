@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../../../i18n";
   // 「title」補正源のペイン。装備枠 1 つ、表示中の 1 件だけが効く(wiki: 称号システム)。
   import type { Skill, TitleDef } from "../../../api/types";
   import type { Draft } from "../../../draft";
@@ -20,14 +21,14 @@
   let { draft, skills }: Props = $props();
 
   let titleQuery = $state("");
-  const selectedTitle = $derived(app.titles.find((t) => t.id === draft.equipment.title) ?? null);
+  const selectedTitle = $derived(app.titles.find((title) => title.id === draft.equipment.title) ?? null);
   /** 所持している称号(キャラタブで登録した一覧)。カタログに無い id(旧データ)は出さない */
   const ownedTitles = $derived(
     draft.equipment.owned_titles
-      .map((id) => app.titles.find((t) => t.id === id))
-      .filter((t): t is TitleDef => t !== undefined),
+      .map((id) => app.titles.find((title) => title.id === id))
+      .filter((title): title is TitleDef => title !== undefined),
   );
-  const ownedIds = $derived(new Set(ownedTitles.map((t) => t.id)));
+  const ownedIds = $derived(new Set(ownedTitles.map((title) => title.id)));
   /** 所持に入れて表示中にする(既に所持なら表示中にするだけ)。 */
   function addOwnedAndSelect(id: string) {
     if (!ownedIds.has(id)) draft.equipment.owned_titles = [...draft.equipment.owned_titles, id];
@@ -38,16 +39,16 @@
   let openGroup = $state<string | null>(null);
   /** 所持から外す。表示中だったら表示中も外す。 */
   function removeOwned(id: string) {
-    draft.equipment.owned_titles = draft.equipment.owned_titles.filter((t) => t !== id);
+    draft.equipment.owned_titles = draft.equipment.owned_titles.filter((title) => title !== id);
     if (draft.equipment.title === id) draft.equipment.title = null;
   }
   /** 普段使う称号(常設)。どれが普段使いかは gamedata の `common` */
-  const commonTitles = $derived(app.titles.filter((t) => t.common));
-  const otherTitles = $derived(app.titles.filter((t) => !t.common));
+  const commonTitles = $derived(app.titles.filter((title) => title.common));
+  const otherTitles = $derived(app.titles.filter((title) => !title.common));
   const queriedOtherTitles = $derived.by(() => {
     const q = titleQuery.trim();
     if (q === "") return otherTitles;
-    return otherTitles.filter((t) => t.name.includes(q) || t.group.includes(q));
+    return otherTitles.filter((title) => title.name.includes(q) || title.group.includes(q));
   });
 
   // --- 主軸スキルの依存種別で絞り込む ---------------------------------------
@@ -57,31 +58,31 @@
   const skillKinds = $derived(equipmentAttackKindsFor(mainSkill?.dependency ?? null));
   let showAllTitles = $state(false);
   const filterActive = $derived(mainSkill !== null && !showAllTitles);
-  const titleMatchesSkill = (t: TitleDef): boolean =>
+  const titleMatchesSkill = (title: TitleDef): boolean =>
     !filterActive ||
-    t.attack_damage_percent > 0 ||
-    t.added_damage_percent > 0 ||
-    t.conditional_added_damage !== null ||
-    skillKinds.some((k) => t.values[k] > 0);
+    title.attack_damage_percent > 0 ||
+    title.added_damage_percent > 0 ||
+    title.conditional_added_damage !== null ||
+    skillKinds.some((k) => title.values[k] > 0);
   const filteredCommonTitles = $derived(commonTitles.filter(titleMatchesSkill));
   const filteredOtherTitles = $derived(queriedOtherTitles.filter(titleMatchesSkill));
 
   /** 称号の補正値の要約(値が入っている列だけ)。 */
-  const titleSummary = (t: TitleDef): string =>
-    EQUIPMENT_STAT_KINDS.filter((k) => t.values[k] !== 0)
-      .map((k) => `${EQUIPMENT_STAT_SHORT[k]}${t.values[k]}`)
+  const titleSummary = (title: TitleDef): string =>
+    EQUIPMENT_STAT_KINDS.filter((k) => title.values[k] !== 0)
+      .map((k) => `${EQUIPMENT_STAT_SHORT[k]}${title.values[k]}`)
       .join(" ");
   /** 「緋馬の怪火 - 突き」の「緋馬の怪火」。同じ称号の依存違いをまとめる単位 */
-  const titleBase = (t: TitleDef): string => t.name.split(" - ")[0];
+  const titleBase = (title: TitleDef): string => title.name.split(" - ")[0];
   /** 同じ称号の変種(突き / 斬り / 魔攻 …)を 1 行にまとめる。
       カタログの並び(ダメージ増加の大きい順)は最初に出てきた変種の位置で保つ */
   const groupTitles = (titles: TitleDef[]) => {
     const groups = new Map<string, TitleDef[]>();
-    for (const t of titles) {
-      const base = titleBase(t);
+    for (const title of titles) {
+      const base = titleBase(title);
       const list = groups.get(base);
-      if (list) list.push(t);
-      else groups.set(base, [t]);
+      if (list) list.push(title);
+      else groups.set(base, [title]);
     }
     return [...groups].map(([base, items]) => ({ base, items }));
   };
@@ -99,35 +100,35 @@
      ただしダメ %を消しても行を無情報にはしない — 装備基本能力値の合計(equipment_value_total)は
      称号ごとに違うので、常に「その行を選んだら何が増えるか」が読めるよう値を残す -->
 
-{#snippet dmgBadge(t: TitleDef, impliedDmg: number | null)}
-  {#if t.attack_damage_percent > 0 && t.attack_damage_percent !== impliedDmg}
-    <span class="title-dmg meta-pill num">ダメ {fmtSigned(t.attack_damage_percent, { max: 2 }, "%")}</span>
-  {:else if t.added_damage_percent > 0}
-    <span class="title-dmg meta-pill num">追加ダメ {fmtSigned(t.added_damage_percent, { max: 2 }, "%")}</span>
-  {:else if t.conditional_added_damage !== null}
-    <span class="title-extra">条件付き追加ダメ</span>
+{#snippet dmgBadge(title: TitleDef, impliedDmg: number | null)}
+  {#if title.attack_damage_percent > 0 && title.attack_damage_percent !== impliedDmg}
+    <span class="title-dmg meta-pill num">{t("ダメ")} {fmtSigned(title.attack_damage_percent, { max: 2 }, "%")}</span>
+  {:else if title.added_damage_percent > 0}
+    <span class="title-dmg meta-pill num">{t("追加ダメ")} {fmtSigned(title.added_damage_percent, { max: 2 }, "%")}</span>
+  {:else if title.conditional_added_damage !== null}
+    <span class="title-extra">{t("条件付き追加ダメ")}</span>
   {/if}
 {/snippet}
 {#snippet ownedBadge(owned: boolean)}
-  {#if owned}<span class="ro-badge title-owned-badge badge-in">所持</span>{/if}
+  {#if owned}<span class="ro-badge title-owned-badge badge-in">{t("所持")}</span>{/if}
 {/snippet}
 {#snippet titleRows(groups: { base: string; items: TitleDef[] }[], impliedDmg: number | null)}
   {#each groups as g (g.base)}
     {#if g.items.length === 1}
-      {@const t = g.items[0]}
+      {@const title = g.items[0]}
       <button
         type="button"
         class="item-row"
-        class:on={draft.equipment.title === t.id}
-        onclick={() => addOwnedAndSelect(t.id)}
+        class:on={draft.equipment.title === title.id}
+        onclick={() => addOwnedAndSelect(title.id)}
       >
-        <span class="item-name">{t.name}</span>
-        <span class="item-vals num dim">合計 {signed(t.equipment_value_total)}</span>
-        {@render dmgBadge(t, impliedDmg)}
-        {@render ownedBadge(ownedIds.has(t.id))}
+        <span class="item-name">{title.name}</span>
+        <span class="item-vals num dim">{t("合計")} {signed(title.equipment_value_total)}</span>
+        {@render dmgBadge(title, impliedDmg)}
+        {@render ownedBadge(ownedIds.has(title.id))}
       </button>
     {:else}
-      {@const picked = g.items.find((t) => t.id === draft.equipment.title) ?? null}
+      {@const picked = g.items.find((title) => title.id === draft.equipment.title) ?? null}
       {@const expanded = picked !== null || openGroup === g.base}
       <!-- 未選択のあいだは行そのものが「変種チップを開く」ボタン。押すと変種チップがここに
            (その場に)出て、変種を押したときに所持に入り表示中になる(§00 03「押した場所は動かない」) -->
@@ -148,18 +149,18 @@
         }}
       >
         <span class="item-name">{g.base}</span>
-        {@render ownedBadge(g.items.some((t) => ownedIds.has(t.id)))}
+        {@render ownedBadge(g.items.some((title) => ownedIds.has(title.id)))}
         {#if !expanded}
-          <span class="item-vals num dim">合計 {signed(g.items[0].equipment_value_total)}</span>
+          <span class="item-vals num dim">{t("合計")} {signed(g.items[0].equipment_value_total)}</span>
           {@render dmgBadge(g.items[0], impliedDmg)}
         {:else}
           <span class="title-variants">
-            {#each g.items as t (t.id)}
+            {#each g.items as title (title.id)}
               <Chip
-                on={draft.equipment.title === t.id}
-                title="{t.name} — {titleSummary(t)}"
-                onToggle={() => addOwnedAndSelect(t.id)}
-              >{t.name.slice(g.base.length + 3)} <span class="title-variant-val num">{signed(t.equipment_value_total)}</span></Chip>
+                on={draft.equipment.title === title.id}
+                title="{title.name} — {titleSummary(title)}"
+                onToggle={() => addOwnedAndSelect(title.id)}
+              >{title.name.slice(g.base.length + 3)} <span class="title-variant-val num">{signed(title.equipment_value_total)}</span></Chip>
             {/each}
           </span>
         {/if}
@@ -169,74 +170,72 @@
 {/snippet}
 
 <div class="card">
-  <div class="card-title">選択中</div>
+  <div class="card-title">{t("選択中")}</div>
   <div
     class="contrib-card title-current"
     class:empty={selectedTitle === null}
     use:changed={() => selectedTitle?.id ?? "none"}
   >
-    <span class="item-name strong">{selectedTitle?.name ?? "未選択"}</span>
+    <span class="item-name strong">{selectedTitle?.name ?? t("未選択")}</span>
     {#if selectedTitle && titleSummary(selectedTitle) !== ""}
       <span class="item-vals num dim" title={titleSummary(selectedTitle)}>{titleSummary(selectedTitle)}</span>
     {/if}
     {#if selectedTitle?.attack_damage_percent}
-      <span class="title-dmg meta-pill num">ダメージ {fmtSigned(selectedTitle.attack_damage_percent, { max: 2 }, "%")}</span>
+      <span class="title-dmg meta-pill num">{t("ダメージ")} {fmtSigned(selectedTitle.attack_damage_percent, { max: 2 }, "%")}</span>
     {:else if selectedTitle?.added_damage_percent}
-      <span class="title-dmg meta-pill num">追加ダメージ {fmtSigned(selectedTitle.added_damage_percent, { max: 2 }, "%")}</span>
+      <span class="title-dmg meta-pill num">{t("追加ダメージ")} {fmtSigned(selectedTitle.added_damage_percent, { max: 2 }, "%")}</span>
     {:else if selectedTitle?.conditional_added_damage}
-      <span class="title-extra">条件付き追加ダメージ</span>
+      <span class="title-extra">{t("条件付き追加ダメージ")}</span>
     {/if}
     {#if selectedTitle}
-      <Chip class="quiet" onclick={() => (draft.equipment.title = null)}>外す</Chip>
+      <Chip class="quiet" onclick={() => (draft.equipment.title = null)}>{t("外す")}</Chip>
     {/if}
   </div>
 </div>
 <div class="card">
-  <div class="card-title">所持</div>
+  <div class="card-title">{t("所持")}</div>
   {#if ownedTitles.length === 0}
-    <p class="hint dim">下の一覧から選ぶと所持に入ります。</p>
+    <p class="hint dim">{t("下の一覧から選ぶと所持に入ります。")}</p>
   {:else}
     <div class="item-list owned-title-list">
-      {#each ownedTitles as t (t.id)}
-        <div class="item-row badge-in" class:on={draft.equipment.title === t.id}>
-          <button type="button" class="item-row-main" onclick={() => (draft.equipment.title = t.id)}>
-            <span class="item-name">{t.name}</span>
-            {#if titleSummary(t) !== ""}
-              <span class="item-vals num dim">{titleSummary(t)}</span>
+      {#each ownedTitles as title (title.id)}
+        <div class="item-row badge-in" class:on={draft.equipment.title === title.id}>
+          <button type="button" class="item-row-main" onclick={() => (draft.equipment.title = title.id)}>
+            <span class="item-name">{title.name}</span>
+            {#if titleSummary(title) !== ""}
+              <span class="item-vals num dim">{titleSummary(title)}</span>
             {/if}
           </button>
-          <Chip class="quiet" onclick={() => removeOwned(t.id)} title="所持から外す(表示中なら表示も解除)">所持から外す</Chip>
+          <Chip class="quiet" onclick={() => removeOwned(title.id)} title={t("所持から外す(表示中なら表示も解除)")}>{t("所持から外す")}</Chip>
         </div>
       {/each}
     </div>
   {/if}
 </div>
 <div class="card">
-  <p class="hint dim">普段使う候補だけを先に出しています。それ以外は下の「その他」から選べます。行を選ぶと所持に入り、表示中になります。</p>
+  <p class="hint dim">{t("普段使う候補だけを先に出しています。それ以外は下の「その他」から選べます。行を選ぶと所持に入り、表示中になります。")}</p>
   <Disclosure class="fold">
-    {#snippet summary()}称号の補正の入り方{/snippet}
+    {#snippet summary()}{t("称号の補正の入り方")}{/snippet}
     <div class="fold-body">
       <p class="hint dim">
-        wiki「称号システム」。補正値は<b>装備の基本能力値</b>に乗り、<b>ダメージ n% 増加</b>はカテゴリX(攻撃ダメージ)に入ります。
-        収録は主要称号のみ({app.titles.length} 件)。並びは<b>ダメージ増加 → 与ダメージに効く 1 値の大きさ</b>の順です。
-        条件付き効果とグループボーナスは記録だけで、計算には入りません。
+        {t("wiki「称号システム」。補正値は")}<b>{t("装備の基本能力値")}</b>{t("に乗り、")}<b>{t("ダメージ n% 増加")}</b>{t("はカテゴリX(攻撃ダメージ)に入ります。収録は主要称号のみ({n} 件)。並びは", { n: app.titles.length })}<b>{t("ダメージ増加 → 与ダメージに効く 1 値の大きさ")}</b>{t("の順です。条件付き効果とグループボーナスは記録だけで、計算には入りません。")}
       </p>
     </div>
 
   </Disclosure>
   <div class="card-title space">
-    よく使う称号 <span class="normal dim">ダメ +20%以上 / エクリプス / 神鳥の塒</span>
+    {t("よく使う称号")} <span class="normal dim">{t("ダメ +20%以上 / エクリプス / 神鳥の塒")}</span>
   </div>
   {#if mainSkill}
     <!-- 絞り込みで件数が減ったことを数字で見せる(§00 05 考えさせない) -->
     <div class="title-filter">
       <Value class="dim" value={String(filterActive)}
         >{#snippet children()}{filterActive
-          ? `${mainSkill.name}向けに ${filteredCommonTitles.length} / ${commonTitles.length} 件`
-          : `すべて表示中(${commonTitles.length} 件)`}{/snippet}</Value
+          ? t("{name}向けに {n} / {total} 件", { name: mainSkill.name, n: filteredCommonTitles.length, total: commonTitles.length })
+          : t("すべて表示中({total} 件)", { total: commonTitles.length })}{/snippet}</Value
       >
       <Chip class="quiet" on={showAllTitles} onToggle={() => (showAllTitles = !showAllTitles)}>
-        {showAllTitles ? "絞り込みに戻す" : "すべて表示"}
+        {showAllTitles ? t("絞り込みに戻す") : t("すべて表示")}
       </Chip>
     </div>
   {/if}
@@ -244,15 +243,15 @@
     {@render titleRows(commonTitleGroups, 20)}
   </div>
   <Disclosure class="fold">
-    {#snippet summary()}その他の称号から選ぶ({filteredOtherTitles.length} 件){/snippet}
+    {#snippet summary()}{t("その他の称号から選ぶ({n} 件)", { n: filteredOtherTitles.length })}{/snippet}
     <div class="fold-body">
-      <TextField label="称号名・グループで探す" count={filteredOtherTitles.length} bind:value={titleQuery} />
+      <TextField label={t("称号名・グループで探す")} count={filteredOtherTitles.length} bind:value={titleQuery} />
       {#if otherTitleGroups.length > 0}
         <div class="item-list title-list effectful">
           {@render titleRows(otherTitleGroups, null)}
         </div>
       {:else}
-        <p class="hint dim">該当する称号はありません。</p>
+        <p class="hint dim">{t("該当する称号はありません。")}</p>
       {/if}
     </div>
 
@@ -262,16 +261,16 @@
   {@const filled = EQUIPMENT_STAT_KINDS.filter((k) => selectedTitle.values[k] !== 0)}
   <div class="card">
     <div class="card-title inline">
-      選択中の補正 <span class="normal dim">{selectedTitle.name}</span>
+      {t("選択中の補正")} <span class="normal dim">{selectedTitle.name}</span>
     </div>
     {#if selectedTitle.attack_damage_percent > 0}
       <p class="hint dim">
-        ダメージ増加は<b>カテゴリX(攻撃ダメージ)</b>の X3 基本発動に入ります(wiki: ステータス。X3 は上限 +80%)。
+        {t("ダメージ増加は")}<b>{t("カテゴリX(攻撃ダメージ)")}</b>{t("の X3 基本発動に入ります(wiki: ステータス。X3 は上限 +80%)。")}
       </p>
     {/if}
     {#if selectedTitle.added_damage_percent > 0}
       <p class="hint dim">
-        追加ダメージは<b>合計ダメージに乗る割合追加ダメージ</b>(シャープネスビジョンと同じ段)に入ります。
+        {t("追加ダメージは")}<b>{t("合計ダメージに乗る割合追加ダメージ")}</b>{t("(シャープネスビジョンと同じ段)に入ります。")}
       </p>
     {/if}
     {#if filled.length > 0}
@@ -284,10 +283,10 @@
         {/each}
       </div>
     {:else}
-      <p class="hint dim">補正値はありません(ダメージ増加だけの称号)。</p>
+      <p class="hint dim">{t("補正値はありません(ダメージ増加だけの称号)。")}</p>
     {/if}
     <p class="hint dim">
-      {selectedTitle.group}{selectedTitle.level !== null ? ` ・ 習得 Lv${selectedTitle.level}` : ""}
+      {selectedTitle.group}{selectedTitle.level !== null ? ` ・ ${t("習得 Lv{lv}", { lv: selectedTitle.level })}` : ""}
       {#if selectedTitle.note}<br />{selectedTitle.note}{/if}
     </p>
   </div>

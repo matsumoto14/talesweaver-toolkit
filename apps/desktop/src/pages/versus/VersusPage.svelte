@@ -18,6 +18,7 @@
   import { PART_SLOT_LABELS, PET_SKILL_TIER_LABELS, RANDOM_OPTION_RANK_LABELS } from "../../labels";
   import { app, gameCharacterName, payloadOf } from "../../state.svelte";
   import { reportError } from "../../toast.svelte";
+  import { t } from "../../i18n";
   import Disclosure from "../../ui/Disclosure.svelte";
   import { badgeStyle } from "../../ui/states";
   import { changed } from "../../ui/motion.svelte";
@@ -52,7 +53,7 @@
   // ときに、先に 2 人目を変えないと選べず、行き止まりになる(ユーザー指摘 2026-09-01)。
   // 同じキャラを選んだら 2 人を入れ替える(pickCharA / pickCharB)
   const characterOptions = (): PickerOption[] => [
-    { value: "", name: "未選択", meta: "キャラを選ぶ" },
+    { value: "", name: t("未選択"), meta: t("キャラを選ぶ") },
     ...app.characters.map((c) => ({
       value: String(c.id),
       name: c.name,
@@ -88,7 +89,7 @@
     const set = app.buffSets.find((set) => set.id === buffSetIdOf(c));
     return JSON.parse(JSON.stringify(set?.choices ?? { choices: [] })) as BuffSelection;
   }
-  const buffSetOptions = () => buildBuffSetOptions(app.buffSets, "バフを使わない");
+  const buffSetOptions = () => buildBuffSetOptions(app.buffSets, t("バフを使わない"));
 
   // --- 使用スキル(キャラタブの主軸スキルが正。CalcPage と同じ組み方) -------------
   // 両方向の命中Pにそれぞれの攻撃スキルが要るので、1 人目・2 人目それぞれに要る。
@@ -140,7 +141,7 @@
     return skills.list.map((s) => ({
       value: s.id,
       name: s.name,
-      meta: s.accuracy !== null ? `命中 ${s.accuracy}` : "命中 未記載",
+      meta: s.accuracy !== null ? t("命中 {v}", { v: s.accuracy }) : t("命中 未記載"),
       iconId: s.id,
       iconKind: "skill" as const,
     }));
@@ -268,30 +269,30 @@
   // 必中かどうかの判定は domain(HitRate::capped)が持つ。ここで raw >= max を書き直さない
   function hitBadge(result: VersusAccuracy | null) {
     if (result === null) return { label: "?", state: "unknown" as const };
-    if (result.hit_rate.capped) return { label: "必中", state: "goal" as const };
-    if (result.hit_rate.floored) return { label: "下限", state: "short" as const };
-    return { label: "命中率", state: "met" as const };
+    if (result.hit_rate.capped) return { label: t("必中"), state: "goal" as const };
+    if (result.hit_rate.floored) return { label: t("下限"), state: "short" as const };
+    return { label: t("命中率"), state: "met" as const };
   }
-  const rateText = (hr: HitRate) => (hr.capped ? "必中" : `${hr.value}%`);
+  const rateText = (hr: HitRate) => (hr.capped ? t("必中") : `${hr.value}%`);
 
   /** 列の答えの一文(計算タブの「目安の 2.42 倍。火力は足りています」と同じ役)。
    *  余裕 / 不足は domain(HitRate.to_cap / to_leave_floor)の値をそのまま置く。画面で引き算しない */
   function answerText(hr: HitRate): string {
     if (hr.capped) {
       return hr.to_cap === 0
-        ? "ぎりぎり必中。相手の回避P が 1 上がると外れ始める"
-        : `必中。相手の回避P があと ${-hr.to_cap} 上がるまで必中のまま`;
+        ? t("ぎりぎり必中。相手の回避P が 1 上がると外れ始める")
+        : t("必中。相手の回避P があと {v} 上がるまで必中のまま", { v: -hr.to_cap });
     }
-    if (hr.floored) return `下限に張り付き。命中P があと ${hr.to_leave_floor} 上がると動き始める`;
-    return `必中まで命中P あと ${hr.to_cap}`;
+    if (hr.floored) return t("下限に張り付き。命中P があと {v} 上がると動き始める", { v: hr.to_leave_floor });
+    return t("必中まで命中P あと {v}", { v: hr.to_cap });
   }
 
   /** 倍率・スキル名・Lv は Rust が解決した値をそのまま出す(画面で計算しない) */
   function boostLabel(boost: AccuracyBoost): string | null {
     const source = boost.source;
     if (source === "none") return null;
-    if (source === "concentration") return `ペット集中 ・ 命中P ${fmtRate(boost.rate)}`;
-    return `${source.skill.name} Lv${source.skill.level} ・ 命中P ${fmtRate(boost.rate)}`;
+    if (source === "concentration") return t("ペット集中 ・ 命中P {v}", { v: fmtRate(boost.rate) });
+    return t("{name} Lv{level} ・ 命中P {v}", { name: t(source.skill.name), level: source.skill.level, v: fmtRate(boost.rate) });
   }
 
   // --- 「次にできること」(accuracy_growth / evasion_growth) ------------------------
@@ -301,38 +302,38 @@
   /** ステの固定上昇源。ペットだけ「どの段階まで」が名詞の中身になる */
   function statFixedLabel(source: StatFixedSource): string {
     if (typeof source !== "string") {
-      return `ペット Sスキル ${PET_SKILL_TIER_LABELS[source.pet_skill.target]}`;
+      return t("ペット Sスキル {v}", { v: PET_SKILL_TIER_LABELS[source.pet_skill.target] });
     }
     switch (source) {
-      case "rune": return "ルーンスキル";
-      case "crown": return "クラウン";
-      case "monster_card": return "モンスターカード";
-      case "sacred_relic": return "神鳥の聖物";
+      case "rune": return t("ルーンスキル");
+      case "crown": return t("クラウン");
+      case "monster_card": return t("モンスターカード");
+      case "sacred_relic": return t("神鳥の聖物");
     }
   }
 
   function actionLabel(action: GrowthAction): string {
-    if ("buff" in action) return action.buff.name;
-    if ("stat_buff" in action) return action.stat_buff.name;
+    if ("buff" in action) return t(action.buff.name);
+    if ("stat_buff" in action) return t(action.stat_buff.name);
     if ("ability_attach" in action) {
       const a = action.ability_attach;
-      return `${PART_SLOT_LABELS[a.slot]}: ${a.ability_name}`;
+      return `${PART_SLOT_LABELS[a.slot]}: ${t(a.ability_name)}`;
     }
     if ("ability_replace" in action) {
       const a = action.ability_replace;
-      return `${PART_SLOT_LABELS[a.slot]}: ${a.from_ability_name} → ${a.ability_name}`;
+      return `${PART_SLOT_LABELS[a.slot]}: ${t(a.from_ability_name)} → ${t(a.ability_name)}`;
     }
     if ("random_option_attach" in action) {
       const a = action.random_option_attach;
-      return `${PART_SLOT_LABELS[a.slot]}: ${a.option_name}(${RANDOM_OPTION_RANK_LABELS[a.rank]})`;
+      return `${PART_SLOT_LABELS[a.slot]}: ${t(a.option_name)}(${RANDOM_OPTION_RANK_LABELS[a.rank]})`;
     }
     if ("random_option_rank_up" in action) {
       const a = action.random_option_rank_up;
-      return `${PART_SLOT_LABELS[a.slot]}: ${a.option_name} ${RANDOM_OPTION_RANK_LABELS[a.from_rank]} → ${RANDOM_OPTION_RANK_LABELS[a.rank]}`;
+      return `${PART_SLOT_LABELS[a.slot]}: ${t(a.option_name)} ${RANDOM_OPTION_RANK_LABELS[a.from_rank]} → ${RANDOM_OPTION_RANK_LABELS[a.rank]}`;
     }
     if ("stat_fixed" in action) return statFixedLabel(action.stat_fixed.source);
-    if ("enchant" in action) return `${PART_SLOT_LABELS[action.enchant.slot]}: エンチャント`;
-    return "シエナのオーラ";
+    if ("enchant" in action) return t("{v}: エンチャント", { v: PART_SLOT_LABELS[action.enchant.slot] });
+    return t("シエナのオーラ");
   }
 
   /** バフ由来の手だけアイコンを付ける(id は BuffDefinition.id と一致) */
@@ -345,10 +346,10 @@
   /** 区分の題。同じ 4 区分でも「命中」か「回避」かで動詞の対象が変わる */
   function growthGroupLabel(group: GrowthGroup, kind: TriedKind): string {
     switch (group) {
-      case "stat": return "ステータスを伸ばす";
-      case "buff": return kind === "acc" ? "命中バフを使う" : "回避バフを使う";
-      case "equipment": return kind === "acc" ? "装備命中補正を上げる" : "装備回避補正を上げる";
-      case "enchant": return "エンチャントする";
+      case "stat": return t("ステータスを伸ばす");
+      case "buff": return kind === "acc" ? t("命中バフを使う") : t("回避バフを使う");
+      case "equipment": return kind === "acc" ? t("装備命中補正を上げる") : t("装備回避補正を上げる");
+      case "enchant": return t("エンチャントする");
     }
   }
 
@@ -380,10 +381,10 @@
     {@const on = swordIsOn(character.id)}
     <!-- 行チップは押した瞬間に切り替わる(§00 03/04)。この画面だけの切り替えなので tone="temp" -->
     <ToggleRow
-      name={`${skill.name} Lv${skill.max_level}`}
+      name={`${t(skill.name)} Lv${skill.max_level}`}
       on={on}
       tone="temp"
-      title="対人タブの中だけの切り替えです(キャラには保存しません)"
+      title={t("対人タブの中だけの切り替えです(キャラには保存しません)")}
       onToggle={() => (swordOn[character.id] = !on)}
     />
   {/if}
@@ -428,9 +429,9 @@
         <span class="try-head-summary" use:changed={() => (maxHitRateGain === 0 ? "stuck" : "moves")}>
           {#if maxHitRateGain === 0}
             <!-- 必中か下限に張り付いていると全部積んでも命中率は動かない(§00 05) -->
-            全部積んでも{rateWord}は動かない
+            {t("全部積んでも{word}は動かない", { word: rateWord })}
           {:else}
-            全部やると <Value motion={() => maxHitRateGain} value={`${rateWord} ${formatHitRateGain(maxHitRateGain)}`} />
+            {t("全部やると")} <Value motion={() => maxHitRateGain} value={`${rateWord} ${formatHitRateGain(maxHitRateGain)}`} />
           {/if}
           ・ <Value motion={() => point} value={String(point)} /> → <Value motion={() => max} value={String(max)} />
         </span>
@@ -441,12 +442,12 @@
     <div class="try-status">
       {#if triedCount > 0 && beforePoint !== null && nowPoint !== null}
         <span class="try-status-on">
-          試し <span class="num">{triedCount}</span>件を反映中 ・ {unit}
+          {t("試し")} <span class="num">{triedCount}</span>{t("件を反映中 ・ {unit}", { unit })}
           <Value tone="sim" motion={() => beforePoint} value={String(beforePoint)} />
           <span class="try-arrow">→</span>
           <Value tone="sim" motion={() => nowPoint} value={String(nowPoint)} />
           <button type="button" class="try-clear" onclick={() => charId !== null && clearTries(charId, kind)}>
-            全部外す
+            {t("全部外す")}
           </button>
         </span>
       {/if}
@@ -457,7 +458,7 @@
          必中 / 下限に張り付いていて何を積んでも動かないときは面ごと薄くする(押せはする) -->
     <div class="try-list" class:stuck={maxHitRateGain === 0}>
       {#if groups.length === 0}
-        <div class="try-empty dim">いま打てる手なし</div>
+        <div class="try-empty dim">{t("いま打てる手なし")}</div>
       {:else}
         {#each groups as g (g.group)}
           {@const lastResort = g.group === "enchant"}
@@ -480,10 +481,10 @@
 {#snippet buffSetRow(character: CharacterRef | null)}
   <!-- 使うバフセット。計算タブの「使うセット」と同じ役。命中P(DEX・命中P増加)にも
        回避P(AGI)にも効くので、材料の行として両ブロックに置く(同じキャラなら同じ状態) -->
-  <ReadRow label="バフセット">
+  <ReadRow label={t("バフセット")}>
     {#if character}
       <Picker
-        label="使うバフセット"
+        label={t("使うバフセット")}
         bind:value={
           () => { const id = buffSetIdOf(character); return id === null ? "" : String(id); },
           (v) => (buffSetOverride[character.id] = v === "" ? null : Number(v))
@@ -507,12 +508,12 @@
   <Disclosure class="stat-block" summaryClass="stat-row main stat-toggle" bind:open={accBlockOpen}>
     {#snippet summary(open)}
       <div class="stat-label">
-        命中P
+        {t("命中P")}
         {#if !open && result}
           <!-- 畳んでも「何のスキルで・的中剣は」が残る(計算タブの折りたたみカードの右の要約と同じ役) -->
           <span class="stat-summary dim">
-            {skills.list.find((s) => s.id === skillId)?.name ?? ""}
-            {#if result.accuracy_skill_available && attacker}・ 的中剣 {swordIsOn(attacker.id) ? "ON" : "OFF"}{/if}
+            {t(skills.list.find((s) => s.id === skillId)?.name ?? "")}
+            {#if result.accuracy_skill_available && attacker}・ {t("的中剣")} {swordIsOn(attacker.id) ? "ON" : "OFF"}{/if}
           </span>
         {/if}
       </div>
@@ -522,11 +523,11 @@
            bind しているので同時に開閉し、同時に動く -->
       <div class="stat-body">
         <ReadRow label="DEX" value={result ? fmtInt(result.attacker_dex) : null} motion={() => result?.attacker_dex ?? null} tone={accCount > 0 ? "sim" : null} />
-        <ReadRow label="装備の命中補正" value={result ? fmtInt(result.equipment_accuracy) : null} motion={() => result?.equipment_accuracy ?? null} />
-        <ReadRow label="スキルの命中">
+        <ReadRow label={t("装備の命中補正")} value={result ? fmtInt(result.equipment_accuracy) : null} motion={() => result?.equipment_accuracy ?? null} />
+        <ReadRow label={t("スキルの命中")}>
           {#if attacker}
             <Picker
-              label="命中に使うスキル"
+              label={t("命中に使うスキル")}
               bind:value={
                 () => skillId,
                 (v) => (skills.override = v)
@@ -540,17 +541,17 @@
           {/if}
         </ReadRow>
         {@render buffSetRow(attacker)}
-        <ReadRow label="依存の補正" value={result ? `${fmtSigned(result.correction_bonus)} / ${fmtSigned(-result.correction_penalty)}` : null} />
+        <ReadRow label={t("依存の補正")} value={result ? `${fmtSigned(result.correction_bonus)} / ${fmtSigned(-result.correction_penalty)}` : null} />
         {#if result?.accuracy_skill_available && attacker}
-          <ReadRow label="的中剣">{@render swordCell(attacker, result)}</ReadRow>
+          <ReadRow label={t("的中剣")}>{@render swordCell(attacker, result)}</ReadRow>
         {:else}
-          <ReadRow label="命中P割合" value={result ? (boostLabel(result.accuracy_boost) ?? "なし") : null} />
+          <ReadRow label={t("命中P割合")} value={result ? (boostLabel(result.accuracy_boost) ?? t("なし")) : null} />
         {/if}
 
         <!-- 「全部やると」は試す前(before_tries)を基準に引く。伸びしろ側(max)は試す前の
              payload から固定されているので、試した後の値と混ぜると差が嘘になる -->
         {@render growthList(
-          attacker?.id ?? null, "acc", "命中率", "命中P",
+          attacker?.id ?? null, "acc", t("命中率"), t("命中P"),
           result?.accuracy_growth ?? [],
           result?.accuracy_max ?? null, result?.before_tries?.accuracy_point ?? result?.accuracy_point ?? null,
           result?.accuracy_max_hit_rate_gain ?? null,
@@ -568,7 +569,7 @@
   <Disclosure class="stat-block" summaryClass="stat-row main stat-toggle" bind:open={evaBlockOpen}>
     {#snippet summary(open)}
       <div class="stat-label">
-        回避P
+        {t("回避P")}
         {#if !open && result}
           <span class="stat-summary dim">AGI <span class="num">{result.defender_agi}</span></span>
         {/if}
@@ -577,13 +578,13 @@
     {/snippet}
       <div class="stat-body">
         <ReadRow label="AGI" value={result ? fmtInt(result.defender_agi) : null} motion={() => result?.defender_agi ?? null} tone={evaCount > 0 ? "sim" : null} />
-        <ReadRow label="装備の回避補正" value={result ? fmtInt(result.equipment_evasion) : null} motion={() => result?.equipment_evasion ?? null} />
-        <ReadRow label="装備の敏捷補正" value={result ? fmtInt(result.equipment_agility) : null} motion={() => result?.equipment_agility ?? null} />
+        <ReadRow label={t("装備の回避補正")} value={result ? fmtInt(result.equipment_evasion) : null} motion={() => result?.equipment_evasion ?? null} />
+        <ReadRow label={t("装備の敏捷補正")} value={result ? fmtInt(result.equipment_agility) : null} motion={() => result?.equipment_agility ?? null} />
         {@render buffSetRow(defender)}
-        <ReadRow label="攻撃タイプの補正" value={result ? fmtNum(result.attack_type_bonus, 1) : null} />
+        <ReadRow label={t("攻撃タイプの補正")} value={result ? fmtNum(result.attack_type_bonus, 1) : null} />
 
         {@render growthList(
-          defender?.id ?? null, "eva", "当てられる率", "回避P",
+          defender?.id ?? null, "eva", t("当てられる率"), t("回避P"),
           result?.evasion_growth ?? [],
           result?.evasion_max ?? null, result?.before_tries?.evasion_point ?? result?.evasion_point ?? null,
           result?.evasion_max_hit_rate_gain ?? null,
@@ -614,7 +615,7 @@
       <span class="dir-who">
         <span class="dir-picker">
           <Picker
-            label="殴る側のキャラ"
+            label={t("殴る側のキャラ")}
             bind:value={
               () => (attacker ? String(attacker.id) : ""),
               (v) => pickAttacker(v === "" ? null : Number(v))
@@ -623,10 +624,10 @@
             menu
           />
         </span>
-        <span class="dir-particle">が</span>
+        <span class="dir-particle">{t("が")}</span>
         <span class="dir-picker">
           <Picker
-            label="受ける側のキャラ"
+            label={t("受ける側のキャラ")}
             bind:value={
               () => (defender ? String(defender.id) : ""),
               (v) => pickDefender(v === "" ? null : Number(v))
@@ -635,11 +636,11 @@
             menu
           />
         </span>
-        <span class="dir-particle">に当てる</span>
+        <span class="dir-particle">{t("に当てる")}</span>
       </span>
       <span class="dir-right">
         {#if totalTried > 0}
-          <Value class="try-badge" motion={() => totalTried} value={`試し ${totalTried}件`} />
+          <Value class="try-badge" motion={() => totalTried} value={t("試し {n}件", { n: totalTried })} />
         {/if}
         <!-- 数値 ⇄ 必中 は要素が入れ替わるので、入れ物のほうを「どちらの形か」で光らせる -->
         <span class="dir-value" use:changed={() => (result === null ? "none" : result.hit_rate.capped ? "capped" : "rate")}>
@@ -654,13 +655,13 @@
               <span class="try-arrow">→</span>
             {/if}
             {#if result.hit_rate.capped}
-              <span class="rate-cap" style={badgeStyle(badge)}>必中</span>
+              <span class="rate-cap" style={badgeStyle(badge)}>{t("必中")}</span>
             {:else}
               <Value class="rate-num" motion={() => result?.hit_rate.value ?? null} value={String(result.hit_rate.value)} />
               <span class="rate-unit">%</span>
               {#if result.hit_rate.floored}
                 <!-- 下限に張り付いている値は、式を読まなくても分かるようバッジで言う -->
-                <span class="rate-floor" style={badgeStyle(badge)}>下限</span>
+                <span class="rate-floor" style={badgeStyle(badge)}>{t("下限")}</span>
               {/if}
             {/if}
           {/if}
@@ -674,13 +675,13 @@
       <!-- 答えは数ではなく文。数値書体にすると読みにくいので <Value> に入れず、文の入れ替えとして光らせる -->
       <div class="dir-answer" use:changed={() => answerText(result.hit_rate)}>{answerText(result.hit_rate)}</div>
       <div class="dir-why dim">
-        命中P <Value motion={() => result?.accuracy_point ?? null} value={String(result.accuracy_point)} />
+        {t("命中P")} <Value motion={() => result?.accuracy_point ?? null} value={String(result.accuracy_point)} />
         <span class="op">−</span>
-        相手の回避P <Value motion={() => result?.evasion_point ?? null} value={String(result.evasion_point)} />
+        {t("相手の回避P")} <Value motion={() => result?.evasion_point ?? null} value={String(result.evasion_point)} />
         <span class="op">=</span>
         <Value motion={() => result?.hit_rate.raw ?? null} value={String(result.hit_rate.raw)} />
-        ・ 下限 <Value motion={() => result?.hit_rate.min ?? null} value={String(result.hit_rate.min)} />
-        ・ 上限 <span class="num">{result.hit_rate.max}</span>
+        ・ {t("下限")} <Value motion={() => result?.hit_rate.min ?? null} value={String(result.hit_rate.min)} />
+        ・ {t("上限")} <span class="num">{result.hit_rate.max}</span>
         {#if boost}・ {boost}{/if}
       </div>
     {/if}
@@ -693,7 +694,7 @@
 <div class="versus-page">
   <div class="scroll">
     {#if app.characters.length < 2}
-      <p class="empty dim">2 人そろうと、どちらがどれだけ当てられるかを出せます。キャラタブで登録してください。</p>
+      <p class="empty dim">{t("2 人そろうと、どちらがどれだけ当てられるかを出せます。キャラタブで登録してください。")}</p>
     {:else}
       <!-- 方向ごとに 1 列。殴り合ったら、どっちがどれだけ当たるか(ユーザー決定 2026-09-02) -->
       <div class="directions">

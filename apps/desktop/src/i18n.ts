@@ -3,7 +3,9 @@
 // **鍵は日本語の文言そのもの**(gettext 方式)。画面は `t("閉じる")` と書き、韓国語の辞書
 // (`i18n/ko/*.json`、日本語 → 韓国語)を引く。日本語が正で、辞書に無い文言は日本語のまま出る
 // — 漏れは `tools/i18n/check.py` が数える。Rust が返す表示名(トレースの出どころ・部位名など)も
-// 同じ `t()` に通す。ゲームデータ名の辞書(`ko/names.json`)も同じ引き方で、ファイルを分けるのは
+// 同じ `t()` に通す。Rust が `format!` で組み立てた文(「武器 エンチャント」)は、辞書に文面を
+// `{0} エンチャント` の形で載せておき、完全一致が無いときに照合で当てる(穴に入っていた部分も訳す)。
+// ゲームデータ名の辞書(`ko/names.json`)も同じ引き方で、ファイルを分けるのは
 // 出典が違うから(UI 文言は翻訳、データ名は韓国側の資料)。
 //
 // 言語はページを読み込むたびに 1 回だけ決まり、切り替えるときは読み込み直す。labels.ts のように
@@ -67,6 +69,39 @@ export async function loadLocale(): Promise<void> {
     import("@fontsource/noto-sans-kr/800.css"),
   ]);
   dictionary = Object.assign({}, ...parts);
+  patterns = Object.keys(dictionary)
+    .filter((key) => HOLE.test(key))
+    // 文面の長いものから試す(「{0} エンチャント」より「{0} のエンチャント上限」を先に)
+    .sort((a, b) => b.replace(HOLES, "").length - a.replace(HOLES, "").length)
+    .map((key) => ({
+      match: new RegExp(`^${key.split(HOLE).map(escapeRegExp).join("(.+?)")}$`, "s"),
+      holes: [...key.matchAll(HOLES)].map((m) => m[1]),
+      key,
+    }));
+}
+
+/** Rust の `format!` の穴(`{0}` `{1}`…)。鍵の形は tools/i18n/check.py が作るものと同じ */
+const HOLE = /\{\d+\}/;
+const HOLES = /\{(\d+)\}/g;
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** 穴のある訳。完全一致が無いときだけ上から試す */
+let patterns: { match: RegExp; holes: string[]; key: string }[] = [];
+const matched = new Map<string, string>();
+
+/** Rust が組み立てた文を照合で訳す。当たらなければ null */
+function translateComposed(text: string): string | null {
+  const cached = matched.get(text);
+  if (cached !== undefined) return cached;
+  for (const { match, holes, key } of patterns) {
+    const found = match.exec(text);
+    if (!found) continue;
+    const args = Object.fromEntries(holes.map((hole, i) => [hole, t(found[i + 1])]));
+    const result = dictionary[key].replace(HOLES, (whole, hole: string) => args[hole] ?? whole);
+    matched.set(text, result);
+    return result;
+  }
+  return null;
 }
 
 /**
@@ -83,7 +118,7 @@ export function tc(context: string, text: string, params?: Record<string, string
  * 日本語の文言を鍵にするので、鍵は**画面に出す日本語そのまま**を書く。
  */
 export function t(text: string, params?: Record<string, string | number>): string {
-  const translated = dictionary[text] ?? text;
+  const translated = dictionary[text] ?? (params || locale === "ja" ? null : translateComposed(text)) ?? text;
   if (!params) return translated;
   return translated.replace(/\{(\w+)\}/g, (whole, key: string) =>
     key in params ? String(params[key]) : whole,

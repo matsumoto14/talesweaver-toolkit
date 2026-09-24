@@ -2,6 +2,7 @@
   // 詳細トレース(能力値・カテゴリ・式の各段)。「なぜこの数字？」の最深部。
   import type { CategoryTrace, DamageContribution, DamageTrace, StatSourceEffect, StatTrace } from "../../api/types";
   import { fmtInt, fmtNum, fmtSignedPct, formatLayerValue } from "../../format";
+  import { t } from "../../i18n";
   import { STAT_KINDS, STAT_LABELS, STAT_LAYER_LABELS } from "../../labels";
   import Disclosure from "../../ui/Disclosure.svelte";
   import Value from "../../ui/Value.svelte";
@@ -12,15 +13,15 @@
   // pin(能力値の固定)は計算タブの一時調整だけから来る。
   function pinnedBeforeLabel(s: StatTrace): string {
     if (s.pinned_from === null) return "";
-    return `固定前: ${fmtInt(s.pinned_from)}`;
+    return t("固定前: {v}", { v: fmtInt(s.pinned_from) });
   }
 
-  const KIND_LABEL = { assigned: "代入", fixed: "固定値", rate: "割合" } as const;
+  const KIND_LABEL = { assigned: t("代入"), fixed: t("固定値"), rate: t("割合") } as const;
   type StepTab = "min" | "max" | "critical";
   const STEP_TABS: { id: StepTab; label: string }[] = [
-    { id: "min", label: "最小" },
-    { id: "max", label: "最大" },
-    { id: "critical", label: "クリティカル" },
+    { id: "min", label: t("最小") },
+    { id: "max", label: t("最大") },
+    { id: "critical", label: t("クリティカル") },
   ];
   let stepTab = $state<StepTab>("max");
   const steps = $derived(
@@ -67,16 +68,16 @@
 
 <Disclosure class="trace">
   {#snippet summary()}
-    <span>詳細トレース</span>
-    <span class="dim">能力値 {trace.stats.length} / カテゴリ {trace.categories.length} / 式 {trace.steps_max.length} 段</span>
+    <span>{t("詳細トレース")}</span>
+    <span class="dim">{t("能力値 {stats} / カテゴリ {cats} / 式 {steps} 段", { stats: trace.stats.length, cats: trace.categories.length, steps: trace.steps_max.length })}</span>
   {/snippet}
-  <div class="section-label"><span>(a) 能力値計算</span><span class="rule"></span></div>
+  <div class="section-label"><span>{t("(a) 能力値計算")}</span><span class="rule"></span></div>
   <div class="tbl">
     <table class="grid ro">
       <thead><tr>
-        <th>ステ</th><th class="n">最終</th><th class="n">素</th><th class="n">Σ割合</th><th class="n">固定</th><th class="n">Π倍率A</th>
-        <th class="n">基本</th><th class="n">倍率B</th><th class="n">[基本×B]</th><th class="n">最終固定</th>
-        <th class="n">上限</th><th class="n">上限で捨てた分</th>
+        <th>{t("ステ")}</th><th class="n">{t("最終")}</th><th class="n">{t("素")}</th><th class="n">{t("Σ割合")}</th><th class="n">{t("固定")}</th><th class="n">{t("Π倍率A")}</th>
+        <th class="n">{t("基本")}</th><th class="n">{t("倍率B")}</th><th class="n">{t("[基本×B]")}</th><th class="n">{t("最終固定")}</th>
+        <th class="n">{t("上限")}</th><th class="n">{t("上限で捨てた分")}</th>
       </tr></thead>
       <tbody>
         {#each trace.stats as s (s.kind)}
@@ -85,7 +86,7 @@
             <td class="n strong final">
               <Value motion={() => s.effective} value={fmtInt(s.effective)} />
               {#if s.pinned_from !== null}
-                <span class="pin-badge" title={pinnedBeforeLabel(s)}>固定</span>
+                <span class="pin-badge" title={pinnedBeforeLabel(s)}>{t("固定")}</span>
               {/if}
             </td>
             <td class="n">{fmtInt(s.base)}</td>
@@ -106,22 +107,22 @@
 
   {#if trace.stats.some((s) => s.capped_loss > 0)}
     <p class="cap-note">
-      最終能力値が上限({fmtInt(trace.stats[0].stat_cap)})で頭打ちになっています。上限は覚醒段階とエタの意志 Lv で上がります(wiki: Quest/覚醒クエスト・エタの意志)。
+      {t("最終能力値が上限({cap})で頭打ちになっています。上限は覚醒段階とエタの意志 Lv で上がります(wiki: Quest/覚醒クエスト・エタの意志)。", { cap: fmtInt(trace.stats[0].stat_cap) })}
     </p>
   {/if}
 
-  <div class="section-label"><span>(a-1) 補正源内訳</span><span class="rule"></span></div>
+  <div class="section-label"><span>{t("(a-1) 補正源内訳")}</span><span class="rule"></span></div>
   <div class="tbl">
     {#if contributions.length === 0}
-      <p class="empty dim">補正源なし(素ステのみ)</p>
+      <p class="empty dim">{t("補正源なし(素ステのみ)")}</p>
     {:else}
       <table class="grid ro">
-        <thead><tr><th>ステ</th><th>出典</th><th>層</th><th class="n">値</th></tr></thead>
+        <thead><tr><th>{t("ステ")}</th><th>{t("出典")}</th><th>{t("層")}</th><th class="n">{t("値")}</th></tr></thead>
         <tbody>
           {#each contributions as { item: c, state, key } (key)}
             <tr class:gone={state === "gone"}>
               <td>{STAT_LABELS[c.kind]}</td>
-              <td class="muted">{c.source}{#if state !== "same"}<span class="presence badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
+              <td class="muted">{t(c.source)}{#if state !== "same"}<span class="presence badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? t("追加") : t("削除")}</span>{/if}</td>
               <td class="muted">{STAT_LAYER_LABELS[c.layer]}</td>
               <td class="n"><Value motion={() => c.value} value={formatLayerValue(c.layer, c.value)} /></td>
             </tr>
@@ -131,17 +132,17 @@
     {/if}
   </div>
 
-  <div class="section-label"><span>(b) カテゴリ集計</span><span class="rule"></span><span class="dim">ハイライト = 非中立値</span></div>
+  <div class="section-label"><span>{t("(b) カテゴリ集計")}</span><span class="rule"></span><span class="dim">{t("ハイライト = 非中立値")}</span></div>
   <div class="tbl">
     <table class="grid ro">
       <thead><tr>
-        <th>記号</th><th>カテゴリ</th><th>種別</th><th class="n">集計値</th><th class="n">係数</th><th class="n">キャップ</th>
+        <th>{t("記号")}</th><th>{t("カテゴリ")}</th><th>{t("種別")}</th><th class="n">{t("集計値")}</th><th class="n">{t("係数")}</th><th class="n">{t("キャップ")}</th>
       </tr></thead>
       <tbody>
         {#each trace.categories as c (c.category)}
           <tr class:active={isActive(c)}>
             <td class="sym">{c.symbol}</td>
-            <td>{c.label}</td>
+            <td>{t(c.label)}</td>
             <td class="muted">{KIND_LABEL[c.kind]}</td>
             <td class="n"><Value motion={() => c.value} value={fmtValue(c)} /></td>
             <td class="n strong"><Value motion={() => c.factor} value={fmtNum(c.factor)} /></td>
@@ -152,19 +153,19 @@
     </table>
   </div>
 
-  <div class="section-label"><span>(b-1) カテゴリ供給源内訳</span><span class="rule"></span></div>
+  <div class="section-label"><span>{t("(b-1) カテゴリ供給源内訳")}</span><span class="rule"></span></div>
   <div class="tbl">
     {#if categoryContributions.length === 0}
-      <p class="empty dim">供給源なし</p>
+      <p class="empty dim">{t("供給源なし")}</p>
     {:else}
       <table class="grid ro">
-        <thead><tr><th>記号</th><th>カテゴリ</th><th>出典</th><th class="n">値</th></tr></thead>
+        <thead><tr><th>{t("記号")}</th><th>{t("カテゴリ")}</th><th>{t("出典")}</th><th class="n">{t("値")}</th></tr></thead>
         <tbody>
           {#each categoryContributions as { item: c, state, key } (key)}
             <tr class:gone={state === "gone"}>
               <td class="sym">{c.symbol}</td>
-              <td>{c.label}</td>
-              <td class="muted">{c.source}{#if state !== "same"}<span class="presence badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? "追加" : "削除"}</span>{/if}</td>
+              <td>{t(c.label)}</td>
+              <td class="muted">{t(c.source)}{#if state !== "same"}<span class="presence badge-in" class:up={state === "added"} class:down={state === "gone"}>{state === "added" ? t("追加") : t("削除")}</span>{/if}</td>
               <td class="n"><Value motion={() => c.value} value={fmtContributionValue(c.kind, c.value)} /></td>
             </tr>
           {/each}
@@ -174,21 +175,21 @@
   </div>
 
   <div class="section-label">
-    <span>(c) 式の各段</span><span class="rule"></span>
+    <span>{t("(c) 式の各段")}</span><span class="rule"></span>
     <span class="tabs">
-      {#each STEP_TABS as t (t.id)}
-        <button type="button" class:on={stepTab === t.id} onclick={() => (stepTab = t.id)}>{t.label}</button>
+      {#each STEP_TABS as tab (tab.id)}
+        <button type="button" class:on={stepTab === tab.id} onclick={() => (stepTab = tab.id)}>{tab.label}</button>
       {/each}
     </span>
   </div>
   <div class="tbl">
     <table class="grid ro">
-      <thead><tr><th>#</th><th>段</th><th>式</th><th class="n">値</th></tr></thead>
+      <thead><tr><th>#</th><th>{t("段")}</th><th>{t("式")}</th><th class="n">{t("値")}</th></tr></thead>
       <tbody>
         {#each steps as s, i (i)}
           <tr>
             <td class="dim">{String(i + 1).padStart(2, "0")}</td>
-            <td>{s.name}</td>
+            <td>{t(s.name)}</td>
             <td class="expr">{s.expression}</td>
             <td class="n strong">{fmtNum(s.value)}</td>
           </tr>

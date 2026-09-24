@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../../../i18n";
   // 「siena」補正源のペイン。部位ごとに登録し、装着中の 1 件だけを計算へ反映する。
   import type { SienaAuraList, SienaExtraKind, SienaValueKind, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
@@ -37,7 +38,7 @@
   const createSienaRegistration = (slot: SienaPartSlot) => {
     const list = sienaList(slot);
     const id = Math.max(0, ...list.registered.map((entry) => entry.id)) + 1;
-    list.registered.push({ id, label: `オーラ ${list.registered.length + 1}`, aura: neutralSienaAura() });
+    list.registered.push({ id, label: t("オーラ {n}", { n: list.registered.length + 1 }), aura: neutralSienaAura() });
     list.selected_id = id;
   };
   const removeSelectedSienaRegistration = (slot: SienaPartSlot) => {
@@ -101,8 +102,8 @@
   /** 部位の行に出す要約。段階はバッジで出しているので、ここでは効き先の合計だけ */
   const sienaSummary = (slot: SienaPartSlot): string => {
     const siena = sienaForDisplay(slot);
-    if (sienaList(slot).selected_id === null) return "未装着";
-    if (sienaStage(siena) === 0) return "未発現";
+    if (sienaList(slot).selected_id === null) return t("未装着");
+    if (sienaStage(siena) === 0) return t("未発現");
     const parts: string[] = [];
     if (sienaIsEquipmentValues(slot)) {
       const v = sienaPartValues(slot);
@@ -112,9 +113,9 @@
     }
     // 正は SienaAura::stat_bonus().total()(preview.siena_part_stat_totals。部位別の内訳)
     const statTotal = preview?.siena_part_stat_totals.find((p) => p.slot === slot)?.value ?? 0;
-    if (statTotal > 0) parts.push(`ステ ${fmtSigned(statTotal)}`);
+    if (statTotal > 0) parts.push(t("ステ {v}", { v: fmtSigned(statTotal) }));
     const attack = sienaExtraValue(siena, "attack_rate");
-    if (attack > 0) parts.push(`攻撃力 ${fmtSigned(attack, { max: 2 }, "%")}`);
+    if (attack > 0) parts.push(t("攻撃力 {v}", { v: fmtSigned(attack, { max: 2 }, "%") }));
     return parts.length > 0 ? parts.join(" ・ ") : "—";
   };
   /** 行に出すバッジ。段階 10 だと 13 個になるので上位だけ出し、残りは「+N」で畳む(§00 01) */
@@ -143,12 +144,8 @@
 
 <div class="card">
   <p class="hint dim">
-    wiki「装備システム/シエナのオーラ」。オーラは装備から抽出して、同じ部位の別装備へ注入できます。
-    そのため装備とは別に登録し、<b>部位ごとに装着中の 1 件だけ</b>を計算へ反映します。
-    中身は再抽選のランダム値なので、<b>スロットに出ているものを 1 個ずつ選んで足します</b>。
-    <b>増幅段階は足したスロットの数</b>で、段階 3/7/10 で追加オプションの枠が 1/2/3 個開きます。
-    効果値は触らなければレンジ上限で計算します(再抽選で振り直せるため)。
-    グレーの枠は<b>記録するだけ</b>(防御側・HP/MP/SP など未収録の概念)で計算には入りません。
+    {t("wiki「装備システム/シエナのオーラ」。オーラは装備から抽出して、同じ部位の別装備へ注入できます。 そのため装備とは別に登録し、")}<b>{t("部位ごとに装着中の 1 件だけ")}</b>{t("を計算へ反映します。 中身は再抽選のランダム値なので、")}<b>{t("スロットに出ているものを 1 個ずつ選んで足します")}</b>。
+    <b>{t("増幅段階は足したスロットの数")}</b>{t("で、段階 3/7/10 で追加オプションの枠が 1/2/3 個開きます。 効果値は触らなければレンジ上限で計算します(再抽選で振り直せるため)。 グレーの枠は")}<b>{t("記録するだけ")}</b>{t("(防御側・HP/MP/SP など未収録の概念)で計算には入りません。")}
   </p>
 </div>
 <div class="part-list">
@@ -163,9 +160,9 @@
       <span class="siena-mark" class:off={current === null} aria-hidden="true">◆</span>
       <span class="part-main">
         <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
-        <span class="part-item">{current?.label || (current ? `オーラ ${current.id}` : "未装着")}</span>
-        <Value class="part-abi" motion={() => list.registered.length} value={`登録 ${list.registered.length}`} />
-        <span class="part-plus wide" class:on={stage > 0}>{stage > 0 ? `${stage} 段階` : ""}</span>
+        <span class="part-item">{current?.label || (current ? t("オーラ {n}", { n: current.id }) : t("未装着"))}</span>
+        <Value class="part-abi" motion={() => list.registered.length} value={t("登録 {n}", { n: list.registered.length })} />
+        <span class="part-plus wide" class:on={stage > 0}>{stage > 0 ? t("{n} 段階", { n: stage }) : ""}</span>
       </span>
       <span class="ro-badges">
         {#each badges.slice(0, SIENA_BADGE_MAX) as b (b.key)}
@@ -181,11 +178,11 @@
     {/snippet}
     </Drill>
     {#if list.registered.length > 0}
-      <div class="part-switches siena-quick-switches" aria-label={`${PART_SLOT_LABELS[slot]}のオーラ切替`}>
-        <button type="button" class:on={list.selected_id === null} onclick={() => (list.selected_id = null)}>未装着</button>
+      <div class="part-switches siena-quick-switches" aria-label={t("{part}のオーラ切替", { part: PART_SLOT_LABELS[slot] })}>
+        <button type="button" class:on={list.selected_id === null} onclick={() => (list.selected_id = null)}>{t("未装着")}</button>
         {#each list.registered as entry (entry.id)}
           <button type="button" class:on={entry.id === list.selected_id} onclick={() => (list.selected_id = entry.id)}>
-            <span class="siena-mini-mark" aria-hidden="true">◆</span>{entry.label || `オーラ ${entry.id}`}
+            <span class="siena-mini-mark" aria-hidden="true">◆</span>{entry.label || t("オーラ {n}", { n: entry.id })}
           </button>
         {/each}
       </div>
@@ -199,35 +196,35 @@
   {@const siena = sienaForDisplay(slot)}
   {@const stage = sienaStage(siena)}
   {@const capacity = sienaCapacity(slot)}
-  <Modal label={`${PART_SLOT_LABELS[slot]}のシエナのオーラ`} class="part-detail" onClose={() => (openSienaPart = null)}>
+  <Modal label={t("{part}のシエナのオーラ", { part: PART_SLOT_LABELS[slot] })} class="part-detail" onClose={() => (openSienaPart = null)}>
     <div class="part-detail-body">
       <div class="part-actions siena-registration-actions">
-        <div class="part-switches" aria-label="装着するオーラ">
-          <button type="button" class:on={list.selected_id === null} onclick={() => (list.selected_id = null)}>未装着</button>
+        <div class="part-switches" aria-label={t("装着するオーラ")}>
+          <button type="button" class:on={list.selected_id === null} onclick={() => (list.selected_id = null)}>{t("未装着")}</button>
           {#each list.registered as entry (entry.id)}
             <button type="button" class:on={entry.id === list.selected_id} onclick={() => (list.selected_id = entry.id)}>
-              <span class="siena-mini-mark" aria-hidden="true">◆</span>{entry.label || `オーラ ${entry.id}`}
+              <span class="siena-mini-mark" aria-hidden="true">◆</span>{entry.label || t("オーラ {n}", { n: entry.id })}
             </button>
           {/each}
         </div>
-        <button type="button" class="btn primary" onclick={() => createSienaRegistration(slot)}>＋ 新しいオーラを登録</button>
+        <button type="button" class="btn primary" onclick={() => createSienaRegistration(slot)}>{t("＋ 新しいオーラを登録")}</button>
       </div>
       {#if registration === null}
         <div class="card empty siena-unattached">
-          <p class="hint dim">この部位は未装着です。登録済みのオーラを選ぶか、新しく登録してください。</p>
+          <p class="hint dim">{t("この部位は未装着です。登録済みのオーラを選ぶか、新しく登録してください。")}</p>
         </div>
       {:else}
         <div class="card registration-name-card">
           <label class="text custom-name">
-            <span class="label">登録名 <span class="dim">同じ部位のオーラを見分ける名前</span></span>
-            <TextField label="登録名" bind:value={registration.label} max={40} />
+            <span class="label">{t("登録名")} <span class="dim">{t("同じ部位のオーラを見分ける名前")}</span></span>
+            <TextField label={t("登録名")} bind:value={registration.label} max={40} />
           </label>
-          <Chip class="quiet siena-delete" onclick={() => removeSelectedSienaRegistration(slot)}>この登録を削除</Chip>
+          <Chip class="quiet siena-delete" onclick={() => removeSelectedSienaRegistration(slot)}>{t("この登録を削除")}</Chip>
         </div>
         <div class="card">
           <div class="card-title inline">
-            {PART_SLOT_LABELS[slot]}: 能力値スロット
-            <Value class="dim normal" motion={() => stage} value={`${stage} / ${app.siena.stage_max} 段階`} />
+            {PART_SLOT_LABELS[slot]}: {t("能力値スロット")}
+            <Value class="dim normal" motion={() => stage} value={t("{n} / {max} 段階", { n: stage, max: app.siena.stage_max })} />
         </div>
         <!-- 足す場所は**行より上**。下に置くと、1 個足すたびに押したチップが
              行の高さぶん下へ逃げる(§09 規則 1)。足したものは真下に増える -->
@@ -242,7 +239,7 @@
             {/each}
           </div>
         {:else}
-          <p class="hint dim">段階 {app.siena.stage_max} まで埋まりました。変えるときは外してから足します。</p>
+          <p class="hint dim">{t("段階 {n} まで埋まりました。変えるときは外してから足します。", { n: app.siena.stage_max })}</p>
         {/if}
         {#each siena.slots as s, index (index)}
           {@const def = sienaValueDef(s.kind)}
@@ -252,25 +249,25 @@
             <div class="siena-row swap-in" class:record-only={!def.is_modeled}>
               <span class="ro-name" title="{def.label}{def.note ? ` — ${def.note}` : ''}">{def.label}</span>
               <NumberField
-                label="{def.label}の値"
+                label={t("{name}の値", { name: def.label })}
                 min={def.min}
                 max={def.max}
                 format={def.min > 1 ? () => `wiki ${def.min}–${def.max}${def.unit}` : undefined}
                 bind:value={() => s.value, (v) => (s.value = v)}
               />
-              <button type="button" class="clear" onclick={() => removeSienaSlot(slot, index)}>外す</button>
+              <button type="button" class="clear" onclick={() => removeSienaSlot(slot, index)}>{t("外す")}</button>
             </div>
           {/if}
         {/each}
         </div>
         <div class="card">
         <div class="card-title inline">
-          追加オプション
-          <Value class="dim normal" motion={() => capacity} value={`${siena.extras.length} / ${capacity} 枠`} />
+          {t("追加オプション")}
+          <Value class="dim normal" motion={() => capacity} value={t("{n} / {max} 枠", { n: siena.extras.length, max: capacity })} />
         </div>
         {#if capacity === 0}
           <p class="hint dim">
-            段階 {app.siena.extra_unlock_stages[0]} で 1 枠目が開きます(いま段階 {stage})。
+            {t("段階 {n} で 1 枠目が開きます(いま段階 {cur})。", { n: app.siena.extra_unlock_stages[0], cur: stage })}
           </p>
         {:else}
           {#if siena.extras.length < capacity}
@@ -285,8 +282,7 @@
             </div>
           {:else}
             <p class="hint dim">
-              いまの段階で開いている {capacity} 枠は埋まりました。次は段階
-              {app.siena.extra_unlock_stages[capacity] ?? app.siena.stage_max} で開きます。
+              {t("いまの段階で開いている {n} 枠は埋まりました。次は段階 {next} で開きます。", { n: capacity, next: app.siena.extra_unlock_stages[capacity] ?? app.siena.stage_max })}
             </p>
           {/if}
           {#each siena.extras as e, index (index)}
@@ -299,7 +295,7 @@
                 </span>
                 {#if sienaChoicesAreRun(def.choices)}
                   <NumberField
-                    label="{def.label}の値"
+                    label={t("{name}の値", { name: def.label })}
                     min={def.choices[0]}
                     max={def.choices[def.choices.length - 1]}
                     format={def.choices[0] > 1
@@ -310,12 +306,12 @@
                 {:else}
                   <!-- 飛び飛びの値(中ディレイ 0.5 / 1 / 2%)はステッパーだと無い値を作れてしまう -->
                   <Choose
-                    label="{def.label}の値"
+                    label={t("{name}の値", { name: def.label })}
                     options={def.choices.map((c) => ({ value: String(c), label: `${c}${def.unit}` }))}
                     bind:value={() => String(e.value), (v) => (e.value = Number(v))}
                   />
                 {/if}
-                <button type="button" class="clear" onclick={() => removeSienaExtra(slot, index)}>外す</button>
+                <button type="button" class="clear" onclick={() => removeSienaExtra(slot, index)}>{t("外す")}</button>
               </div>
             {/if}
           {/each}

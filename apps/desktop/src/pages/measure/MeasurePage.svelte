@@ -11,6 +11,7 @@
   import type { AttackPowerBreakdown, DamageResult, EffectiveStats, Skill } from "../../api/types";
   import { skillMeta } from "../../characterSkills";
   import { fmtInt, fmtSignedPct } from "../../format";
+  import { t } from "../../i18n";
   import {
     damageGap, expectedDamage, measurementDraft, type MeasurementSample,
   } from "../../measurement";
@@ -43,10 +44,10 @@
       : (weapons.some((w) => w.id === weaponOverride) ? weaponOverride : savedWeaponId),
   );
   const weaponLabel = (id: number | null) =>
-    id === null ? "武器なし" : (weapons.find((w) => w.id === id)?.label || "(名前なし)");
+    id === null ? t("武器なし") : (weapons.find((w) => w.id === id)?.label || t("(名前なし)"));
   const weaponOptions = $derived([
-    ...weapons.map((w) => ({ value: String(w.id), label: w.label || "(名前なし)" })),
-    { value: "none", label: "外す" },
+    ...weapons.map((w) => ({ value: String(w.id), label: w.label || t("(名前なし)") })),
+    { value: "none", label: t("外す") },
   ]);
   /** 武器だけ差し替えたコピー。DB にも app.sim にも書かない */
   const payload = $derived.by<NewCharacter | null>(() => {
@@ -59,8 +60,8 @@
 
   // --- 対象 -----------------------------------------------------------------
   const TARGET_KINDS = [
-    { value: "listed", label: "一覧から選ぶ" },
-    { value: "unlisted", label: "一覧に無い敵" },
+    { value: "listed", label: t("一覧から選ぶ") },
+    { value: "unlisted", label: t("一覧に無い敵") },
   ];
   let targetKind = $state("listed");
   const contents = $derived(
@@ -220,61 +221,60 @@
 <div class="measure-page">
   <div class="scroll">
     {#if !character}
-      <p class="empty dim">キャラを選択してください。</p>
+      <p class="empty dim">{t("キャラを選択してください。")}</p>
     {:else}
       <p class="lead dim">
-        敵の防御力・カット率は wiki でも「約」「推定値」で、ゲーム内では見られません。
-        <b>実測を集めて逆算する</b>しか確かめる方法がないので、出た値を送ってもらえると助かります。
-        まだ収録していない敵(新しいモブ)も、名前を書いて送れます。
+        {t("敵の防御力・カット率は wiki でも「約」「推定値」で、ゲーム内では見られません。")}
+        <b>{t("実測を集めて逆算する")}</b>{t("しか確かめる方法がないので、出た値を送ってもらえると助かります。")}
+        {t("まだ収録していない敵(新しいモブ)も、名前を書いて送れます。")}
       </p>
 
       <div class="section">
-        <div class="area-head"><span class="area-name">対象</span><span class="area-rule"></span></div>
-        <Choose label="対象の選び方" options={TARGET_KINDS} bind:value={targetKind} full />
+        <div class="area-head"><span class="area-name">{t("対象")}</span><span class="area-rule"></span></div>
+        <Choose label={t("対象の選び方")} options={TARGET_KINDS} bind:value={targetKind} full />
         {#if targetKind === "listed"}
           <div class="field">
-            <span class="field-label">対象</span>
+            <span class="field-label">{t("対象")}</span>
             <Picker
-              label="対象"
+              label={t("対象")}
               bind:value={
                 () => content?.content.id ?? "",
                 (v) => (pickedContentId = v)
               }
-              options={contents.map((x) => ({ value: x.content.id, name: x.content.name, meta: x.areaName }))}
+              options={contents.map((x) => ({ value: x.content.id, name: t(x.content.name), meta: t(x.areaName) }))}
             />
           </div>
         {:else}
           <div class="fields">
             <label class="field">
-              <span class="label">敵の名前</span>
-              <TextField label="敵の名前(ゲーム内の表記どおりに)" bind:value={unlistedName} max={60} />
+              <span class="label">{t("敵の名前")}</span>
+              <TextField label={t("敵の名前(ゲーム内の表記どおりに)")} bind:value={unlistedName} max={60} />
             </label>
             <label class="field">
-              <span class="label">出た場所(任意)</span>
-              <TextField label="出た場所(マップ名・コンテンツ名)" bind:value={unlistedPlace} max={60} />
+              <span class="label">{t("出た場所(任意)")}</span>
+              <TextField label={t("出た場所(マップ名・コンテンツ名)")} bind:value={unlistedPlace} max={60} />
             </label>
           </div>
           <p class="note dim">
-            この敵はまだ収録していないので、ツールの計算値は出せません。実測と攻撃側の条件を送ってもらえれば、
-            こちらで敵の値を逆算します。
+            {t("この敵はまだ収録していないので、ツールの計算値は出せません。実測と攻撃側の条件を送ってもらえれば、こちらで敵の値を逆算します。")}
           </p>
         {/if}
       </div>
 
       <div class="section">
-        <div class="area-head"><span class="area-name">使ったスキル</span><span class="area-rule"></span></div>
+        <div class="area-head"><span class="area-name">{t("使ったスキル")}</span><span class="area-rule"></span></div>
         <div class="field">
-          <span class="field-label">スキル</span>
+          <span class="field-label">{t("スキル")}</span>
           <Picker
-            label="スキル"
+            label={t("スキル")}
             bind:value={
               () => skill?.id ?? "",
               (v) => (pickedSkillId = v)
             }
             options={skills.map((s) => ({
-              value: s.id, name: s.name,
-              meta: s.attacker === "magic_doll" ? `熊 ・ ${skillMeta(s)}`
-                : s.attacker === "destruction_spirit" ? `精霊 ・ ${skillMeta(s)}`
+              value: s.id, name: t(s.name),
+              meta: s.attacker === "magic_doll" ? t("熊 ・ {meta}", { meta: skillMeta(s) })
+                : s.attacker === "destruction_spirit" ? t("精霊 ・ {meta}", { meta: skillMeta(s) })
                 : skillMeta(s),
               iconId: s.id, iconKind: "skill" as const,
             }))}
@@ -284,18 +284,17 @@
           <!-- 熊(魔法人形)の係数は wiki が「2026/4/1 以前の情報」と断っている行。合わないときに
                敵側より先に疑う場所を、測る前に言っておく(ADR-016 突き合わせ) -->
           <p class="note dim">
-            <b>熊(魔法人形)が撃つスキル</b>です。計算は wiki の <b>STAB(熊)</b> の係数行
-            (INT・HACK と装備の斬り・魔攻・魔防)から出しています。この行は 2026/4/1 以前の情報なので、
-            差が大きいときは敵の値より先に<b>係数の行のほう</b>を疑ってください。
+            <b>{t("熊(魔法人形)が撃つスキル")}</b>{t("です。計算は wiki の")}
+            <b>STAB({t("熊")})</b>{t("の係数行(INT・HACK と装備の斬り・魔攻・魔防)から出しています。この行は 2026/4/1 以前の情報なので、差が大きいときは敵の値より先に")}<b>{t("係数の行のほう")}</b>{t("を疑ってください。")}
           </p>
         {/if}
         {#if weapons.length > 0}
           <!-- 攻撃力を変える一番かんたんな手段。押した瞬間に攻撃力が変わる(保存はされない)。
                登録が 1 件でも「外す」で 2 点目を作れる -->
           <div class="field">
-            <span class="field-label">測るときの武器</span>
+            <span class="field-label">{t("測るときの武器")}</span>
             <Choose
-              label="測るときの武器"
+              label={t("測るときの武器")}
               options={weaponOptions}
               cols={2}
               bind:value={
@@ -310,33 +309,33 @@
         {/if}
         {#if weaponId !== savedWeaponId}
           <p class="note dim">
-            この画面だけ <b>{weaponLabel(weaponId)}</b> で計算しています。
-            キャラに登録した装備(<b>{weaponLabel(savedWeaponId)}</b>)は変わりません。
+            {t("この画面だけ")} <b>{weaponLabel(weaponId)}</b> {t("で計算しています。")}
+            {t("キャラに登録した装備(")}<b>{weaponLabel(savedWeaponId)}</b>{t(")は変わりません。")}
           </p>
         {/if}
         <div class="readrows inset">
-          <ReadRow label="攻撃力(A)" value={attack ? fmtInt(attack.value) : "—"} motion={() => attack?.value ?? null}>
-            {#snippet note()}最終能力値も一緒に送られます(逆算の入力になります){/snippet}
+          <ReadRow label={t("攻撃力(A)")} value={attack ? fmtInt(attack.value) : "—"} motion={() => attack?.value ?? null}>
+            {#snippet note()}{t("最終能力値も一緒に送られます(逆算の入力になります)")}{/snippet}
           </ReadRow>
         </div>
       </div>
 
       <div class="section">
-        <div class="area-head"><span class="area-name">出たダメージ</span><span class="area-rule"></span></div>
+        <div class="area-head"><span class="area-name">{t("出たダメージ")}</span><span class="area-rule"></span></div>
         <div class="fields">
           <!-- 実測値は外部データで取れない値なので自由入力(§07 形態 5)。理由チップで例外だと示す。
                0 = 未入力(点として溜められない)。上限が無いので max は渡さない -->
           <div class="field">
-            <span class="label">実測ダメージ(1 発)</span>
-            <NumberField label="実測ダメージ(1 発)" reason="実測値 · 一時" digits={8} bind:value={measuredDamage} />
+            <span class="label">{t("実測ダメージ(1 発)")}</span>
+            <NumberField label={t("実測ダメージ(1 発)")} reason={t("実測値 · 一時")} digits={8} bind:value={measuredDamage} />
           </div>
           <!-- 何発も実測値。上限が無いので形態 5(§07) -->
           <div class="field">
-            <span class="label">何発中の最大</span>
-            <NumberField label="何発中の最大" min={1} reason="数えた回数" digits={3} bind:value={measuredHits} />
+            <span class="label">{t("何発中の最大")}</span>
+            <NumberField label={t("何発中の最大")} min={1} reason={t("数えた回数")} digits={3} bind:value={measuredHits} />
           </div>
           <ToggleRow
-            name="クリティカルだった"
+            name={t("クリティカルだった")}
             on={measuredCritical}
             tone="temp"
             onToggle={() => (measuredCritical = !measuredCritical)}
@@ -347,12 +346,12 @@
           <div class="readrows inset">
             <!-- どちら側と比べているかを必ず書く(計算タブの「1 発」はクリ率 > 0 ならクリ側) -->
             <ReadRow
-              label={`このツールの計算(${measuredCritical ? "クリティカル" : "非クリ最大"})`}
+              label={t("このツールの計算({kind})", { kind: measuredCritical ? t("クリティカル") : t("非クリ最大") })}
               value={expected !== null ? fmtInt(Math.trunc(expected)) : "—"}
               motion={() => expected}
             />
             <ReadRow
-              label="差"
+              label={t("差")}
               value={gap === null ? "—" : fmtSignedPct(gap, 1)}
               motion={() => gap}
               tone={gap !== null && Math.abs(gap) >= 0.05 ? "down" : null}
@@ -361,62 +360,60 @@
         {/if}
 
         <label class="field wide">
-          <span class="label">気づいたこと(任意)</span>
-          <TextField label="気づいたこと" bind:value={measuredNote} max={200} />
+          <span class="label">{t("気づいたこと(任意)")}</span>
+          <TextField label={t("気づいたこと")} bind:value={measuredNote} max={200} />
         </label>
 
         <div class="send">
-          <button type="button" class="btn" disabled={!canAdd} onclick={addSample}>この 1 点を記録する</button>
-          <span class="dim">記録したら、装備を替えて攻撃力を変え、もう 1 点測ってください。</span>
+          <button type="button" class="btn" disabled={!canAdd} onclick={addSample}>{t("この 1 点を記録する")}</button>
+          <span class="dim">{t("記録したら、装備を替えて攻撃力を変え、もう 1 点測ってください。")}</span>
         </div>
       </div>
 
       <div class="section">
         <div class="area-head">
-          <span class="area-name">記録した点</span>
+          <span class="area-name">{t("記録した点")}</span>
           <span class="area-rule"></span>
           <span class="count num">{samples.length}</span>
         </div>
         {#if samples.length === 0}
           <p class="note dim">
-            まだ 1 点もありません。<b>攻撃力を変えた 2 点以上</b>あると、防御力とカット率を分けて
-            逆算できます(1 点だけでも送れますが、分けられません)。
+            {t("まだ 1 点もありません。")}<b>{t("攻撃力を変えた 2 点以上")}</b>{t("あると、防御力とカット率を分けて逆算できます(1 点だけでも送れますが、分けられません)。")}
           </p>
         {:else}
           <div class="samples">
             {#each samples as sample, index (index)}
               <div class="sample-row">
                 <span class="meta-pill">{index + 1}</span>
-                <span class="dim">攻撃力</span>
+                <span class="dim">{t("攻撃力")}</span>
                 <span class="num">{sample.attack !== null ? fmtInt(sample.attack) : "—"}</span>
-                <span class="dim">実測</span>
+                <span class="dim">{t("実測")}</span>
                 <span class="num">{fmtInt(sample.damage)}</span>
-                {#if sample.critical}<span class="meta-pill crit">クリ</span>{/if}
-                <span class="dim">{fmtInt(sample.hits)} 発中</span>
+                {#if sample.critical}<span class="meta-pill crit">{t("クリ")}</span>{/if}
+                <span class="dim">{t("{n} 発中", { n: fmtInt(sample.hits) })}</span>
                 {#if sample.weapon}<span class="dim sample-note">{sample.weapon}</span>{/if}
                 {#if sample.note}<span class="dim sample-note">{sample.note}</span>{/if}
-                <button type="button" class="btn danger sample-del" onclick={() => removeSample(index)}>消す</button>
+                <button type="button" class="btn danger sample-del" onclick={() => removeSample(index)}>{t("消す")}</button>
               </div>
             {/each}
           </div>
           <p class="note dim" class:ready={separable}>
             {separable
-              ? "攻撃力の違う点が 2 つ以上あります。防御力とカット率を分けて逆算できます。"
-              : "攻撃力が同じ点だけです。上の「測るときの武器」を替えて(外すのでも構いません)、もう 1 点測ってください。"}
+              ? t("攻撃力の違う点が 2 つ以上あります。防御力とカット率を分けて逆算できます。")
+              : t("攻撃力が同じ点だけです。上の「測るときの武器」を替えて(外すのでも構いません)、もう 1 点測ってください。")}
           </p>
         {/if}
 
         <div class="send">
           <button type="button" class="btn primary" disabled={!canSend} onclick={send}>
-            {samples.length} 点まとめて送る
+            {t("{n} 点まとめて送る", { n: samples.length })}
           </button>
-          <span class="dim">送信前に全文を確認できます。</span>
+          <span class="dim">{t("送信前に全文を確認できます。")}</span>
         </div>
       </div>
 
       <p class="foot dim">
-        測り方(上限に当たっていないか・非クリの最大だけを採る・攻撃力を 2 段階にして 2 点測る)は
-        docs/enemy-verification.md にまとめてあります。
+        {t("測り方(上限に当たっていないか・非クリの最大だけを採る・攻撃力を 2 段階にして 2 点測る)は docs/enemy-verification.md にまとめてあります。")}
       </p>
     {/if}
   </div>

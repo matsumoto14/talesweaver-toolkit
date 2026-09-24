@@ -27,6 +27,7 @@
   import Disclosure from "../../../ui/Disclosure.svelte";
   import Value from "../../../ui/Value.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
+  import { t } from "../../../i18n";
 
   interface Props {
     draft: Draft;
@@ -74,8 +75,8 @@
 <!-- 上: 効いている量。実機の装備画面と 9 列で突き合わせられる -->
 <div class="card">
   <div class="card-head">
-    <span class="card-title">アバターで効いている量</span>
-    <span class="small dim">強化能力値へ合流</span>
+    <span class="card-title">{t("アバターで効いている量")}</span>
+    <span class="small dim">{t("強化能力値へ合流")}</span>
   </div>
 
   <div class="inset sum">
@@ -87,7 +88,7 @@
     </div>
 
     <div class="sum-grid">
-      <span class="sum-label">補正付きアバター {count}点</span>
+      <span class="sum-label">{t("補正付きアバター {n}点", { n: count })}</span>
       {#each COLUMNS as kind (kind)}
         <Value
           class={"sum-v " + (itemAmount === 0 ? "dim" : "")}
@@ -98,7 +99,7 @@
     </div>
 
     <div class="sum-grid" class:set-on={isSet}>
-      <span class="sum-label">5セット効果</span>
+      <span class="sum-label">{t("5セット効果")}</span>
       {#each COLUMNS as kind (kind)}
         <Value
           class={"sum-v " + (setAmount === 0 ? "dim" : "")}
@@ -109,7 +110,7 @@
     </div>
 
     <div class="sum-grid last-part">
-      <span class="sum-label">強化剤 5部位計</span>
+      <span class="sum-label">{t("強化剤 5部位計")}</span>
       {#each COLUMNS as kind (kind)}
         <Value
           class={"sum-v " + (enhanceTotals[kind] === 0 ? "dim" : "")}
@@ -120,7 +121,7 @@
     </div>
 
     <div class="sum-grid total-row">
-      <span class="sum-label">合計</span>
+      <span class="sum-label">{t("合計")}</span>
       {#each COLUMNS as kind (kind)}
         <Value
           class={"sum-total " + (isKey(kind) ? "key-total" : "")}
@@ -135,8 +136,8 @@
 <!-- 下: 入力。開閉は無い。列は上のカードとそのまま揃う -->
 <div class="card input-card">
   <div class="avatar-grid stat-head">
-    <span class="part-head">部位</span>
-    <span class="a-head">補正付きアバター</span>
+    <span class="part-head">{t("部位")}</span>
+    <span class="a-head">{t("補正付きアバター")}</span>
     {#each COLUMNS as kind (kind)}
       <span class:key-stat={isKey(kind)}>{EQUIPMENT_STAT_SHORT[kind]}</span>
     {/each}
@@ -151,15 +152,16 @@
         onToggle={() =>
           (draft.equipment.avatar_corrections[part] = !draft.equipment.avatar_corrections[part])}
       >
-        全値 {fmtSigned(limits.avatar_correction_per_part)}
+        {t("全値 {v}", { v: fmtSigned(limits.avatar_correction_per_part) })}
       </Chip>
       {#each COLUMNS as kind (kind)}
         {@const value = draft.equipment.avatar[part][kind]}
         <Chip
           class={"cell num " + (value > 0 ? "on" : "")}
-          title="{AVATAR_PART_LABELS[part]}の{EQUIPMENT_STAT_SHORT[kind]}(押すと なし → {fmtSigned(
-            CHOICES[0],
-          )} → {fmtSigned(CHOICES[1])})"
+          title={t("{part}の{stat}(押すと なし → {a} → {b})", {
+            part: AVATAR_PART_LABELS[part], stat: EQUIPMENT_STAT_SHORT[kind],
+            a: fmtSigned(CHOICES[0]), b: fmtSigned(CHOICES[1]),
+          })}
           onclick={() => cycleCell(part, kind)}
         >
           <Value
@@ -179,33 +181,33 @@
       ? STATE.met.bd
       : 'var(--border-soft)'}; color: {isSet ? STATE.met.fg : 'var(--fg-muted)'};"
   >
-    <b>5セット効果</b>
+    <b>{t("5セット効果")}</b>
     <Value
       value={isSet
-        ? `5部位そろいました — 全9値 ${fmtSigned(limits.avatar_set_bonus)} が上の合計に入っています`
-        : `あと${AVATAR_PARTS.length - count}部位そろえると 全9値 ${fmtSigned(limits.avatar_set_bonus)}`}
+        ? t("5部位そろいました — 全9値 {v} が上の合計に入っています", { v: fmtSigned(limits.avatar_set_bonus) })
+        : t("あと{n}部位そろえると 全9値 {v}", { n: AVATAR_PARTS.length - count, v: fmtSigned(limits.avatar_set_bonus) })}
     />
   </div>
 
   <!-- 説明は毎回読むものではない。入力の下に畳む(§00 02) -->
   <Disclosure class="fold">
-    {#snippet summary()}この画面の読み方{/snippet}
+    {#snippet summary()}{t("この画面の読み方")}{/snippet}
     <div class="fold-body">
       <p class="hint dim">
-        <b>補正付きアバター</b>はアイテム名の末尾に「Ａ」が付くアバターです。1 点で装備補正
-        {EQUIPMENT_STAT_KINDS.length}値すべてに{fmtSigned(limits.avatar_correction_per_part)}、5 部位
-        そろえるとセット効果でさらに{fmtSigned(limits.avatar_set_bonus)}(合計{fmtSigned(
-          AVATAR_PARTS.length * limits.avatar_correction_per_part + limits.avatar_set_bonus,
-        )})。セット効果の移動速度 +10 はこのツールでは扱いません。
+        <b>{t("補正付きアバター")}</b>{t("はアイテム名の末尾に「Ａ」が付くアバターです。1 点で装備補正 {n}値すべてに{v1}、5 部位 そろえるとセット効果でさらに{v2}(合計{v3})。セット効果の移動速度 +10 はこのツールでは扱いません。", {
+          n: EQUIPMENT_STAT_KINDS.length,
+          v1: fmtSigned(limits.avatar_correction_per_part),
+          v2: fmtSigned(limits.avatar_set_bonus),
+          v3: fmtSigned(AVATAR_PARTS.length * limits.avatar_correction_per_part + limits.avatar_set_bonus),
+        })}
       </p>
       <p class="hint dim">
-        <b>アバター強化剤</b>は部位ごとに{EQUIPMENT_STAT_KINDS.length}値のどれにでも固定値を付与でき、
-        <b>同じ部位に複数の値を重ねられます</b>(例: 兜に突き+{limits.avatar_enhance_max}と命中+{limits.avatar_enhance_max}の両方)。
-        枠は押すたび なし → {fmtSigned(CHOICES[0])} → {fmtSigned(CHOICES[1])} と回ります。
-        現行の強化剤は期限つきですが、期限はこのツールでは扱いません。旧品の +1 / +3 などが
-        既に入っている枠は、その値も回ります。移動速度の強化剤は対象外です。
+        <b>{t("アバター強化剤")}</b>{t("は部位ごとに{n}値のどれにでも固定値を付与でき、", { n: EQUIPMENT_STAT_KINDS.length })}
+        <b>{t("同じ部位に複数の値を重ねられます")}</b>{t("(例: 兜に突き+{max}と命中+{max}の両方)。 枠は押すたび なし → {a} → {b} と回ります。 現行の強化剤は期限つきですが、期限はこのツールでは扱いません。旧品の +1 / +3 などが 既に入っている枠は、その値も回ります。移動速度の強化剤は対象外です。", {
+          max: limits.avatar_enhance_max, a: fmtSigned(CHOICES[0]), b: fmtSigned(CHOICES[1]),
+        })}
       </p>
-      <p class="hint dim">どちらもエンチャント・テシスコアと同じ「強化能力値」に合流します。</p>
+      <p class="hint dim">{t("どちらもエンチャント・テシスコアと同じ「強化能力値」に合流します。")}</p>
     </div>
   </Disclosure>
 </div>

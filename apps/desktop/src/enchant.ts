@@ -4,6 +4,7 @@
 // (ADR 001: ゲーム由来の係数・上限をフロントに置かない / 値域上限にフォールバックを持たない)。
 import type { Equipment, EquipmentItem, EquipmentPart, PartSlot, SkillDependency } from "./api/types";
 import { tables } from "./tables.svelte";
+import { t } from "./i18n";
 
 export type EnchantDepKey = "thrust" | "slash" | "magic_attack" | "magic_defense";
 
@@ -18,7 +19,8 @@ export function enchantDepKeysFor(dependency: SkillDependency): EnchantDepKey[] 
 export const ENCHANT_SLOTS: PartSlot[] =
   tables.part_slot_rules.filter((r) => r.allows_enchant).map((r) => r.slot);
 export const ENCHANT_SLOT_LABELS: Record<string, string> = {
-  weapon: "武器", armor: "鎧", helm: "兜", shield: "盾", shield_plus: "カフス", head: "頭", hand: "手", leg: "足",
+  weapon: t("武器"), armor: t("鎧"), helm: t("兜"), shield: t("盾"), shield_plus: t("カフス"),
+  head: t("頭"), hand: t("手"), leg: t("足"),
 };
 
 export const isUnequipped = (part: EquipmentPart | null): boolean =>

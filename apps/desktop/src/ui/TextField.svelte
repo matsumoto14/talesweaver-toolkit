@@ -12,6 +12,7 @@
   // 上限(`max`)は数値欄(NumberField)の /上限 と同じ位置 —— 値のすぐ隣に「n/上限」を常設する。
   import Value from "./Value.svelte";
   import { fmtInt } from "../format";
+  import { t } from "../i18n";
 
   interface Props {
     /** 何の欄か。見えるラベルは呼び出し側が置くので、ここでは aria-label にだけ使う */
@@ -34,7 +35,7 @@
     onEnter?: () => void;
   }
   let {
-    label, value = $bindable(), auto, autoNote = "自動値を使用", count, rows, max,
+    label, value = $bindable(), auto, autoNote = t("自動値を使用"), count, rows, max,
     disabled = false, onCommit, onEnter,
   }: Props = $props();
 
@@ -85,7 +86,7 @@
     {#if max !== undefined}<Value class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />{/if}
   </label>
 {:else if named && !editing}
-  <button type="button" class="tfield read" {disabled} aria-label="{label} を編集" onclick={startEdit}>
+  <button type="button" class="tfield read" {disabled} aria-label={t("{label} を編集", { label })} onclick={startEdit}>
     <span class="text" title={shown}>{shown}</span>
     {#if value === ""}<span class="auto">{autoNote}</span>{/if}
   </button>
@@ -98,7 +99,7 @@
       <input type="text" bind:value maxlength={max} {disabled} aria-label={label} onblur={blur} onkeydown={keydown} />
     {/if}
     {#if search}
-      <Value class="cnt" motion={() => count ?? 0} value={`${fmtInt(count ?? 0)} 件`} />
+      <Value class="cnt" motion={() => count ?? 0} value={t("{n} 件", { n: fmtInt(count ?? 0) })} />
     {:else if max !== undefined}
       <Value class="cnt" motion={() => value.length} value={`${value.length}/${max}`} />
     {/if}

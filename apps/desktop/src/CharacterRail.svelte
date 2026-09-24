@@ -8,6 +8,7 @@
   import { persisted } from "./ui/persistedState.svelte";
   import { dropHalfIndex, moveItem } from "./ui/reorder.svelte";
   import Spinner from "./ui/Spinner.svelte";
+  import { t } from "./i18n";
 
   interface Props {
     collapsed: boolean;
@@ -59,17 +60,17 @@
 <aside class:collapsed>
   <div class="head-bar">
     {#if !collapsed}
-      <span class="title">キャラ</span>
-      <span class="note">{app.characters.length} 人登録済み</span>
+      <span class="title">{t("キャラ")}</span>
+      <span class="note">{t("{n} 人登録済み", { n: app.characters.length })}</span>
       <!-- 読み込み中の印は見出しの帯に置く。一覧の中に出し入れすると、
            読み終わった瞬間に下のキャラが上へずれる(§09 規則 3) -->
-      <Spinner active={app.loading} label="キャラを読み込んでいます" />
+      <Spinner active={app.loading} label={t("キャラを読み込んでいます")} />
     {/if}
     <button
       type="button"
       class="rail-toggle"
-      title={collapsed ? "レールを開く" : "レールを畳む"}
-      aria-label={collapsed ? "レールを開く" : "レールを畳む"}
+      title={collapsed ? t("レールを開く") : t("レールを畳む")}
+      aria-label={collapsed ? t("レールを開く") : t("レールを畳む")}
       onclick={onToggle}
     >{collapsed ? "›" : "‹"}</button>
   </div>
@@ -84,7 +85,7 @@
         class:drop-before={characterDropAt === index}
         class:drop-after={characterDropAt === index + 1 && index === orderedCharacters.length - 1}
         draggable="true"
-        title="{c.name}({gameCharacterName(c.game_character_id)}) クリア可 {clearCount(c.id)} / {total}"
+        title={t("{name}({cls}) クリア可 {clear} / {total}", { name: c.name, cls: t(gameCharacterName(c.game_character_id)), clear: clearCount(c.id), total })}
         onclick={() => selectCharacter(c.id)}
         ondragstart={(event) => startCharacterDrag(event, c.id)}
         ondragover={(event) => dragCharacterOver(event, index)}
@@ -97,28 +98,28 @@
           kind="character"
           id={c.game_character_id}
           size={collapsed ? 40 : 28}
-          label="{c.name}({gameCharacterName(c.game_character_id)})"
+          label={t("{name}({cls})", { name: c.name, cls: t(gameCharacterName(c.game_character_id)) })}
           source={app.characterIcons[c.id] ?? null}
         />
         {#if !collapsed}
           <span class="meta">
             <span class="name">{c.name}</span>
-            <span class="cls">{gameCharacterName(c.game_character_id)} / 覚醒{c.awakening.stage}</span>
+            <span class="cls">{t(gameCharacterName(c.game_character_id))} / {t("覚醒{stage}", { stage: c.awakening.stage })}</span>
           </span>
           <span class="count">
             <Value class="ok" motion={() => clearCount(c.id)} value={String(clearCount(c.id))}
               >{#snippet children()}{clearCount(c.id)}<span class="total"> / {total}</span>{/snippet}</Value
             >
-            <span class="cap">クリア可</span>
+            <span class="cap">{t("クリア可")}</span>
           </span>
         {:else}
           <Value class="mini" motion={() => clearCount(c.id)} value={String(clearCount(c.id))} />
         {/if}
       </button>
     {/each}
-    <button type="button" class="register" onclick={goRegister}>{collapsed ? "＋" : "＋ キャラを登録"}</button>
+    <button type="button" class="register" onclick={goRegister}>{collapsed ? "＋" : t("＋ キャラを登録")}</button>
     {#if !collapsed}
-      <p class="note-text dim">クリア済みは「ソロで {fmtDuration(tables.reach_seconds.reached)}以内に倒せて入場条件も満たす」コンテンツの数です。</p>
+      <p class="note-text dim">{t("クリア済みは「ソロで {sec}以内に倒せて入場条件も満たす」コンテンツの数です。", { sec: fmtDuration(tables.reach_seconds.reached) })}</p>
     {/if}
   </div>
 </aside>

@@ -10,6 +10,7 @@
    * 切り替えた ↑↓・追加/削除 が、開いたときには消えている(差分は要素が前回値を覚えている。§00 04)。
    */
   import { fmtInt, fmtSigned } from "../../format";
+  import { t } from "../../i18n";
   import Disclosure from "../../ui/Disclosure.svelte";
   import Value from "../../ui/Value.svelte";
   import { changed } from "../../ui/motion.svelte";
@@ -30,17 +31,17 @@
   <div class="detail-body">
     {#if d.head !== false}
       <div class="dt-head">
-        <span class="dt-hk dim">倍率</span>
+        <span class="dt-hk dim">{t("倍率")}</span>
         <!-- 倍率は書式済みの文字(「×87.7」「—」)で数が来ないので、変わったら光る(<Value> が決める) -->
         <Value class="dt-hv" value={d.mult} />
-        <span class="dt-hk dim">実数</span>
+        <span class="dt-hk dim">{t("実数")}</span>
         <Value
           class={`dt-hv ${(d.delta ?? 0) < 0 ? "bad" : ""}`}
           motion={() => (d.delta === null ? null : Math.round(d.delta))}
           value={d.delta === null ? "—" : fmtSigned(d.delta)}
           delta={{}}
         />
-        <span class="dt-hk dim">結果</span>
+        <span class="dt-hk dim">{t("結果")}</span>
         <Value class="dt-hv big" motion={() => d.to} value={d.to === null ? "—" : fmtInt(Math.round(d.to))} delta={{}} />
       </div>
     {/if}
@@ -78,7 +79,7 @@
                   value={sm.value}
                   delta={sm.state === "gone" || sm.state === "added" ? null : { unit: sm.unit }}
                 />
-                {#if sm.state === "gone"}<span class="delta num down delta-in">削除</span>{:else if sm.state === "added"}<span class="delta num up delta-in">追加</span>{/if}
+                {#if sm.state === "gone"}<span class="delta num down delta-in">{t("削除")}</span>{:else if sm.state === "added"}<span class="delta num up delta-in">{t("追加")}</span>{/if}
                 <Value class="dt-sub dim" value={sm.sub ?? ""} />
               </div>
             {/each}
@@ -94,7 +95,7 @@
       {/if}
     {/each}
     {#if d.idle > 0}
-      <p class="dt-note dim">他 {d.idle} 枠は中立(±0)なので、この段では効いていません。</p>
+      <p class="dt-note dim">{t("他 {n} 枠は中立(±0)なので、この段では効いていません。", { n: d.idle })}</p>
     {/if}
     {#if d.note}<p class="dt-note dim">{d.note}</p>{/if}
     {#if d.expr}<p class="dt-expr dim">{d.expr}</p>{/if}

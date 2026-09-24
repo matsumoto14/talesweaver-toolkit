@@ -35,6 +35,7 @@
   import failSheet from "../../assets/inkri/fx/fail.webp";
   import failData from "../../assets/inkri/fx/fail.json";
   import SpriteFx, { type FxData } from "./SpriteFx.svelte";
+  import { t } from "../../i18n";
 
   const tabImages = import.meta.glob<string>("../../assets/inkri/ui/tab_*.png", {
     eager: true,
@@ -86,45 +87,45 @@
   const FX = { x: 248, y: 258 };
 </script>
 
-<div class="tw-window" role="group" aria-label="装備システム(インクリ)">
+<div class="tw-window" role="group" aria-label={t("装備システム(インクリ)")}>
   <div class="title">Equipment System<span class="close" aria-hidden="true">✕</span></div>
 
   <!-- 左: 装備の説明(ゲームのアイテム説明) -->
   <aside class="detail">
     <div class="detail-head">
-      <button type="button" class="detail-slot" onclick={onpickitem} title="装備を選ぶ">
+      <button type="button" class="detail-slot" onclick={onpickitem} title={t("装備を選ぶ")}>
         {#if shown?.icon}<img src={shown.icon} alt="" />{/if}
       </button>
-      <div class="detail-name">{shown ? shown.name : "装備を選択してください。"}</div>
+      <div class="detail-name">{shown ? t(shown.name) : t("装備を選択してください。")}</div>
     </div>
-    <div class="info-bar">アイテム情報<span class="info-min" aria-hidden="true"></span></div>
+    <div class="info-bar">{t("アイテム情報")}<span class="info-min" aria-hidden="true"></span></div>
     {#if shown}
       <div class="detail-body">
-        <div>インクリ</div>
-        {#if shown.inkriCount > 0}<div class="ind blue">インクリ回数 {shown.inkriCount}</div>{/if}
+        <div>{t("インクリ")}</div>
+        {#if shown.inkriCount > 0}<div class="ind blue">{t("インクリ回数 {n}", { n: shown.inkriCount })}</div>{/if}
       </div>
     {/if}
   </aside>
 
   <!-- 右: タブ + インクリの面 -->
   <div class="tabs">
-    {#each TABS as t (t)}
-      <img src={tab(t, t === "inkri" ? 1 : 0)} alt={t === "inkri" ? "インクリ" : ""} />
+    {#each TABS as tab_id (tab_id)}
+      <img src={tab(tab_id, tab_id === "inkri" ? 1 : 0)} alt={tab_id === "inkri" ? t("インクリ") : ""} />
     {/each}
   </div>
 
   <section class="body">
     <div class="panel" style:background-image="url({panel})">
-      <button type="button" class="slot" onclick={onpickitem} title="装備を選ぶ">
+      <button type="button" class="slot" onclick={onpickitem} title={t("装備を選ぶ")}>
         {#if shown?.icon}<img src={shown.icon} alt="" />{/if}
       </button>
       {#if shown}
         <div class="name">{shown.name}</div>
-        <div class="row r2"><span>エンチャント回数</span><b>0回</b></div>
-        <div class="row r3"><span>インクリ回数</span><b>{shown.inkriCount}回</b></div>
+        <div class="row r2"><span>{t("エンチャント回数")}</span><b>{t("{n}回", { n: 0 })}</b></div>
+        <div class="row r3"><span>{t("インクリ回数")}</span><b>{t("{n}回", { n: shown.inkriCount })}</b></div>
       {/if}
-      <div class="list-head">インクリ 選択</div>
-      <div class="list" role="radiogroup" aria-label="インクリの種類">
+      <div class="list-head">{t("インクリ 選択")}</div>
+      <div class="list" role="radiogroup" aria-label={t("インクリの種類")}>
         {#each kinds as k, i (k.id)}
           <button
             type="button"
@@ -137,7 +138,7 @@
             disabled={busy || unavailable.includes(k.id)}
             onclick={() => { onbutton(); onkind(k.id); }}
           >
-            <img src={k.id === kind ? radioOn : radioOff} alt="" />{k.label}
+            <img src={k.id === kind ? radioOn : radioOff} alt="" />{t(k.label)}
           </button>
         {/each}
       </div>
@@ -145,30 +146,30 @@
 
     {#if selected && shown}
       <div class="desc">
-        <p><b>{selected.rateLabel}</b> でインクリが成功します。</p>
-        <p>インクリ成功時 <b>インクリ回数が1増加</b> します。</p>
+        <p>{t("{rate} でインクリが成功します。", { rate: t(selected.rateLabel) })}</p>
+        <p>{t("インクリ成功時")} <b>{t("インクリ回数が1増加")}</b> {t("します。")}</p>
         {#if selected.destroysOnFailure}
-          <p>インクリ失敗時 <b>アイテムが破壊</b> されます。</p>
+          <p>{t("インクリ失敗時")} <b>{t("アイテムが破壊")}</b> {t("されます。")}</p>
         {:else}
-          <p>インクリが失敗しても <b>アイテムは破壊</b> されません。</p>
+          <p>{t("インクリが失敗しても")} <b>{t("アイテムは破壊")}</b> {t("されません。")}</p>
         {/if}
         {#if selected.consumesScroll}
-          <p>1回ごとに <b>エタインクリ呪文書</b> を1枚消費します。</p>
+          <p>{t("1回ごとに")} <b>{t("エタインクリ呪文書")}</b> {t("を1枚消費します。")}</p>
         {/if}
       </div>
     {/if}
 
     <img class="cost-radio r1" src={radioOn} alt="" />
     <div class="cost c1">
-      <span class="k">費用</span><span class="v yellow">{shown ? (cost ?? "?") : "0"}</span>
+      <span class="k">{t("費用")}</span><span class="v yellow">{shown ? (cost ?? "?") : "0"}</span>
       <span class="k sep">SEED</span><span class="v">{seed}</span>
     </div>
     <img class="cost-radio r2" src={radioOff} alt="" />
     <div class="cost c2">
-      <span class="k">費用</span><span class="v">-</span>
+      <span class="k">{t("費用")}</span><span class="v">-</span>
       <span class="k sep">ELSO</span><span class="v">-</span>
     </div>
-    <p class="note">{notice ?? "選択したインクリによって費用が異なります。"}</p>
+    <p class="note">{notice ?? t("選択したインクリによって費用が異なります。")}</p>
 
     <div class="strip">
       <button
@@ -181,7 +182,7 @@
         onpointerup={() => (down = false)}
         onclick={() => { onbutton(); onrun(); }}
       >
-        <img src={buttonImage} alt="インクリ" />
+        <img src={buttonImage} alt={t("インクリ")} />
       </button>
     </div>
 

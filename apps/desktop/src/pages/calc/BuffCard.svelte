@@ -12,6 +12,7 @@
     isUserSelectedTarget, matchesPurpose, pickedStats, toggleBuff, toggleBuffStat, userInputRange,
   } from "../../buffs";
   import { fmtSigned, fmtSignedPct, formatLayerValue, topRowsText } from "../../format";
+  import { t } from "../../i18n";
   import { STAT_KINDS, STAT_LABELS } from "../../labels";
   import { app } from "../../state.svelte";
   import Choose from "../../ui/Choose.svelte";
@@ -126,36 +127,36 @@
                      値の調整(設定・ポップオーバー)は押せる面の外(extra)に置く —
                      押した名前の上に段を差し込まない(§00 03) -->
                 <ToggleRow
-                  name={def.name}
+                  name={t(def.name)}
                   value={state !== "off" ? buffContributionText(def) : undefined}
                   on={state !== "off"}
                   tone={state === "extra" ? "temp" : "saved"}
                   disabled={blocked}
-                  title={blocked ? "同枠の他バフと排他です" : def.note || undefined}
+                  title={blocked ? t("同枠の他バフと排他です") : (def.note ? t(def.note) : undefined)}
                   onToggle={() => { if (!blocked) toggleBuffChip(def); }}
                 >
                   {#snippet icon()}
                     <!-- 未収録の id は破線 + ? になり、その場でも幅は変わらない -->
-                    <Icon kind="buff" id={def.id} size={20} label={def.name} />
+                    <Icon kind="buff" id={def.id} size={20} label={t(def.name)} />
           {/snippet}
                   {#snippet extra()}
                     {#if detail}
                       {@const choice = buffChoiceOf(def.id)}
                       {#if choice}
                         <Popover
-                          label={`${def.name} の設定`}
-                          triggerLabel={`${def.name} の設定`}
+                          label={t("{name} の設定", { name: t(def.name) })}
+                          triggerLabel={t("{name} の設定", { name: t(def.name) })}
                           triggerClass="chip-config"
                           panelClass="buff-editor"
                         >
-                          {#snippet trigger()}設定{/snippet}
+                          {#snippet trigger()}{t("設定")}{/snippet}
                           {#snippet children(close)}
                         {#if isMultiTarget(def.target)}
                         <!-- クラブエフェクトはステごとに 1 つずつ併用できる。ここでは対象ステの
                              出し入れだけを試せるようにし、値はバフタブ側の設定を引き継ぐ -->
                         <div class="field">
                           <span class="field-head">
-                            <span class="field-label">対象ステ</span>
+                            <span class="field-label">{t("対象ステ")}</span>
                             <Value
                               class="field-count"
                               motion={() => pickedStats(app.calcBuffs.choices, def).length}
@@ -163,7 +164,7 @@
                             />
                           </span>
                           <Choose
-                            label="対象ステ"
+                            label={t("対象ステ")}
                             options={statOptions}
                             max={STAT_KINDS.length}
                             values={pickedStats(app.calcBuffs.choices, def)}
@@ -172,9 +173,9 @@
                         </div>
                       {:else if isUserSelectedTarget(def.target)}
                         <div class="field">
-                          <span class="field-label">対象ステ</span>
+                          <span class="field-label">{t("対象ステ")}</span>
                           <Choose
-                            label="対象ステ"
+                            label={t("対象ステ")}
                             options={statOptions}
                             bind:value={
                               () => choice.stat ?? STAT_KINDS[0],
@@ -187,9 +188,9 @@
                         {@const options = def.value.choice.map((v, i) => ({ value: String(i), label: formatLayerValue(def.layer, v) }))}
                         <!-- 値の候補は小さい順に並ぶ(順序あり)ので段(§07「1 つ選ぶ」) -->
                         <div class="field">
-                          <span class="field-label">値</span>
+                          <span class="field-label">{t("値")}</span>
                           <Choose
-                            label="値"
+                            label={t("値")}
                             {options}
                             full
                             bind:value={
@@ -207,7 +208,7 @@
                             <div class="stat-value-row">
                               <span class="stat-value-label">{STAT_LABELS[stat]}</span>
                               <NumberField
-                                label="{STAT_LABELS[stat]}の値"
+                                label={t("{stat}の値", { stat: STAT_LABELS[stat] })}
                                 min={range.min * scale}
                                 max={range.max * scale}
                                 bind:value={
@@ -219,9 +220,9 @@
                           {/each}
                         {:else}
                           <div class="stat-value-row">
-                            <span class="stat-value-label">{isPercentLayer(def.layer) ? "値 (%)" : "値"}</span>
+                            <span class="stat-value-label">{isPercentLayer(def.layer) ? t("値 (%)") : t("値")}</span>
                             <NumberField
-                              label={isPercentLayer(def.layer) ? "値 (%)" : "値"}
+                              label={isPercentLayer(def.layer) ? t("値 (%)") : t("値")}
                               min={range.min * scale}
                               max={range.max * scale}
                               bind:value={
@@ -232,7 +233,7 @@
                           </div>
                         {/if}
                       {/if}
-                            <button type="button" class="popover-close" onclick={close}>閉じる</button>
+                            <button type="button" class="popover-close" onclick={close}>{t("閉じる")}</button>
                           {/snippet}
                         </Popover>
                       {/if}
@@ -244,24 +245,24 @@
         <!-- バフ -->
         <Disclosure class="card" summaryClass="card-head toggle">
           {#snippet summary()}
-            <Icon kind="buff" id="illumination_drink" size={20} label="バフ" />
-            <span class="card-title">バフ</span>
-            <Value class="dim small" motion={() => alwaysBuffCount + extraBuffCount} value={`${alwaysBuffCount + extraBuffCount} 件`} />
+            <Icon kind="buff" id="illumination_drink" size={20} label={t("バフ")} />
+            <span class="card-title">{t("バフ")}</span>
+            <Value class="dim small" motion={() => alwaysBuffCount + extraBuffCount} value={t("{n} 件", { n: alwaysBuffCount + extraBuffCount })} />
           {/snippet}
           {#snippet children(open)}
           {#if open}
           <div class="calc-buff-set">
-            <span>使うセット</span>
+            <span>{t("使うセット")}</span>
             <Picker
-              label="使うバフセット"
-              options={buffSetOptions(app.buffSets, "追加だけで計算")}
+              label={t("使うバフセット")}
+              options={buffSetOptions(app.buffSets, t("追加だけで計算"))}
               bind:value={() => (app.calcBuffSetId === null ? "" : String(app.calcBuffSetId)), chooseCalcBuffSet}
             />
           </div>
           <p class="buff-legend dim">
-            <span class="lg always">常</span> セット内({alwaysBuffCount} 件)
-            ／ <span class="lg extra">追</span> 追加 = この計算だけ({extraBuffCount} 件・保存されません)
-            ／ 無印 使わない。
+            <span class="lg always">{t("常")}</span> {t("セット内({n} 件)", { n: alwaysBuffCount })}
+            ／ <span class="lg extra">{t("追")}</span> {t("追加 = この計算だけ({n} 件・保存されません)", { n: extraBuffCount })}
+            ／ {t("無印 使わない。")}
           </p>
           <!-- 目的ごとに畳む。35 個を全部並べると 31 行(1177px)になり、ペインの大半を
                バフが占める。見出しは常に同じ場所にあり、開いても**その下に生えるだけ**で
@@ -282,7 +283,7 @@
               </Disclosure>
             {/if}
           {/each}
-          <p class="buff-note dim">変更はこの計算だけに反映され、バフセットやキャラには保存されません。</p>
+          <p class="buff-note dim">{t("変更はこの計算だけに反映され、バフセットやキャラには保存されません。")}</p>
           {/if}
           {/snippet}
         </Disclosure>

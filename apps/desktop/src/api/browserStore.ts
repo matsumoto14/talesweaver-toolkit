@@ -13,6 +13,7 @@ import type {
   BuffSelection, BuffSet, CharacterIcon, CharacterSkills, DamageSnapshot, NewCharacter,
   RegisteredCharacter, ValidationLocation,
 } from "./types";
+import { t } from "../i18n";
 
 const DB_NAME = "tw-context";
 /**
@@ -134,9 +135,9 @@ export const failure = (
   location: ValidationLocation | null = null,
 ): CommandFailure => ({ message, location });
 
-const characterNotFound = (id: number) => failure(`キャラクター(id=${id})が見つかりません`);
-const buffSetNotFound = (id: number) => failure(`バフセット(id=${id})が見つかりません`);
-const invalidIcon = (reason: string) => failure(`キャラクター画像が不正です: ${reason}`);
+const characterNotFound = (id: number) => failure(t("キャラクター(id={id})が見つかりません", { id }));
+const buffSetNotFound = (id: number) => failure(t("バフセット(id={id})が見つかりません", { id }));
+const invalidIcon = (reason: string) => failure(t("キャラクター画像が不正です: {reason}", { reason }));
 
 /** SQLite 側の strftime('%Y-%m-%dT%H:%M:%fZ','now') と同じ形(UTC・ミリ秒まで) */
 const nowIso = () => new Date().toISOString();
@@ -145,7 +146,7 @@ const wrap = <T>(request: IDBRequest<T>): Promise<T> =>
   new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
-      reject(failure(`保存先(IndexedDB)の操作に失敗しました: ${request.error?.message ?? ""}`));
+      reject(failure(t("保存先(IndexedDB)の操作に失敗しました: {reason}", { reason: request.error?.message ?? "" })));
   });
 
 let connection: Promise<IDBDatabase> | null = null;
@@ -195,9 +196,9 @@ function open(): Promise<IDBDatabase> {
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
-      reject(failure("保存先(IndexedDB)を開けません。プライベートウィンドウでは保存できないことがあります"));
+      reject(failure(t("保存先(IndexedDB)を開けません。プライベートウィンドウでは保存できないことがあります")));
     request.onblocked = () =>
-      reject(failure("別のタブが古い保存先を開いています。そのタブを閉じてから読み込み直してください"));
+      reject(failure(t("別のタブが古い保存先を開いています。そのタブを閉じてから読み込み直してください")));
   });
   return connection;
 }
@@ -216,7 +217,7 @@ export async function deleteDatabase(): Promise<void> {
     request.onsuccess = () => resolve();
     request.onblocked = () => resolve();
     request.onerror = () =>
-      reject(failure(`保存先(IndexedDB)を消せませんでした: ${request.error?.message ?? ""}`));
+      reject(failure(t("保存先(IndexedDB)を消せませんでした: {reason}", { reason: request.error?.message ?? "" })));
   });
 }
 
@@ -384,7 +385,7 @@ export const duplicateBuffSet = (id: number) =>
     const source = await readBuffSet(tx, id);
     const copy: BuffSet = {
       id: await nextId(tx, BUFF_SETS),
-      name: `${source.name}のコピー`,
+      name: t("{name}のコピー", { name: source.name }),
       choices: source.choices,
     };
     await wrap(tx.objectStore(BUFF_SETS).add(copy));
@@ -432,19 +433,19 @@ const isSupportedImage = (bytes: Uint8Array) =>
 
 /** 中央を正方形に切って 128px の PNG にする(デスクトップ版の normalize_icon と同じ形) */
 async function normalizeIcon(source: Uint8Array): Promise<string> {
-  if (source.length === 0 || source.length > MAX_SOURCE_BYTES) throw invalidIcon("画像は5 MiB以下にしてください");
-  if (!isSupportedImage(source)) throw invalidIcon("PNG、JPEG、WebPを選んでください");
+  if (source.length === 0 || source.length > MAX_SOURCE_BYTES) throw invalidIcon(t("画像は5 MiB以下にしてください"));
+  if (!isSupportedImage(source)) throw invalidIcon(t("PNG、JPEG、WebPを選んでください"));
 
   let image: ImageBitmap;
   try {
     image = await createImageBitmap(new Blob([source as BlobPart]));
   } catch {
-    throw invalidIcon("画像を読み取れません");
+    throw invalidIcon(t("画像を読み取れません"));
   }
   const { width, height } = image;
   if (width === 0 || height === 0 || width * height > MAX_SOURCE_PIXELS) {
     image.close();
-    throw invalidIcon("画像は合計1600万画素以下にしてください");
+    throw invalidIcon(t("画像は合計1600万画素以下にしてください"));
   }
   const side = Math.min(width, height);
   const canvas = document.createElement("canvas");
@@ -453,7 +454,7 @@ async function normalizeIcon(source: Uint8Array): Promise<string> {
   const context = canvas.getContext("2d");
   if (!context) {
     image.close();
-    throw invalidIcon("画像を保存用に変換できません");
+    throw invalidIcon(t("画像を保存用に変換できません"));
   }
   context.drawImage(
     image,

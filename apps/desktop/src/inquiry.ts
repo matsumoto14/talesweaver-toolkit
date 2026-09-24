@@ -8,6 +8,7 @@ import type {
   SienaAuraList,
   SienaAuras,
 } from "./api/types";
+import { t } from "./i18n";
 import { solveChallenge } from "./pow";
 
 /**
@@ -148,13 +149,13 @@ export async function send(
   includeDiagnostics: boolean,
   onProgress?: (message: string) => void,
 ): Promise<SentInquiry> {
-  onProgress?.("送信の準備をしています…");
+  onProgress?.(t("送信の準備をしています…"));
   const challenge = await request<Challenge>("/challenge");
 
-  onProgress?.("送信の検証中です…");
+  onProgress?.(t("送信の検証中です…"));
   const solution = await solveChallenge(challenge.nonce, challenge.difficultyBits);
 
-  onProgress?.("送信しています…");
+  onProgress?.(t("送信しています…"));
   return request<SentInquiry>("/inquiry", {
     nonce: challenge.nonce,
     solution,
@@ -176,12 +177,12 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new Error("送信サーバーに接続できませんでした。ネットワークを確認してください。");
+    throw new Error(t("送信サーバーに接続できませんでした。ネットワークを確認してください。"));
   }
 
   const payload = (await response.json().catch(() => null)) as { error?: string } | null;
   if (!response.ok) {
-    throw new Error(payload?.error ?? `送信に失敗しました(${response.status})`);
+    throw new Error(payload?.error ?? t("送信に失敗しました({status})", { status: response.status }));
   }
   return payload as T;
 }

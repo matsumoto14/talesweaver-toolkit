@@ -9,6 +9,7 @@
     type InquiryDraft, type InquiryKind, type InquiryResult, type SentInquiry,
   } from "./inquiry";
   import { fmtInt } from "./format";
+  import { t } from "./i18n";
   import { app, payloadOf, simIsDirty } from "./state.svelte";
   import { reportError } from "./toast.svelte";
   import Modal from "./ui/Modal.svelte";
@@ -118,60 +119,69 @@
     title = "";
     body = "";
   }
+  /** 種類の表示名。送る本文(inquiry.ts)は受け取る側に合わせて日本語のまま、画面だけ訳す */
+  const KIND_LABELS: Record<InquiryKind, string> = {
+    bug: t("不具合"), data: t("データの誤り"), feature: t("要望"),
+  };
 </script>
 
-<Modal label="問い合わせ" class="modal-narrow" closeDisabled={sending} {onClose}>
+<Modal label={t("問い合わせ")} class="modal-narrow" closeDisabled={sending} {onClose}>
     <div class="panel-body">
       <div class="card inquiry">
         {#if sent}
-          <p>送信しました。やり取りはこのページで行います。</p>
+          <p>{t("送信しました。やり取りはこのページで行います。")}</p>
           <div class="path inset">{sent.url}</div>
-          <p class="muted">アプリからは返信を受け取れないので、この URL を控えてください。</p>
-          <button type="button" class="btn" onclick={reset}>続けて送る</button>
+          <p class="muted">{t("アプリからは返信を受け取れないので、この URL を控えてください。")}</p>
+          <button type="button" class="btn" onclick={reset}>{t("続けて送る")}</button>
         {:else}
           <p class="muted warn-line">
-            送った内容は<b>公開のページに載ります</b>。本名・メールアドレス・ゲーム内 ID は書かないでください。
+            {t("送った内容は")}<b>{t("公開のページに載ります")}</b>{t("。本名・メールアドレス・ゲーム内 ID は書かないでください。")}
           </p>
 
-          <Choose label="問い合わせの種類" bind:value={kind} options={INQUIRY_KINDS} full />
+          <Choose
+            label={t("問い合わせの種類")}
+            bind:value={kind}
+            options={INQUIRY_KINDS.map((k) => ({ value: k.value, label: KIND_LABELS[k.value] }))}
+            full
+          />
 
           <label class="line">
-            <span class="line-label">件名</span>
-            <TextField label="件名" bind:value={title} max={120} />
+            <span class="line-label">{t("件名")}</span>
+            <TextField label={t("件名")} bind:value={title} max={120} />
           </label>
 
           <label class="line">
-            <span class="line-label">内容</span>
-            <TextField label="内容" bind:value={body} max={4000} rows={5} />
+            <span class="line-label">{t("内容")}</span>
+            <TextField label={t("内容")} bind:value={body} max={4000} rows={5} />
           </label>
 
           <ToggleRow
-            name="バージョンなどの情報を一緒に送る"
+            name={t("バージョンなどの情報を一緒に送る")}
             tone="temp"
             on={includeDiagnostics}
             onToggle={() => (includeDiagnostics = !includeDiagnostics)}
           />
           {#if selected}
             <ToggleRow
-              name="選択中のキャラのデータを一緒に送る(キャラ名は含めません)"
+              name={t("選択中のキャラのデータを一緒に送る(キャラ名は含めません)")}
               tone="temp"
               on={includeCharacter}
               onToggle={() => (includeCharacter = !includeCharacter)}
             />
             {#if characterTooLong}
               <p class="muted warn-line">
-                このキャラのデータは上限({fmtInt(CHARACTER_ATTACHMENT_MAX)} 文字)を超えるため<b>添付しません</b>。
-                途中で切れたデータでは再現できないので、内容に「どの装備・どのスキルで」を書いてください。
+                {t("このキャラのデータは上限({limit} 文字)を超えるため", { limit: fmtInt(CHARACTER_ATTACHMENT_MAX) })}<b>{t("添付しません")}</b>{t("。")}
+                {t("途中で切れたデータでは再現できないので、内容に「どの装備・どのスキルで」を書いてください。")}
               </p>
             {/if}
           {/if}
 
-          <div class="preview-label">送られる内容</div>
+          <div class="preview-label">{t("送られる内容")}</div>
           <div class="preview inset">{preview(draft, includeDiagnostics)}</div>
-          <div class="endpoint">送信先: {INQUIRY_ENDPOINT}</div>
+          <div class="endpoint">{t("送信先: {url}", { url: INQUIRY_ENDPOINT })}</div>
 
           <button type="button" class="btn primary" onclick={submit} disabled={!canSubmit || sending}>
-            {sending ? progress || "送信中…" : "この内容で送る"}
+            {sending ? progress || t("送信中…") : t("この内容で送る")}
           </button>
         {/if}
       </div>

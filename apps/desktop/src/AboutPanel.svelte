@@ -112,8 +112,8 @@
       </div>
 
       <div class="card">
-        <div class="card-title">言語 · 언어</div>
-        <Choose label="言語 · 언어" bind:value={language} options={LOCALE_OPTIONS} full />
+        <div class="card-title">{t("言語 · 언어")}</div>
+        <Choose label={t("言語 · 언어")} bind:value={language} options={LOCALE_OPTIONS} full />
       </div>
 
       <div class="card warn">

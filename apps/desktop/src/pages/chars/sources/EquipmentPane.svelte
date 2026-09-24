@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../../../i18n";
   // 「equipment」補正源のペイン。部位一覧 ⇄ 部位詳細のドリルダウン(§09 規則 2)。
   import type {
     EnchantPlan, EnchantPlanRow, EquipmentAbilityAdditionalKind, EquipmentAbilityCandidate,
@@ -103,7 +104,7 @@
     const list = draft.equipment.parts[slot];
     const next = neutralEquipmentPart();
     next.id = Math.max(0, ...list.registered.map((p) => p.id)) + 1;
-    next.label = `装備 ${list.registered.length + 1}`;
+    next.label = t("装備 {n}", { n: list.registered.length + 1 });
     list.registered.push(next); list.selected_id = next.id;
     itemQuery = "";
     showOtherEquipmentStats = false;
@@ -181,7 +182,7 @@
     app.gameCharacters.find((character) => character.id === draft.gameCharacterId) ?? null,
   );
   const weaponClassLabel = (weaponClass: WeaponClass): string => {
-    const labels: Partial<Record<WeaponClass, string>> = { katana: "刀", tachi: "太刀", great_sword: "大剣" };
+    const labels: Partial<Record<WeaponClass, string>> = { katana: t("刀"), tachi: t("太刀"), great_sword: t("大剣") };
     return labels[weaponClass] ?? weaponClass;
   };
   /** 何で絞ったかの帯。文言は画面のもの(Rust は絞り込みの構造だけを返す)。 */
@@ -196,15 +197,15 @@
           ? null
           : `${skillName} → ${criterion.classes.map(weaponClassLabel).join("・")}`;
       case "weapon_systems":
-        if (characterName !== null && skillName !== null) return `${characterName}・${skillName}向け`;
-        return skillName === null ? null : `${skillName}の依存能力に合う武器`;
+        if (characterName !== null && skillName !== null) return t("{character}・{skill}向け", { character: characterName, skill: skillName });
+        return skillName === null ? null : t("{skill}の依存能力に合う武器", { skill: skillName });
       case "wrist_types":
         if (characterName === null) return null;
-        return skillName === null ? `${characterName}が装備可能` : `${characterName}・${skillName}向け`;
+        return skillName === null ? t("{character}が装備可能", { character: characterName }) : t("{character}・{skill}向け", { character: characterName, skill: skillName });
       case "character_usable":
-        return characterName === null ? null : `${characterName}が装備可能`;
+        return characterName === null ? null : t("{character}が装備可能", { character: characterName });
       case "dependency":
-        return skillName === null ? null : `${skillName}の依存能力に合うAF`;
+        return skillName === null ? null : t("{skill}の依存能力に合うAF", { skill: skillName });
     }
   });
   const filteredCatalog = $derived.by(() => {
@@ -225,8 +226,8 @@
   };
   const isRelicSlot = (slot: PartSlot): boolean => slot === "relic_pendant" || slot === "relic_bracelet";
   const relicKindOptions = [
-    { value: "godbird", label: "神鳥" },
-    { value: "lunaria", label: "ルナリア" },
+    { value: "godbird", label: t("神鳥") },
+    { value: "lunaria", label: t("ルナリア") },
   ];
   const relicLevelOptions = Array.from({ length: 10 }, (_, i) => ({
     value: String(i + 1),
@@ -250,17 +251,17 @@
     const labels: string[] = item.damage_effects
       .map((e) => {
         if (typeof e === "string" || !("damage" in e)) return null;
-        const head = short ? "与ダメ" : damageCategoryLabel(e.damage.category);
+        const head = short ? t("与ダメ") : damageCategoryLabel(e.damage.category);
         return `${head} ${fmtSigned(e.damage.percent, { max: 2 }, "%")}`;
       })
       .filter((x): x is string => x !== null);
     for (const effect of item.survival_effects) {
       if ("damage_mitigation" in effect) {
-        labels.push(`緩和 ${fmtSigned(effect.damage_mitigation.percent, { max: 2 }, "%")}`);
+        labels.push(t("緩和 {v}", { v: fmtSigned(effect.damage_mitigation.percent, { max: 2 }, "%") }));
       } else if ("defense_rate" in effect) {
-        labels.push(`防御 ${fmtSigned(effect.defense_rate.percent, { max: 2 }, "%")}`);
+        labels.push(t("防御 {v}", { v: fmtSigned(effect.defense_rate.percent, { max: 2 }, "%") }));
       } else if ("defense_fixed" in effect) {
-        labels.push(`防御 ${fmtSigned(effect.defense_fixed.value)}`);
+        labels.push(t("防御 {v}", { v: fmtSigned(effect.defense_fixed.value) }));
       }
     }
     return labels.length === 0 ? null : labels.join(" ・ ");
@@ -269,7 +270,7 @@
     const item = equippedItem(slot);
     if (item) return item.name;
     const custom = selectedPartOrNull(slot)?.custom_name;
-    return custom ? `${custom} [仮]` : "未装備";
+    return custom ? t("{name} [仮]", { name: custom }) : t("未装備");
   };
 
   /** 部位に返ってきた結果を当てる。Rust から返る部位はそのまま保存できる形になっている。 */
@@ -335,7 +336,7 @@
     const parts: string[] = [];
     if (plan.twenty_count > 0) parts.push(`20 × ${plan.twenty_count}`);
     if (plan.seventeen_count > 0) parts.push(`17 × ${plan.seventeen_count}`);
-    if (plan.remainder > 0) parts.push(`端数 ${plan.remainder}`);
+    if (plan.remainder > 0) parts.push(t("端数 {n}", { n: plan.remainder }));
     return parts.length === 0 ? "" : `+${parts.join(" + ")}`;
   }
 
@@ -365,9 +366,9 @@
   const EMPTY_ABILITY_GROUP: AbilityGroup = { shown: [], folded: [] };
   /** 武器の 3 枠(ゲーム内と同じ順)。 */
   const WEAPON_ABILITY_ROWS = [
-    { category: 1, label: "基本補正", note: "従来アビリティ" },
-    { category: 4, label: "新装着", note: "追加効果2枠" },
-    { category: 3, label: "武器ディレイ", note: "任意・計算対象外" },
+    { category: 1, label: t("基本補正"), note: t("従来アビリティ") },
+    { category: 4, label: t("新装着"), note: t("追加効果2枠") },
+    { category: 3, label: t("武器ディレイ"), note: t("任意・計算対象外") },
   ];
   /** カテゴリー枠セレクタを使う部位の実際の枠(その部位の枠数ぶんだけ先頭から使う)。
       武器は3枠で全部出る。双剣Subの盾は2枠なので、カテゴリー3(武器ディレイ・計算対象外)は出ない。 */
@@ -411,7 +412,7 @@
   const abilityGroup = (key: string): AbilityGroup => abilityGroups[key] ?? EMPTY_ABILITY_GROUP;
   /** 武器アビリティ 1 カテゴリの候補列。shown(上位等級)を固定チップ、folded(下位等級)を候補面に */
   const weaponAbilityOptions = (grades: AbilityGroup): PickerOption[] => [
-    { value: "", name: "装着しない", meta: "空き枠", pinned: true },
+    { value: "", name: t("装着しない"), meta: t("空き枠"), pinned: true },
     ...[...grades.shown, ...grades.folded].map((ability, i) => ({
       value: ability.id, name: ability.name, meta: ability.effect_summary,
       iconId: ability.id, iconKind: "equipment" as const,
@@ -440,15 +441,15 @@
     ));
   }
   const additionalKindLabel = (kind: EquipmentAbilityAdditionalKind): string => ({
-    fixed_damage: "ダメージ増加", damage_rate: "ダメージ増加率",
-    thrust: "突き攻撃力", slash: "斬り攻撃力", magic_attack: "魔法攻撃力",
-    magic_defense: "魔法防御力", hp_recovery: "HP自然回復力",
-    mp_recovery: "MP自然回復力", accuracy: "命中率補正",
-    physical_defense: "物理防御力", critical: "クリティカル補正", evasion: "回避率補正",
-    damage_resistance: "ダメージ耐性", physical_damage_reduction: "物理被害減少",
-    magic_damage_reduction: "魔法被害減少", sp_recovery: "SP自然回復力", evasion_rate: "回避率",
-    fire_element: "火属性", water_element: "水属性", wind_element: "風属性", earth_element: "土属性",
-    lightning_element: "雷属性", white_element: "白属性", dark_element: "黒属性",
+    fixed_damage: t("ダメージ増加"), damage_rate: t("ダメージ増加率"),
+    thrust: t("突き攻撃力"), slash: t("斬り攻撃力"), magic_attack: t("魔法攻撃力"),
+    magic_defense: t("魔法防御力"), hp_recovery: t("HP自然回復力"),
+    mp_recovery: t("MP自然回復力"), accuracy: t("命中率補正"),
+    physical_defense: t("物理防御力"), critical: t("クリティカル補正"), evasion: t("回避率補正"),
+    damage_resistance: t("ダメージ耐性"), physical_damage_reduction: t("物理被害減少"),
+    magic_damage_reduction: t("魔法被害減少"), sp_recovery: t("SP自然回復力"), evasion_rate: t("回避率"),
+    fire_element: t("火属性"), water_element: t("水属性"), wind_element: t("風属性"), earth_element: t("土属性"),
+    lightning_element: t("雷属性"), white_element: t("白属性"), dark_element: t("黒属性"),
   }[kind]);
   const abilityRecordedValue = (slot: PartSlot, abilityId: string): number =>
     (selectedPart(slot).ability_values ?? []).find((value) => value.ability_id === abilityId)?.value ?? 0;
@@ -494,9 +495,9 @@
   const abilityImpactSummary = (slot: PartSlot): string => {
     const part = selectedPart(slot);
     const stats = [
-      ["突き", "thrust"], ["斬り", "slash"], ["物防", "physical_defense"],
-      ["魔攻", "magic_attack"], ["魔防", "magic_defense"], ["命中", "accuracy"],
-      ["Cri", "critical"], ["回避", "evasion"], ["敏捷", "agility"],
+      [t("突き"), "thrust"], [t("斬り"), "slash"], [t("物防"), "physical_defense"],
+      [t("魔攻"), "magic_attack"], [t("魔防"), "magic_defense"], [t("命中"), "accuracy"],
+      ["Cri", "critical"], [t("回避"), "evasion"], [t("敏捷"), "agility"],
     ] as const;
     const pieces = stats.flatMap(([label, kind]) => {
       const value = partAbilityValues(slot)[kind];
@@ -505,11 +506,11 @@
     const additions = part.ability_additions ?? [];
     const fixed = additions.filter((a) => a.kind === "fixed_damage").reduce((sum, a) => sum + a.value, 0);
     const rate = additions.filter((a) => a.kind === "damage_rate").reduce((sum, a) => sum + a.value, 0);
-    if (fixed !== 0) pieces.push(`固定 ${fmtSigned(fixed)}`);
-    if (rate !== 0) pieces.push(`ダメージ ${fmtSigned(rate, { max: 2 }, "%")}`);
+    if (fixed !== 0) pieces.push(t("固定 {v}", { v: fmtSigned(fixed) }));
+    if (rate !== 0) pieces.push(t("ダメージ {v}", { v: fmtSigned(rate, { max: 2 }, "%") }));
     if (pieces.length === 0) {
       const modeled = part.abilities.map(abilityDef).filter((def) => def && !def.record_only).map((def) => def!.effect_summary);
-      return modeled.length > 0 ? modeled.join(" / ") : (part.abilities.length > 0 ? "記録のみ" : "未装着");
+      return modeled.length > 0 ? modeled.join(" / ") : (part.abilities.length > 0 ? t("記録のみ") : t("未装備"));
     }
     return pieces.join(" / ");
   };
@@ -590,31 +591,31 @@
   // 武器はその系統の該当武器、鎧は強化補正の式(wiki「装備システム/装備強化」系統表、2026-09-15 取得。
   // 系統の分類の正は crates/domain/src/equipment_class.rs の WeaponClass::system)
   const weaponEnhanceTypeOptions: PickerOption[] = [
-    { value: "", name: "未選択", meta: "追加固定ダメージを出さない" },
-    { value: "weapon_stab", name: "突き系", meta: "細剣・短剣・槍・スモールソード・物理銃・クロー・ハンドランチャー" },
-    { value: "weapon_stab_hack", name: "物理複合系", meta: "長剣・太刀・戦杖・短刀・棒・連接棍" },
-    { value: "weapon_hack", name: "斬り系", meta: "刀・斧・鞭・カーラ・物理双剣・サイズ・アーミングソード" },
-    { value: "weapon_int", name: "魔法系", meta: "魔杖・ワンド・魔法銃・セプター・トーテム" },
-    { value: "weapon_int_hack", name: "魔剣系", meta: "大剣" },
-    { value: "weapon_mr", name: "魔法防御系", meta: "聖杖・ハンドベル・魔法双剣・ハンマー" },
+    { value: "", name: t("未選択"), meta: t("追加固定ダメージを出さない") },
+    { value: "weapon_stab", name: t("突き系"), meta: t("細剣・短剣・槍・スモールソード・物理銃・クロー・ハンドランチャー") },
+    { value: "weapon_stab_hack", name: t("物理複合系"), meta: t("長剣・太刀・戦杖・短刀・棒・連接棍") },
+    { value: "weapon_hack", name: t("斬り系"), meta: t("刀・斧・鞭・カーラ・物理双剣・サイズ・アーミングソード") },
+    { value: "weapon_int", name: t("魔法系"), meta: t("魔杖・ワンド・魔法銃・セプター・トーテム") },
+    { value: "weapon_int_hack", name: t("魔剣系"), meta: t("大剣") },
+    { value: "weapon_mr", name: t("魔法防御系"), meta: t("聖杖・ハンドベル・魔法双剣・ハンマー") },
   ];
   const armorEnhanceTypeOptions: PickerOption[] = [
-    { value: "", name: "未選択", meta: "追加HPを出さない" },
-    { value: "armor_light", name: "軽鎧", meta: "物防 ×3.90 + 魔防 ×4.00" },
-    { value: "armor_heavy", name: "重鎧", meta: "物防 ×3.10 + 魔防 ×3.80" },
-    { value: "armor_magic", name: "マジックアーマー", meta: "物防 ×3.80 + 魔防 ×4.00" },
-    { value: "armor_suit", name: "スーツ", meta: "物防 ×7.80" },
-    { value: "armor_robe", name: "ローブ", meta: "物防 ×4.00 + 魔防 ×3.80" },
+    { value: "", name: t("未選択"), meta: t("追加HPを出さない") },
+    { value: "armor_light", name: t("軽鎧"), meta: t("物防 ×3.90 + 魔防 ×4.00") },
+    { value: "armor_heavy", name: t("重鎧"), meta: t("物防 ×3.10 + 魔防 ×3.80") },
+    { value: "armor_magic", name: t("マジックアーマー"), meta: t("物防 ×3.80 + 魔防 ×4.00") },
+    { value: "armor_suit", name: t("スーツ"), meta: t("物防 ×7.80") },
+    { value: "armor_robe", name: t("ローブ"), meta: t("物防 ×4.00 + 魔防 ×3.80") },
   ];
   const enhanceLevelOptions = $derived(
     tables.enhance_level_candidates.map((lv) => ({
-      value: String(lv), label: lv === 0 ? "強化なし" : `+${lv}`,
+      value: String(lv), label: lv === 0 ? t("強化なし") : `+${lv}`,
     })),
   );
   const enhanceGradeOptions = [
-    { value: "lowest", label: "最下" }, { value: "low", label: "下" },
-    { value: "middle", label: "中" }, { value: "high", label: "上" },
-    { value: "highest", label: "最上" },
+    { value: "lowest", label: t("最下") }, { value: "low", label: t("下") },
+    { value: "middle", label: t("中") }, { value: "high", label: t("上") },
+    { value: "highest", label: t("最上") },
   ];
   // 強化 Lv と等級の不変条件(+12 以上は等級必須)は Rust の EquipmentPart::set_enhance_level。
   function setEnhanceLevel(slot: PartSlot, level: number) {
@@ -631,7 +632,7 @@
     <ToggleRow
       name={ability.name}
       value={ability.effect_summary}
-      cond={ability.record_only ? "記録のみ" : undefined}
+      cond={ability.record_only ? t("記録のみ") : undefined}
       on={selected}
       tone="saved"
       disabled={!selected && full}
@@ -658,8 +659,8 @@
       ondragend={() => { draggedEquipmentRegistration = null; equipmentRegistrationDropAt = null; }}
     >
       <span class="registration-grip" aria-hidden="true">⠿</span>
-      <Icon kind="equipment" id={iconId(registered.item_id)} size={20} label={registered.label || `装備 ${registered.id}`} />
-      {registered.label || app.equipmentCatalog.find((i) => i.id === registered.item_id)?.name || `装備 ${registered.id}`}
+      <Icon kind="equipment" id={iconId(registered.item_id)} size={20} label={registered.label || t("装備 {n}", { n: registered.id })} />
+      {registered.label || app.equipmentCatalog.find((i) => i.id === registered.item_id)?.name || t("装備 {n}", { n: registered.id })}
     </button>
   {/each}
 {/snippet}
@@ -679,14 +680,14 @@
     <span class="part-main">
       <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
       <span class="part-item">{partDisplayName(slot)}</span>
-      <Value class="part-abi" motion={() => list.registered.length} value={`登録 ${list.registered.length}`} />
+      <Value class="part-abi" motion={() => list.registered.length} value={t("登録 {n}", { n: list.registered.length })} />
       <!-- 強化バッジの枠は常に確保する。出ても行の中身がずれない(§12) -->
       {#if canEnhance}
         <span class="part-plus" class:on={(part?.enhance_level ?? 0) > 0}
         >{(part?.enhance_level ?? 0) > 0 ? `+${part!.enhance_level}` : ""}</span>
       {/if}
       {#if (part?.abilities.length ?? 0) > 0}
-        <span class="part-abi">アビリティ {part!.abilities.length}</span>
+        <span class="part-abi">{t("アビリティ {n}", { n: part!.abilities.length })}</span>
       {/if}
       <!-- 装着時効果は装備補正値の列に出ないので、行にバッジで残す(§00 ②/⑤) -->
       {#if damageLabel !== null}
@@ -714,32 +715,32 @@
     {@const part = selectedPartOrNull(slot)}
     {@const item = equippedItem(slot)}
     {@const contribution = partContribution(slot)}
-    <Modal label={`${openPartLabel}の装備登録`} class="part-detail" onClose={() => (openPart = null)}>
+    <Modal label={t("{part}の装備登録", { part: openPartLabel })} class="part-detail" onClose={() => (openPart = null)}>
     <div class="part-detail-body" bind:this={detailEl}>
     {#if draft.equipment.parts[slot].registered.length > 1}
-      <div class="part-switches registration-order inset" aria-label="装備登録の並び順">
+      <div class="part-switches registration-order inset" aria-label={t("装備登録の並び順")}>
         {@render partSwitchList(slot, draft.equipment.parts[slot].registered, draft.equipment.parts[slot].selected_id)}
       </div>
     {/if}
     {#if part === null}
-      <div class="card empty"><p class="hint dim">この部位にはまだ装備が登録されていません。</p>
-        <button type="button" class="btn primary" onclick={() => createEquipmentRegistration(slot)}>＋ 新しい装備を登録</button>
+      <div class="card empty"><p class="hint dim">{t("この部位にはまだ装備が登録されていません。")}</p>
+        <button type="button" class="btn primary" onclick={() => createEquipmentRegistration(slot)}>{t("＋ 新しい装備を登録")}</button>
       </div>
     {:else}
     <div class="part-actions">
-      <span class="editing-registration badge">編集中: {part.label || `装備 ${part.id}`}</span>
-      <button type="button" class="btn" onclick={() => createEquipmentRegistration(slot)}>＋ 新しい装備を登録</button>
+      <span class="editing-registration badge">{t("編集中: {name}", { name: part.label || t("装備 {n}", { n: part.id }) })}</span>
+      <button type="button" class="btn" onclick={() => createEquipmentRegistration(slot)}>{t("＋ 新しい装備を登録")}</button>
       <button
         type="button"
         class="btn delete-registration"
         class:confirm={confirmEquipmentDeleteId === part.id}
         onclick={() => removeSelectedEquipmentRegistration(slot)}
-      >{confirmEquipmentDeleteId === part.id ? "もう一度押すと削除します" : "この登録を削除"}</button>
+      >{confirmEquipmentDeleteId === part.id ? t("もう一度押すと削除します") : t("この登録を削除")}</button>
     </div>
     <div class="card registration-name-card">
       <label class="text custom-name">
-        <span class="label">登録名 <span class="dim">同じ装備を複数持つときの見分け方</span></span>
-        <TextField label="登録名" bind:value={part.label} max={40} />
+        <span class="label">{t("登録名")} <span class="dim">{t("同じ装備を複数持つときの見分け方")}</span></span>
+        <TextField label={t("登録名")} bind:value={part.label} max={40} />
       </label>
     </div>
 
@@ -748,12 +749,12 @@
         <Icon kind="equipment" id={iconId(part.item_id)} size={28} label={partDisplayName(slot)} />
         <!-- 値ではなく「選択中の装備」という面。装備名を数値書体にしないので <Value> に入れない -->
         <span class="selected-equipment-copy" use:changed={() => partDisplayName(slot)}>
-          <small class="dim">選択中の装備</small>
+          <small class="dim">{t("選択中の装備")}</small>
           <b>{partDisplayName(slot)}</b>
         </span>
-        {#if contribution !== null}<Value class="contrib-inline" value={String(contribution)}>{#snippet children()}寄与 {fmtInt(contribution)}{/snippet}</Value>{/if}
+        {#if contribution !== null}<Value class="contrib-inline" value={String(contribution)}>{#snippet children()}{t("寄与 {v}", { v: fmtInt(contribution) })}{/snippet}</Value>{/if}
         <button type="button" class="btn" onclick={() => (itemPickerOpen = !itemPickerOpen)}>
-          {itemPickerOpen ? "候補を閉じる" : "装備を変更"}
+          {itemPickerOpen ? t("候補を閉じる") : t("装備を変更")}
         </button>
       </div>
       {#if itemPickerOpen}
@@ -761,18 +762,18 @@
           {#if isRelicSlot(slot)}
             <div class="relic-selector">
               <div class="field">
-                <span class="field-label">種別</span>
+                <span class="field-label">{t("種別")}</span>
                 <Choose
-                  label="レリックの種別"
+                  label={t("レリックの種別")}
                   options={relicKindOptions}
                   full
                   bind:value={() => relicKindFor(slot), (value) => pickRelicKind(slot, value)}
                 />
               </div>
               <div class="field">
-                <span class="field-label">強化段階</span>
+                <span class="field-label">{t("強化段階")}</span>
                 <Choose
-                  label="レリックの強化段階"
+                  label={t("レリックの強化段階")}
                   options={relicLevelOptions}
                   cols={5}
                   disabled={relicKindFor(slot) === ""}
@@ -780,24 +781,24 @@
                 />
               </div>
               <div class="relic-picker-actions">
-                <Chip class="quiet" onclick={() => pickUnequipped(slot)}>未装備</Chip>
-                <Chip class="quiet" onclick={() => pickCustom(slot)}>カタログ外</Chip>
+                <Chip class="quiet" onclick={() => pickUnequipped(slot)}>{t("未装備")}</Chip>
+                <Chip class="quiet" onclick={() => pickCustom(slot)}>{t("カタログ外")}</Chip>
               </div>
             </div>
           {:else}
           <div class="picker-tools">
-            <TextField label="装備名で探す" count={filteredCatalog.length} bind:value={itemQuery} />
+            <TextField label={t("装備名で探す")} count={filteredCatalog.length} bind:value={itemQuery} />
             {#if equipmentFilterLabel !== null}
               <span class="equipment-filter badge">{equipmentFilterLabel}</span>
               <Chip class="quiet" onclick={() => (showAllEquipmentCandidates = !showAllEquipmentCandidates)}>
-                {showAllEquipmentCandidates ? "候補だけ見る" : "すべて見る"}
+                {showAllEquipmentCandidates ? t("候補だけ見る") : t("すべて見る")}
               </Chip>
             {/if}
           </div>
           <div class="item-list" class:effectful={slot === "artifact"}>
             <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name === null} onclick={() => pickUnequipped(slot)}>
-              <Icon kind="equipment" id={null} size={28} label="未装備" />
-              <span class="item-copy"><span class="item-name">未装備</span></span>
+              <Icon kind="equipment" id={null} size={28} label={t("未装備")} />
+              <span class="item-copy"><span class="item-name">{t("未装備")}</span></span>
             </button>
             {#each filteredCatalog as candidate (candidate.id)}
               <!-- 候補カードは名前の識別が主目的。カテゴリ名は詳細へ譲り、短い効果量だけを置く -->
@@ -812,15 +813,15 @@
               </button>
             {/each}
             <button type="button" class="item-row" class:on={part.item_id === null && part.custom_name !== null} onclick={() => pickCustom(slot)}>
-              <Icon kind="equipment" id={null} size={28} label="カスタム" />
-              <span class="item-copy"><span class="item-name">カスタム</span><span class="item-vals dim">カタログ外</span></span>
+              <Icon kind="equipment" id={null} size={28} label={t("カスタム")} />
+              <span class="item-copy"><span class="item-name">{t("カスタム")}</span><span class="item-vals dim">{t("カタログ外")}</span></span>
             </button>
           </div>
           {/if}
           {#if part.item_id === null && part.custom_name !== null}
             <label class="text custom-name">
-              <span class="label">装備名 <span class="dim">[仮] カタログ外</span></span>
-              <TextField label="装備名" bind:value={part.custom_name} max={40} />
+              <span class="label">{t("装備名")} <span class="dim">{t("[仮] カタログ外")}</span></span>
+              <TextField label={t("装備名")} bind:value={part.custom_name} max={40} />
             </label>
           {/if}
         </div>
@@ -833,16 +834,16 @@
     {#if item?.growth_caps}
     <div class="card growth-equipment-card">
       <div class="card-title inline growth-equipment-head">
-        <span>装備補正</span>
-        <span class="badge num">成長値</span>
+        <span>{t("装備補正")}</span>
+        <span class="badge num">{t("成長値")}</span>
       </div>
-      <p class="hint dim">この段階の実値を入力します。下限は直前段階の完成値、上限はこの段階のMAXです。エンチャント枠はありません。</p>
+      <p class="hint dim">{t("この段階の実値を入力します。下限は直前段階の完成値、上限はこの段階のMAXです。エンチャント枠はありません。")}</p>
       <div class="stat-rows growth-equipment-values">
         {#each EQUIPMENT_STAT_KINDS.filter((k) => item.growth_caps![k] > 0) as k (k)}
           <div class="stat-row">
             <span class="k">{EQUIPMENT_STAT_LABELS[k]}</span>
             <NumberField
-              label="{EQUIPMENT_STAT_LABELS[k]}の装備補正"
+              label={t("{name}の装備補正", { name: EQUIPMENT_STAT_LABELS[k] })}
               min={item.values_min[k]}
               max={item.growth_caps[k]}
               presets={item.id === "rising-holic-cuffs" ? [{ value: 140, label: "140" }] : []}
@@ -856,21 +857,21 @@
     {@const enchantPlanStats = enchantPlanStatsFor(slot)}
     <div class="card enchant-card">
       <div class="card-title inline">
-        <span>エンチャント</span>
+        <span>{t("エンチャント")}</span>
       </div>
-      <p class="hint dim">通常は突き・斬り・魔攻・魔防の4補正だけ入力します。</p>
+      <p class="hint dim">{t("通常は突き・斬り・魔攻・魔防の4補正だけ入力します。")}</p>
       <div class="base-value-toolbar">
-        <span class="base-value-copy" title={item === null ? "カタログ外のため入力" : "数値を押すと例外編集"}><b>装備本体</b><small>{item === null ? "入力" : "自動"}</small></span>
+        <span class="base-value-copy" title={item === null ? t("カタログ外のため入力") : t("数値を押すと例外編集")}><b>{t("装備本体")}</b><small>{item === null ? t("入力") : t("自動")}</small></span>
       </div>
       {#if item === null}
         {@const capStats = EQUIPMENT_STAT_KINDS.filter((k) => part.enchant[k] > 0 || (part.enchant_caps?.[k] ?? 0) > 0)}
         <div class="card custom-enchant-caps">
           <div class="card-title inline">
-            <span>エンチャント上限</span>
-            <span class="dim small">カタログ外は自動で分からないため実測値を入力</span>
+            <span>{t("エンチャント上限")}</span>
+            <span class="dim small">{t("カタログ外は自動で分からないため実測値を入力")}</span>
           </div>
           {#if capStats.length === 0}
-            <p class="hint dim">下でエンチャント値を入れると、ここにその補正の上限入力が出ます。</p>
+            <p class="hint dim">{t("下でエンチャント値を入れると、ここにその補正の上限入力が出ます。")}</p>
           {:else}
             <div class="stat-rows custom-enchant-cap-rows">
               {#each capStats as k (k)}
@@ -878,8 +879,8 @@
                   <span class="k">{EQUIPMENT_STAT_SHORT[k]}</span>
                   <!-- 上限そのものを入れる欄。これ自身に上限は無いので形態 5(§07) -->
                   <NumberField
-                    label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント上限"
-                    reason="カタログ外 · 実測"
+                    label={t("{name}のエンチャント上限", { name: EQUIPMENT_STAT_LABELS[k] })}
+                    reason={t("カタログ外 · 実測")}
                     bind:value={
                       () => part.enchant_caps?.[k] ?? 0,
                       (v) => { part.enchant_caps = { ...(part.enchant_caps ?? zeroValues()), [k]: v }; }
@@ -899,15 +900,15 @@
              <details> を段に溶かして(display: contents)、行がそのまま values-paired の子になるようにする -->
         <Disclosure class="equipment-more" summaryClass="enchant-more-toggle" bind:open={showOtherEquipmentStats}>
           {#snippet summary(open)}
-            <span class="more-label"><b>物防・命中など5補正</b><small>物防 / 命中 / Cri / 回避 / 敏捷</small></span>
-            <span class="toggle-state">{open ? "閉じる" : "開く"}</span>
+            <span class="more-label"><b>{t("物防・命中など5補正")}</b><small>{t("物防 / 命中 / Cri / 回避 / 敏捷")}</small></span>
+            <span class="toggle-state">{open ? t("閉じる") : t("開く")}</span>
           {/snippet}
           {#each OTHER_EQUIPMENT_STATS as k (k)}
             {@render equationRow(k)}
           {/each}
         </Disclosure>
       </div>
-      <p class="hint dim">シエナのオーラとテシスコアは各専用欄から自動合流します。</p>
+      <p class="hint dim">{t("シエナのオーラとテシスコアは各専用欄から自動合流します。")}</p>
       {#snippet equationRow(k: EquipmentStatKind)}
           {@const cap = item ? item.enchant_caps[k] : (part.enchant_caps?.[k] ?? null)}
           <!-- 上限 0 = この装備でそのステはエンチャントできない。「上限が未収録」の破線欄を出すと
@@ -930,16 +931,16 @@
                 <Value class="enchant-part" motion={() => part.enchant[k]} value={`（＋${part.enchant[k]}）`} />
               </strong>
               {#if abilityValue !== 0}
-                <span class="ability-part meta-pill">アビ{abilityValue}</span>
+                <span class="ability-part meta-pill">{t("アビ{v}", { v: abilityValue })}</span>
               {:else}
                 <span class="ability-spacer" aria-hidden="true"></span>
               {/if}
               <div class="equation-enchant">
                 {#if !noEnchant}
                   <NumberField
-                    label="{EQUIPMENT_STAT_LABELS[k]}のエンチャント"
+                    label={t("{name}のエンチャント", { name: EQUIPMENT_STAT_LABELS[k] })}
                     max={cap ?? undefined}
-                    reason="上限が未収録"
+                    reason={t("上限が未収録")}
                     increments={[12, 14, 17, 20]}
                     bind:value={part.enchant[k]}
                   />
@@ -947,9 +948,9 @@
               </div>
               <div class="equation-base">
                 <NumberField
-                  label="{EQUIPMENT_STAT_LABELS[k]}の装備本体補正"
-                  autoNote={item === null ? undefined : "カタログの値"}
-                  reason="カタログ外 · 入力"
+                  label={t("{name}の装備本体補正", { name: EQUIPMENT_STAT_LABELS[k] })}
+                  autoNote={item === null ? undefined : t("カタログの値")}
+                  reason={t("カタログ外 · 入力")}
                   bind:value={part.base[k]}
                 />
               </div>
@@ -960,12 +961,12 @@
                 class:complete={completionPlan.remaining === 0}
                 use:changed={() => `${completionPlan.remaining}:${completionPlan.twenty_count}:${completionPlan.seventeen_count}:${completionPlan.remainder}`}
               >
-                <span class="plan-remaining"><small>上限まであと</small><b class="num">{completionPlan.remaining}</b></span>
+                <span class="plan-remaining"><small>{t("上限まであと")}</small><b class="num">{completionPlan.remaining}</b></span>
                 {#if completionPlan.remaining > 0}
                   <span class="plan-recipe num">{enchantCompletionLabel(completionPlan)}</span>
-                  <span class="badge num">{completionPlan.count}回</span>
+                  <span class="badge num">{t("{n}回", { n: completionPlan.count })}</span>
                 {:else}
-                  <span class="plan-recipe">強化完了</span>
+                  <span class="plan-recipe">{t("強化完了")}</span>
                   <span class="badge">MAX</span>
                 {/if}
               </div>
@@ -978,14 +979,14 @@
     {#if ABILITY_ALLOWED_SLOTS.includes(slot) && currentAbilitySlotCount(slot) > 0}
       <div class="card ability-card">
         <div class="card-title inline">
-          <span>アビリティ</span><span class="badge">{part.abilities.length} / {currentAbilitySlotCount(slot)}</span>
+          <span>{t("アビリティ")}</span><span class="badge">{part.abilities.length} / {currentAbilitySlotCount(slot)}</span>
           <strong class="ability-impact num"><Value value={abilityImpactSummary(slot)} /></strong>
         </div>
         {#if usesWeaponAbilityUi(slot)}
         <p class="hint dim">
           {slot === "weapon"
-            ? "ゲーム内の3枠と同じ順です。装備中の武器系統に合う候補を押して選びます。"
-            : "双剣Subは武器アビリティと盾アビリティを合わせて2枠まで装着できます。"}
+            ? t("ゲーム内の3枠と同じ順です。装備中の武器系統に合う候補を押して選びます。")
+            : t("双剣Subは武器アビリティと盾アビリティを合わせて2枠まで装着できます。")}
         </p>
 
         <div class="ability-fixed-list">
@@ -1001,13 +1002,13 @@
             >
               <div class="ability-fixed-label">
                 <b>{row.label}</b>
-                <span>{row.note} ・ カテゴリ{row.category}</span>
+                <span>{row.note} ・ {t("カテゴリ{n}", { n: row.category })}</span>
               </div>
               <!-- カテゴリごとに 1 つ選ぶ(§07「1 つ選ぶ」)。上位等級と「装着しない」はチップで手前に固定、
                    下位等級は候補面へ。候補行の値は効果の要約、絵はゲーム内のアイテム(月石・研磨…) -->
-              <div class="ability-choice-list" aria-label="{row.label}の候補">
+              <div class="ability-choice-list" aria-label={t("{name}の候補", { name: row.label })}>
                 <Picker
-                  label="{row.label}のアビリティ"
+                  label={t("{name}のアビリティ", { name: row.label })}
                   options={weaponAbilityOptions(grades)}
                   bind:value={() => selectedAbilityId, (v) => setAbilityForCategory(slot, row.category, v)}
                 />
@@ -1017,9 +1018,9 @@
             {#if row.category === 4 && selectedAbility?.additional_slots}
               <div class="ability-additional-panel swap-in">
                 <div class="ability-additional-head">
-                  <b>ランダム追加</b>
+                  <b>{t("ランダム追加")}</b>
                   <span class="badge">{additionsFor(slot, selectedAbility.id).length} / 2</span>
-                  <span class="dim">付いている種類を押して足し、実測値を合わせます</span>
+                  <span class="dim">{t("付いている種類を押して足し、実測値を合わせます")}</span>
                 </div>
                 {#if additionsFor(slot, selectedAbility.id).length < 2}
                   <div class="ro-add-row ability-additional-candidates">
@@ -1039,27 +1040,27 @@
                     <div class="siena-row swap-in">
                       <span class="ro-name">{additionalKindLabel(additional.kind)}</span>
                       <NumberField
-                        label="{additionalKindLabel(additional.kind)}の値"
+                        label={t("{name}の値", { name: additionalKindLabel(additional.kind) })}
                         min={additionalDef.min}
                         max={additionalDef.max}
                         bind:value={() => additional.value, (value) => setAdditionalValue(slot, selectedAbility.id, additionalIndex, value)}
                       />
-                      <button type="button" class="clear" onclick={() => removeAdditional(slot, selectedAbility.id, additionalIndex)}>外す</button>
+                      <button type="button" class="clear" onclick={() => removeAdditional(slot, selectedAbility.id, additionalIndex)}>{t("外す")}</button>
                     </div>
                   {/if}
                 {/each}
-                <span class="additional-note dim">固定ダメージ・割合・攻撃補正・命中を保存し、計算へ反映します。</span>
+                <span class="additional-note dim">{t("固定ダメージ・割合・攻撃補正・命中を保存し、計算へ反映します。")}</span>
               </div>
             {/if}
           {/each}
         </div>
         {:else}
           <p class="hint dim">
-            {currentAbilitySlotCount(slot)}枠まで装着できます。範囲値とランダム追加は選択後に実測値を合わせます。
+            {t("{n}枠まで装着できます。範囲値とランダム追加は選択後に実測値を合わせます。", { n: currentAbilitySlotCount(slot) })}
           </p>
           {@const grades = abilityGroup(slot)}
           {@const full = part.abilities.length >= currentAbilitySlotCount(slot)}
-          <div class="ability-choice-list non-weapon-ability-list" aria-label="{PART_SLOT_LABELS[slot]}アビリティの候補">
+          <div class="ability-choice-list non-weapon-ability-list" aria-label={t("{name}アビリティの候補", { name: PART_SLOT_LABELS[slot] })}>
             {#each grades.shown as ability (ability.id)}
               {@render nonWeaponAbilityChip(slot, ability, part.abilities, full, false)}
             {/each}
@@ -1069,7 +1070,7 @@
             {#if grades.folded.length > 0}
               <Disclosure class="lower-grades" summaryClass="chip add lower-grade-toggle">
                 {#snippet summary(open)}
-                  {open ? "ほかの等級を畳む" : "ほかの等級も出す"}
+                  {open ? t("ほかの等級を畳む") : t("ほかの等級も出す")}
                   <span class="num dim">{grades.folded.length}</span>
                 {/snippet}
                 {#each grades.folded as ability (ability.id)}
@@ -1088,7 +1089,7 @@
               >
                 <span class="ro-name">{ability.name}</span>
                 <NumberField
-                  label="{ability.name}の実測値"
+                  label={t("{name}の実測値", { name: ability.name })}
                   min={ability.value_option.min}
                   max={ability.value_option.max}
                   bind:value={() => abilityRecordedValue(slot, ability.id), (value) => setAbilityRecordedValue(slot, ability.id, value)}
@@ -1106,7 +1107,7 @@
                 use:changed={() => focusToken(ability.id)}
               >
                 <div class="ability-additional-head">
-                  <b>{ability.name}のランダム追加</b>
+                  <b>{t("{name}のランダム追加", { name: ability.name })}</b>
                   <span class="badge">{additionsFor(slot, ability.id).length} / {ability.additional_slots}</span>
                 </div>
                 {#if additionsFor(slot, ability.id).length < ability.additional_slots}
@@ -1125,11 +1126,11 @@
                     <div class="siena-row swap-in">
                       <span class="ro-name">{additionalKindLabel(additional.kind)}</span>
                       <NumberField
-                        label="{additionalKindLabel(additional.kind)}の実測値"
+                        label={t("{name}の実測値", { name: additionalKindLabel(additional.kind) })}
                         min={option.min} max={option.max}
                         bind:value={() => additional.value, (value) => setAdditionalValue(slot, ability.id, additionalIndex, value)}
                       />
-                      <button type="button" class="clear" onclick={() => removeAdditional(slot, ability.id, additionalIndex)}>外す</button>
+                      <button type="button" class="clear" onclick={() => removeAdditional(slot, ability.id, additionalIndex)}>{t("外す")}</button>
                     </div>
                   {/if}
                 {/each}
@@ -1137,7 +1138,7 @@
             {/if}
           {/each}
           {#if slotAbilities(slot).some((ability) => ability.record_only)}
-            <span class="additional-note dim">破線の候補は効果を保存しますが、現在の計算項目にない値は合計へ加えません。防御率・回避率の追加効果も同じく記録だけです。</span>
+            <span class="additional-note dim">{t("破線の候補は効果を保存しますが、現在の計算項目にない値は合計へ加えません。防御率・回避率の追加効果も同じく記録だけです。")}</span>
           {/if}
         {/if}
 
@@ -1145,29 +1146,29 @@
     {/if}
 
     {#if ELEMENT_ALLOWED_SLOTS.includes(slot)}
-      <p class="hint dim">属性強化はキャラで選択中の属性を自動で +9 反映します。</p>
+      <p class="hint dim">{t("属性強化はキャラで選択中の属性を自動で +9 反映します。")}</p>
     {/if}
 
     {#if ENHANCE_ALLOWED_SLOTS.includes(slot)}
       <div class="card">
-        <div class="card-title">装備強化</div>
+        <div class="card-title">{t("装備強化")}</div>
         {#if part.item_id === null && part.custom_name !== null}
           <div class="field">
-            <span class="field-label">装備種別</span>
+            <span class="field-label">{t("装備種別")}</span>
             <Picker
-              label="装備種別"
+              label={t("装備種別")}
               options={slot === "weapon" ? weaponEnhanceTypeOptions : armorEnhanceTypeOptions}
               bind:value={() => part.enhance_type ?? "", (v) => (part.enhance_type = v === "" ? null : v as typeof part.enhance_type)}
             />
           </div>
           <p class="hint dim">
-            {slot === "weapon" ? "追加固定ダメージの補正式に使います。" : "追加HPの算出条件として保存します。"}
+            {slot === "weapon" ? t("追加固定ダメージの補正式に使います。") : t("追加HPの算出条件として保存します。")}
           </p>
         {/if}
         <div class="field">
-          <span class="field-label">強化 Lv</span>
+          <span class="field-label">{t("強化 Lv")}</span>
           <Choose
-            label="強化 Lv"
+            label={t("強化 Lv")}
             options={enhanceLevelOptions}
             bind:value={() => String(part.enhance_level), (v) => setEnhanceLevel(slot, Number(v))}
           />
@@ -1175,32 +1176,32 @@
         {#if part.enhance_level > 0 && part.enhance_type === null}
           <p class="preview-error">
             {slot === "weapon"
-              ? "装備種別を選ぶと追加固定ダメージを計算できます。"
-              : "装備種別を選んでください(追加HPの算出条件に使用します)。"}
+              ? t("装備種別を選ぶと追加固定ダメージを計算できます。")
+              : t("装備種別を選んでください(追加HPの算出条件に使用します)。")}
           </p>
         {/if}
         {#if part.enhance_level >= 12}
           <div class="field">
-            <span class="field-label">等級</span>
+            <span class="field-label">{t("等級")}</span>
             <Choose
-              label="強化の等級"
+              label={t("強化の等級")}
               options={enhanceGradeOptions}
               bind:value={() => part.enhance_grade ?? "highest", (v) => (part.enhance_grade = v as typeof part.enhance_grade)}
             />
           </div>
-          <p class="hint dim">等級内の上限値を使用します。倍率の端数は四捨五入します。</p>
+          <p class="hint dim">{t("等級内の上限値を使用します。倍率の端数は四捨五入します。")}</p>
         {:else if part.enhance_level > 0}
           {#if part.enhance_type !== null || item}
             <p class="hint dim">
               {slot === "weapon"
-                ? "追加固定ダメージは自動計算されます(ダメージ計算タブのトレースに表示)。"
-                : "追加HPの算出条件として保存します。現在はHP表示へ反映せず、与ダメージにも加算しません。"}
+                ? t("追加固定ダメージは自動計算されます(ダメージ計算タブのトレースに表示)。")
+                : t("追加HPの算出条件として保存します。現在はHP表示へ反映せず、与ダメージにも加算しません。")}
             </p>
           {:else}
             <p class="hint dim">
               {slot === "weapon"
-                ? "装備種別を選ぶと追加固定ダメージを自動計算します。"
-                : "装備種別を選んでください(追加HPの算出条件に使用します)。"}
+                ? t("装備種別を選ぶと追加固定ダメージを自動計算します。")
+                : t("装備種別を選んでください(追加HPの算出条件に使用します)。")}
             </p>
           {/if}
         {/if}
@@ -1210,17 +1211,17 @@
           {@const enhance = partEnhance(slot)!}
           <div class="enhance-readout inset num">
             <span class="enhance-term">
-              <span class="dim">{slot === "weapon" ? "追加ダメージ" : "追加HP"}</span>
+              <span class="dim">{slot === "weapon" ? t("追加ダメージ") : t("追加HP")}</span>
               <b><Value motion={() => enhance.added} value={fmtInt(enhance.added)} /></b>
             </span>
             <span class="enhance-op" aria-hidden="true">×</span>
             <span class="enhance-term">
-              <span class="dim">ソウルリンク</span>
+              <span class="dim">{t("ソウルリンク")}</span>
               <b><Value motion={() => enhance.soul_link_multiplier} value={fmtRate(enhance.soul_link_multiplier)} /></b>
             </span>
             <span class="enhance-op" aria-hidden="true">=</span>
             <span class="enhance-term">
-              <span class="dim">合計</span>
+              <span class="dim">{t("合計")}</span>
               <strong><Value motion={() => enhance.total} value={fmtInt(enhance.total)} /></strong>
             </span>
           </div>
@@ -1230,8 +1231,8 @@
 
     {#if RANDOM_OPTION_ALLOWED_SLOTS.includes(slot) && randomOptionSlots(slot) > 0}
       <div class="card">
-        <div class="card-title">ランダムオプション</div>
-        <p class="hint dim">登録済み {part.random_options.length}件。ランダムオプションは専用の入力エリアで設定します。</p>
+        <div class="card-title">{t("ランダムオプション")}</div>
+        <p class="hint dim">{t("登録済み {n}件。ランダムオプションは専用の入力エリアで設定します。", { n: part.random_options.length })}</p>
       </div>
     {/if}
     </div>

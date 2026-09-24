@@ -45,6 +45,7 @@
   } from "../../state.svelte";
   import { BUNDLED_NEWS, CHANGE_LABELS, fetchNews, type News } from "../../news";
   import { reportError } from "../../toast.svelte";
+  import { t, tc } from "../../i18n";
   import { installUpdate, restartApp, updater } from "../../update.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
   import Icon from "../../ui/Icon.svelte";
@@ -69,7 +70,10 @@
   const character = $derived(selectedCharacter());
   const totalCount = $derived(totalContents());
 
-  const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+  const WEEKDAYS = [
+    tc("曜日", "日"), tc("曜日", "月"), tc("曜日", "火"), tc("曜日", "水"),
+    tc("曜日", "木"), tc("曜日", "金"), tc("曜日", "土"),
+  ];
   const today = new Date();
   const todayLabel = `${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}(${WEEKDAYS[today.getDay()]})`;
   const daysAgo = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
@@ -128,18 +132,18 @@
    * 完全に分かっている行は `null` — 全行に並ぶとバッジが装飾になる。
    */
   function coverage(r: Row): string | null {
-    if (!r.ev) return "判定中";
-    if (r.content.enemy_id === null) return "敵データなし";
-    if (!r.ev.damage) return "スキル未収録";
+    if (!r.ev) return t("判定中");
+    if (r.content.enemy_id === null) return t("敵データなし");
+    if (!r.ev.damage) return t("スキル未収録");
     return null;
   }
   // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)。先頭 6 件は共通(ui/states.ts)
   const BADGE: Badge[] = [
     ...REACH_BADGES,
     // 火力の判定ができない行。理由は行頭の収録度バッジが言うので、ここでは繰り返さない
-    { label: "火力は判定できません", state: "unknown" },
-    { label: "入場OK", state: "met" },
-    { label: "条件未達", state: "temp" },
+    { label: t("火力は判定できません"), state: "unknown" },
+    { label: t("入場OK"), state: "met" },
+    { label: t("条件未達"), state: "temp" },
   ];
 
   // 討伐時間の目安。段の境目は Rust が配る(tables.reach_seconds)。画面は写経しない
@@ -158,35 +162,35 @@
 
   /** 未達条件の説明(「エタの意志 Lv あと 5」)。装備条件は比較先がスキル依存なので label をそのまま使う。 */
   const unmetText = (ev: ContentEvaluation) =>
-    ev.checks.filter((c) => !c.ok).map((c) => `${c.label} あと ${fmtInt(c.required - c.current)}`).join(" ・ ");
+    ev.checks.filter((c) => !c.ok).map((c) => t("{label} あと {v}", { label: t(c.label), v: fmtInt(c.required - c.current) })).join(" ・ ");
 
   function noteOf(r: Row): { text: string; unmet: boolean } {
-    if (!r.ev) return { text: "判定中…", unmet: false };
+    if (!r.ev) return { text: t("判定中…"), unmet: false };
     // 敵データなし: 入場条件だけを説明する(火力の話をしない)
     if (r.content.enemy_id === null) {
       if (r.ev.entry_ok) {
-        const met = r.ev.checks.map((c) => `${c.label} ${fmtInt(c.required)}`).join(" / ");
-        return { text: met ? `入場条件OK(${met})` : "入場条件なし", unmet: false };
+        const met = r.ev.checks.map((c) => `${t(c.label)} ${fmtInt(c.required)}`).join(" / ");
+        return { text: met ? t("入場条件OK({v})", { v: met }) : t("入場条件なし"), unmet: false };
       }
-      return { text: `入場まで: ${unmetText(r.ev)}`, unmet: true };
+      return { text: t("入場まで: {v}", { v: unmetText(r.ev) }), unmet: true };
     }
-    if (!r.ev.damage) return { text: "このキャラのスキルデータが未収録のため火力を判定できません", unmet: false };
+    if (!r.ev.damage) return { text: t("このキャラのスキルデータが未収録のため火力を判定できません"), unmet: false };
     const seconds = r.ev.damage.defeat_seconds;
     // 討伐時間が出せない(敵 HP か中ディレイが未収録)ときは 0 や「届かない」で埋めず理由を出す
     const shortfallText = seconds != null
-      ? `討伐 ${fmtDuration(seconds)}(目安 ${fmtDuration(closeSeconds)}以内)`
-      : "討伐時間を判定できません(敵 HP か中ディレイが未収録)";
+      ? t("討伐 {v}(目安 {c}以内)", { v: fmtDuration(seconds), c: fmtDuration(closeSeconds) })
+      : t("討伐時間を判定できません(敵 HP か中ディレイが未収録)");
     if (r.content.requirements.length === 0) {
       return r.ev.reaches
-        ? { text: "入場条件なし", unmet: false }
-        : { text: `入場条件なし ／ ${shortfallText}`, unmet: false };
+        ? { text: t("入場条件なし"), unmet: false }
+        : { text: t("入場条件なし ／ {v}", { v: shortfallText }), unmet: false };
     }
     if (r.ev.entry_ok) {
       return r.ev.reaches
-        ? { text: `入場条件OK(${r.ev.checks.map((c) => `${c.label} ${fmtInt(c.required)}`).join(" / ")})`, unmet: false }
-        : { text: `入場条件OK ／ ${shortfallText}`, unmet: false };
+        ? { text: t("入場条件OK({v})", { v: r.ev.checks.map((c) => `${t(c.label)} ${fmtInt(c.required)}`).join(" / ") }), unmet: false }
+        : { text: t("入場条件OK ／ {v}", { v: shortfallText }), unmet: false };
     }
-    return { text: `入場まで: ${unmetText(r.ev)}`, unmet: true };
+    return { text: t("入場まで: {v}", { v: unmetText(r.ev) }), unmet: true };
   }
 
   /** どこまでいける?一覧の行を押すと、その対象を選んだ状態で計算タブへ移る(押した場所は動かさず、遷移で詳細を賄う)。 */
@@ -230,8 +234,8 @@
   const goalOptions = $derived<PickerOption[]>([
     {
       value: "",
-      name: `自動: ${autoGoal ? (autoGoal.content.series?.name ?? autoGoal.content.name) : "目標なし"}`,
-      meta: autoGoal ? autoGoal.areaName : "到達できる先がない",
+      name: t("自動: {v}", { v: autoGoal ? t(autoGoal.content.series?.name ?? autoGoal.content.name) : t("目標なし") }),
+      meta: autoGoal ? t(autoGoal.areaName) : t("到達できる先がない"),
       // 自動の行も**行き先の絵**を出す。候補面が一覧と同じ見え方になり、どこを指しているか
       // 名前を読まずに分かる(一覧の行と同じ `content` → `mob` の解決)
       iconKind: "content" as const,
@@ -242,8 +246,8 @@
       .filter((r) => r.content.enemy_id !== null)
       .map((r) => ({
         value: r.content.id,
-        name: r.content.name,
-        meta: r.areaName,
+        name: t(r.content.name),
+        meta: t(r.areaName),
         iconKind: "content" as const,
         iconId: r.content.id,
         iconFallback: { kind: "mob" as const, id: r.content.enemy_id },
@@ -413,11 +417,11 @@
   const heroAccuracyReason = $derived.by(() => {
     if (heroAccuracy !== null) return null;
     const g = heroGoal;
-    if (!g) return "対象コンテンツなし";
-    if (!g.ev) return "判定中";
-    if (g.content.enemy_id === null) return "敵データ未収録";
-    if (!g.ev.damage) return "スキル未収録";
-    return "算出中";
+    if (!g) return t("対象コンテンツなし");
+    if (!g.ev) return t("判定中");
+    if (g.content.enemy_id === null) return t("敵データ未収録");
+    if (!g.ev.damage) return t("スキル未収録");
+    return t("算出中");
   });
   $effect(() => {
     const c = character;
@@ -695,8 +699,8 @@
    *  区別できる文言にする。ステッパーを出せるときは null。 */
   const cuffsUnsetLabel = $derived.by(() => {
     const c = character;
-    if (!c || isUnequipped(cuffsPart(c))) return "未設定";
-    if (!cuffsItem?.growth_caps) return "成長装備ではありません";
+    if (!c || isUnequipped(cuffsPart(c))) return t("未設定");
+    if (!cuffsItem?.growth_caps) return t("成長装備ではありません");
     return null;
   });
   function commitCuffsBase(c: RegisteredCharacter, k: EquipmentStatKind, value: number) {
@@ -799,10 +803,10 @@
   //    Rust(domain::relic_state / relic_step)が持つ。神鳥・ルナリアは別系列で、kind の
   //    外へは踏み出さない(相手 kind への切り替えはキャラタブで行う)。
   const RELIC_ROWS = [
-    { slot: "relic_pendant", side: "左" },
-    { slot: "relic_bracelet", side: "右" },
+    { slot: "relic_pendant", side: t("左") },
+    { slot: "relic_bracelet", side: t("右") },
   ] as const;
-  const RELIC_KIND_LABELS: Record<RelicKind, string> = { godbird: "神鳥", lunaria: "ルナリア" };
+  const RELIC_KIND_LABELS: Record<RelicKind, string> = { godbird: t("神鳥"), lunaria: t("ルナリア") };
   /** いまの段で補正値を上げられるステ(カタログの growth_caps がそのまま今の段の上限)。 */
   function relicGrowthKeys(item: EquipmentItem | null): EquipmentStatKind[] {
     return item?.growth_caps ? EQUIPMENT_STAT_KINDS.filter((k) => item.growth_caps![k] > 0) : [];
@@ -872,9 +876,9 @@
   function relicSideRemaining(slot: "relic_pendant" | "relic_bracelet"): { text: string; done: boolean } | null {
     const rs = relicStateOf(slot);
     if (!rs) return null;
-    if (!rs.growth_done) return { text: `補正値あと${fmtInt(rs.growth_remaining)}`, done: false };
-    if (rs.can_up) return { text: `Lvあと${fmtInt(rs.max_level - rs.level)}`, done: false };
-    return { text: "上限", done: true };
+    if (!rs.growth_done) return { text: t("補正値あと{v}", { v: fmtInt(rs.growth_remaining) }), done: false };
+    if (rs.can_up) return { text: t("Lvあと{v}", { v: fmtInt(rs.max_level - rs.level) }), done: false };
+    return { text: t("上限"), done: true };
   }
   const relicSides = $derived(RELIC_ROWS.map((r) => ({ side: r.side, info: relicSideRemaining(r.slot) })));
   const relicEquippedSides = $derived(relicSides.filter((s) => s.info !== null));
@@ -920,7 +924,7 @@
         slot,
         label: PART_SLOT_LABELS[slot],
         iconId: equipmentIconId(part?.item_id ?? null, app.equipmentCatalog),
-        name: item ? item.name : part?.custom_name ? `${part.custom_name} [仮]` : null,
+        name: item ? t(item.name) : part?.custom_name ? t("{v} [仮]", { v: part.custom_name }) : null,
         enhance: ENHANCE_ALLOWED_SLOTS.includes(slot) ? (part?.enhance_level ?? 0) : null,
         // 列 = 主要 4 補正。部位が持っていない補正は 0 ではなく空(§00 ②)
         values: PRIMARY_EQUIPMENT_STATS.map((k) => {
@@ -938,13 +942,13 @@
 
 <div class="home">
   <div class="head-bar">
-    <span class="title">今日の TW</span>
-    <span class="note">{todayLabel}{character ? ` ・ ${character.name} の現況` : ""}</span>
+    <span class="title">{t("今日の TW")}</span>
+    <span class="note">{todayLabel}{character ? t(" ・ {name} の現況", { name: character.name }) : ""}</span>
   </div>
   <div class="scroll">
     <div class="main">
     {#if !character}
-      <p class="empty dim">キャラを登録すると、ここに今日の状況が出ます。左のレールの「＋ キャラを登録」からどうぞ。</p>
+      <p class="empty dim">{t("キャラを登録すると、ここに今日の状況が出ます。左のレールの「＋ キャラを登録」からどうぞ。")}</p>
     {:else}
       <!-- ===== キャラの窓ヒーロー: 言葉(左)と数値(右)を空間で分離する ===== -->
       <div class="hero">
@@ -953,13 +957,13 @@
             <Icon kind="character" id={character.game_character_id} size={64} label={character.name} source={app.characterIcons[character.id] ?? null} />
             <span class="hero-id-name">{character.name}</span>
             <span class="hero-id-class">
-              {gameCharacterName(character.game_character_id)} / 覚醒{character.awakening.stage} ・ エタ意志
+              {gameCharacterName(character.game_character_id)} {t("/ 覚醒{stage} ・ エタ意志", { stage: character.awakening.stage })}
               <span class="num strong">Lv {character.awakening.eternal_level}</span>
             </span>
           </div>
           <div class="hero-panels">
             <div class="hero-panel readrows inset">
-              <span class="hero-panel-title">ステータス</span>
+              <span class="hero-panel-title">{t("ステータス")}</span>
               {#each STAT_KINDS as k (k)}
                 <ReadRow label={STAT_LABELS[k]} value={heroStats ? fmtInt(heroStats.stats[k]) : "—"} motion={() => heroStats?.stats[k] ?? null} />
               {/each}
@@ -968,21 +972,21 @@
                  「装備でいくつ乗っているか」は目標を替えても知りたい値で、絞ると合計が読めない
                  (ユーザー 2026-09-18)。部位ごとの内訳はヒーロー末尾の畳みが持つ -->
             <div class="hero-panel readrows inset">
-              <span class="hero-panel-title">装備・命中</span>
+              <span class="hero-panel-title">{t("装備・命中")}</span>
               {#each equipPrimaryTotals as row (row.key)}
                 <ReadRow label={row.label} value={fmtInt(row.total)} motion={() => row.total}>
                   {#snippet sub()}{fmtInt(row.base)} {fmtSigned(row.enchant)}{/snippet}
                 </ReadRow>
               {/each}
               {#if heroAccuracy !== null}
-                <ReadRow label="命中P" value={fmtInt(heroAccuracy)} motion={() => heroAccuracy} />
+                <ReadRow label={t("命中P")} value={fmtInt(heroAccuracy)} motion={() => heroAccuracy} />
               {:else}
-                <ReadRow label="命中P">
-                  <span class="badge unknown" title="命中Pを算出できません: {heroAccuracyReason}">{heroAccuracyReason}</span>
+                <ReadRow label={t("命中P")}>
+                  <span class="badge unknown" title={t("命中Pを算出できません: {v}", { v: heroAccuracyReason ?? "" })}>{heroAccuracyReason}</span>
                 </ReadRow>
               {/if}
               <ReadRow
-                label="回避P"
+                label={t("回避P")}
                 value={heroDefense ? fmtInt(heroDefense.evasion_point.physical) : "—"}
                 motion={() => heroDefense?.evasion_point.physical ?? null}
               />
@@ -992,9 +996,9 @@
 
         <!-- 次の目標スポットライト(全幅 — 右列に入れるとメーターが潰れる) -->
         <div class="hero-goal">
-          <span class="tag meta-pill">次の目標</span>
+          <span class="tag meta-pill">{t("次の目標")}</span>
           {#if !app.evaluations[character.id]}
-            <span class="dim">到達判定を取得できていません。</span>
+            <span class="dim">{t("到達判定を取得できていません。")}</span>
           {:else}
             <!-- 目標はふだん自動で決まる。ただし「クリアできる」と「周回したい」は別なので、
                  ここは自動値を上書きする例外操作(ux-guidelines 原則 4)。候補は重なって出るので
@@ -1002,14 +1006,14 @@
             <div
               class="hero-goal-pick" class:manual={manualGoal !== null}
               title={manualGoal
-                ? "自動判定ではなく、自分で選んだ目標です(保存されます)。先頭の「自動: …」を選ぶと自動に戻ります"
-                : "自動で選ばれている目標です。押すと自分の目標に差し替えられます"}
+                ? t("自動判定ではなく、自分で選んだ目標です(保存されます)。先頭の「自動: …」を選ぶと自動に戻ります")
+                : t("自動で選ばれている目標です。押すと自分の目標に差し替えられます")}
               use:changed={() => heroGoal?.content.id ?? ""}
             >
               <Picker
-                label="目標のコンテンツ"
+                label={t("目標のコンテンツ")}
                 options={goalOptions}
-                note="自動で選ばれる目標を、自分の目標に差し替える"
+                note={t("自動で選ばれる目標を、自分の目標に差し替える")}
                 bind:value={
                   () => character?.goal_content_id ?? "",
                   (v) => { if (character) commitGoal(character, v === "" ? null : v); }
@@ -1017,30 +1021,30 @@
               />
             </div>
             {#if goalStale}
-              <span class="badge unknown" title="選んでいた目標が今のデータにありません。自動で選んだ目標を出しています">選んだ目標が見つかりません</span>
+              <span class="badge unknown" title={t("選んでいた目標が今のデータにありません。自動で選んだ目標を出しています")}>{t("選んだ目標が見つかりません")}</span>
             {/if}
             {#if !heroGoal}
-              <span class="hero-goal-note dim">全 {fmtInt(totalCount)} コンテンツ クリア可 — 目標を選ぶとここで詰められます</span>
+              <span class="hero-goal-note dim">{t("全 {n} コンテンツ クリア可 — 目標を選ぶとここで詰められます", { n: fmtInt(totalCount) })}</span>
             {:else if heroGoal.content.enemy_id === null || !heroSpot}
               <span class="hero-goal-note dim">{noteOf(heroGoal).text}</span>
             {:else}
               <span class="hero-div"></span>
               <Icon
                 kind="skill" id={heroSpot.skillId} size={28}
-                label={skillNames[heroSpot.skillId] ?? heroSpot.skillId}
+                label={t(skillNames[heroSpot.skillId] ?? heroSpot.skillId)}
               />
               <span class="hero-goal-skill">
                 {#if summonSkillName}
                   <!-- 見た目の 1 行 = 1 コンテンツは崩さない。同じ欄の中で熊 + 本体を 2 段に(1 段だと 120px で本体名が切れる。実機 2026-09-18)(ADR-016) -->
-                  <span>熊 {summonSkillName}</span>
-                  <span>+ 本体 {skillNames[heroSpot.skillId] ?? heroSpot.skillId}</span>
+                  <span>{t("熊 {v}", { v: t(summonSkillName) })}</span>
+                  <span>{t("+ 本体 {v}", { v: t(skillNames[heroSpot.skillId] ?? heroSpot.skillId) })}</span>
                 {:else}
-                  {skillNames[heroSpot.skillId] ?? heroSpot.skillId}
+                  {t(skillNames[heroSpot.skillId] ?? heroSpot.skillId)}
                 {/if}
                 <!-- 「この数字はクリ側か」の但し書きだけ小さく添える。バッジで主役の隣に置かない(ユーザー 2026-09-16) -->
                 {#if heroDamage}
-                  <Value class="hero-goal-crit dim" value={heroDamage?.critRate === null ? "確定" : fmtNum(heroDamage?.critRate ?? 0, 1, "%")}
-                    >{#snippet children()}{heroDamage?.critRate === null ? "クリ確定扱い" : `クリ ${fmtNum(heroDamage?.critRate ?? 0, 1, "%")}`}{/snippet}</Value
+                  <Value class="hero-goal-crit dim" value={heroDamage?.critRate === null ? t("確定") : fmtNum(heroDamage?.critRate ?? 0, 1, "%")}
+                    >{#snippet children()}{heroDamage?.critRate === null ? t("クリ確定扱い") : t("クリ {v}", { v: fmtNum(heroDamage?.critRate ?? 0, 1, "%") })}{/snippet}</Value
                   >
                 {/if}
               </span>
@@ -1048,10 +1052,10 @@
                 <span class="fill" style="width: {heroSpotPct}; background: {STATE[BADGE[heroSpotState].state].bar};"></span>
               </span>
               <span class="hero-spot-wrap">
-                <Value class="hero-spot" motion={() => heroSpot?.perHit ?? null} value={fmtInt(heroSpot.perHit)} title="表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)" />
+                <Value class="hero-spot" motion={() => heroSpot?.perHit ?? null} value={fmtInt(heroSpot.perHit)} title={t("表記ダメージ(スキル分のみ。武器強化の追加固定ダメージは含まない)")} />
                 <!-- 討伐時間が主役ではなく傍証。出せないときは 0 や「—」で埋めず、そのまま省く(§00 02) -->
                 {#if heroSpot.defeatSeconds !== null}
-                  <Value class="dim" motion={() => heroSpot?.defeatSeconds ?? null} value={` ・ 討伐 ${fmtDuration(heroSpot.defeatSeconds)}`} />
+                  <Value class="dim" motion={() => heroSpot?.defeatSeconds ?? null} value={t(" ・ 討伐 {v}", { v: fmtDuration(heroSpot.defeatSeconds) })} />
                 {/if}
               </span>
               <!-- 到達の判定はバーの色と討伐時間で読める。バッジは重複なので置かない(ユーザー 2026-09-16)。
@@ -1061,8 +1065,8 @@
               <!-- この行は目標名 → 火力 → 到達バッジの 1 本の視線で読ませる。文字の CTA を末尾に置くと
                    その幅ぶん量バーとスキル名が痩せるので、掘り下げの入口は一覧行と同じ「›」に寄せる -->
               <button
-                type="button" class="cta chev-only" title="計算タブで詰める"
-                aria-label="計算タブで詰める" onclick={tryHeroGoalInCalc}
+                type="button" class="cta chev-only" title={t("計算タブで詰める")}
+                aria-label={t("計算タブで詰める")} onclick={tryHeroGoalInCalc}
               >›</button>
             {/if}
           {/if}
@@ -1072,32 +1076,32 @@
              火力が既に届いているのに「届かせるなら +0%」を並べない(§00 考えさせない) -->
         {#if heroEntryUnmet}
           <div class="hero-advice">
-            <span class="hero-advice-title">あとは入場条件 — 満たすなら</span>
+            <span class="hero-advice-title">{t("あとは入場条件 — 満たすなら")}</span>
             <button type="button" class="hero-advice-row" onclick={() => (app.tab = "chars")}>
-              <span class="hero-advice-label">入場まで: {heroGoal?.ev ? unmetText(heroGoal.ev) : ""}</span>
+              <span class="hero-advice-label">{t("入場まで: {v}", { v: heroGoal?.ev ? unmetText(heroGoal.ev) : "" })}</span>
               <span class="chev dim">›</span>
             </button>
           </div>
         {/if}
         {#if heroAdvice.length > 0 && heroPowerShort}
           <div class="hero-advice">
-            <span class="hero-advice-title">おすすめ強化 — 届かせるなら</span>
+            <span class="hero-advice-title">{t("おすすめ強化 — 届かせるなら")}</span>
             <div class="hero-advice-list">
               {#each heroAdvice as a, i (a.id)}
                 <button type="button" class="hero-advice-row" onclick={() => applyHeroAdvice(a)}>
                   <span class="rank num">{i + 1}</span>
                   <span class="cost" style={triadStyle(COST_COLORS[a.cost])}>{COST_LABELS[a.cost]}</span>
-                  <span class="hero-advice-label">{a.label}</span>
+                  <span class="hero-advice-label">{t(a.label)}</span>
                   <!-- 伸び率は表記ダメージと合計ダメージの 2 本。シャープネスビジョンのように
                        表記が動かず合計だけ伸びる候補があるので、片方だけだと「効いていない」と
                        読めてしまう(ユーザー判断 2026-09-01) -->
                   <span class="hero-advice-nums">
-                    <Value motion={() => a.per_hit_primary} value={fmtInt(a.per_hit_primary)} title="表記ダメージ(スキル分のみ)" />
-                    <Value class="advice-delta" motion={() => a.delta_pct} value={deltaText(a.delta_pct)} title="表記ダメージの伸び率" />
-                    <Value class="advice-total dim" motion={() => a.delta_total_pct} value={`合計 ${deltaText(a.delta_total_pct)}`} title="実際に敵へ入る合計ダメージの伸び率(武器強化の追加固定・割合追加を含む)" />
+                    <Value motion={() => a.per_hit_primary} value={fmtInt(a.per_hit_primary)} title={t("表記ダメージ(スキル分のみ)")} />
+                    <Value class="advice-delta" motion={() => a.delta_pct} value={deltaText(a.delta_pct)} title={t("表記ダメージの伸び率")} />
+                    <Value class="advice-total dim" motion={() => a.delta_total_pct} value={t("合計 {v}", { v: deltaText(a.delta_total_pct) })} title={t("実際に敵へ入る合計ダメージの伸び率(武器強化の追加固定・割合追加を含む)")} />
                   </span>
                   {#if a.reaches}
-                    <span class="badge" style={badgeStyle({ label: "届く見込み", state: "temp" })}>届く見込み</span>
+                    <span class="badge" style={badgeStyle({ label: t("届く見込み"), state: "temp" })}>{t("届く見込み")}</span>
                   {/if}
                   <span class="chev dim">›</span>
                 </button>
@@ -1110,8 +1114,8 @@
              合計は上の「装備・命中」に常に出ているので、ここは「何を着けているか」を見る面 -->
         <Disclosure class="fold equip-fold">
           {#snippet summary()}
-            <span class="area-name">装備の内訳(部位ごと)</span>
-            <span class="fold-note dim">押すとキャラタブのその部位へ</span>
+            <span class="area-name">{t("装備の内訳(部位ごと)")}</span>
+            <span class="fold-note dim">{t("押すとキャラタブのその部位へ")}</span>
           {/snippet}
           {#snippet children(open)}
           {#if open}
@@ -1119,8 +1123,8 @@
                  書き込む出し方はやめた(小さすぎて読めず、列がないので足し合わせられない) -->
             <div class="fold-body equip-table">
               <div class="equip-head">
-                <span class="equip-col-slot">部位</span>
-                <span class="equip-col-name">装備</span>
+                <span class="equip-col-slot">{t("部位")}</span>
+                <span class="equip-col-name">{t("装備")}</span>
                 {#each PRIMARY_EQUIPMENT_STATS as k (k)}
                   <span class="equip-col-num">{EQUIPMENT_STAT_SHORT[k]}</span>
                 {/each}
@@ -1129,15 +1133,15 @@
                 <button
                   type="button" class="equip-row"
                   onclick={() => focusCharacterSource("equipment", row.slot)}
-                  title="キャラタブへ移動して、この部位を開きます"
+                  title={t("キャラタブへ移動して、この部位を開きます")}
                 >
                   <span class="equip-col-slot">
                     {row.label}
                     {#if row.enhance}<span class="equip-plus">+{row.enhance}</span>{/if}
                   </span>
                   <span class="equip-col-name" class:none={row.name === null}>
-                    <Icon kind="equipment" id={row.iconId} size={20} label={row.name ?? "未装備"} />
-                    <span class="equip-name-text">{row.name ?? "未装備"}</span>
+                    <Icon kind="equipment" id={row.iconId} size={20} label={row.name ?? t("未装備")} />
+                    <span class="equip-name-text">{row.name ?? t("未装備")}</span>
                   </span>
                   {#each row.values as v (v.key)}
                     <Value class="equip-col-num" motion={() => v.value} value={v.value === null ? "" : fmtInt(v.value)} />
@@ -1147,8 +1151,8 @@
               <!-- 合計は部位の足し算ではない(装備アビリティ・称号・ソウルリンクが乗る)。
                    Rust の equipment_base_total + equipment_enhanced_total をそのまま出す -->
               <div class="equip-sum">
-                <span class="equip-col-slot">合計</span>
-                <span class="equip-col-name dim">装備アビリティ・称号・ソウルリンク込み</span>
+                <span class="equip-col-slot">{t("合計")}</span>
+                <span class="equip-col-name dim">{t("装備アビリティ・称号・ソウルリンク込み")}</span>
                 {#each equipPrimaryTotals as row (row.key)}
                   <span class="equip-col-num equip-sum-cell">
                     <Value class="equip-sum-value" motion={() => row.total} value={fmtInt(row.total)} />
@@ -1158,7 +1162,7 @@
               </div>
               <!-- 物防・命中・Cri・回避・敏捷は主役ではないので合計だけ 1 行に畳む(ユーザー 2026-09-15) -->
               <div class="equip-others dim">
-                そのほかの補正
+                {t("そのほかの補正")}
                 {#each equipOtherTotals as row (row.key)}
                   <span class="equip-other">{EQUIPMENT_STAT_SHORT[row.key]} <Value value={fmtInt(row.total)} motion={() => row.total} /></span>
                 {/each}
@@ -1174,25 +1178,25 @@
         {@const card = impactCard}
         <div class="section">
           <div class="area-head">
-            <span class="area-name">期限・影響</span>
+            <span class="area-name">{t("期限・影響")}</span>
             <span class="area-rule"></span>
           </div>
           <div class="brief-card" use:changed={() => String(card.perHit)}>
-            <span class="tag meta-pill">影響</span>
+            <span class="tag meta-pill">{t("影響")}</span>
             <Icon
               kind="skill" id={card.skillId} size={28}
-              label={skillNames[card.skillId] ?? card.skillId}
+              label={t(skillNames[card.skillId] ?? card.skillId)}
             />
             <span class="brief-copy">
               <span class="brief-title">
-                火力が <Value motion={() => card.perHit} value={fmtInt(card.perHit)} /> に{card.perHit >= card.prevPerHit ? "上がりました" : "下がりました"}
+                {t("火力が")} <Value motion={() => card.perHit} value={fmtInt(card.perHit)} /> {t("に{v}", { v: card.perHit >= card.prevPerHit ? t("上がりました") : t("下がりました") })}
                 <span class="num" style="color: {card.perHit >= card.prevPerHit ? 'var(--good)' : 'var(--danger)'}">
                   {card.perHit >= card.prevPerHit ? "+" : ""}{fmtInt(card.perHit - card.prevPerHit)}
                 </span>
               </span>
-              <span class="brief-why">前回 <span class="num">{fmtInt(card.prevPerHit)}</span></span>
+              <span class="brief-why">{t("前回")} <span class="num">{fmtInt(card.prevPerHit)}</span></span>
             </span>
-            <button type="button" class="cta" onclick={() => openInCalc(card.contentId)}>なぜこの数字? ›</button>
+            <button type="button" class="cta" onclick={() => openInCalc(card.contentId)}>{t("なぜこの数字? ›")}</button>
           </div>
         </div>
       {/if}
@@ -1201,101 +1205,101 @@
            同時に開くのは 1 つだけ)。武器・鎧の強化Lvは低頻度なので「そのほかの設定」からキャラタブへ ===== -->
       <div class="section">
         <div class="area-head">
-          <span class="area-name">今日の強化</span>
+          <span class="area-name">{t("今日の強化")}</span>
           <span class="area-rule"></span>
           {#if character.updated_at}
             {@const up = character.updated_at}
             <!-- どこかを直すとこの日付が今日に変わる。黙って変わると「保存された」が伝わらないので
                  <Value> を通す(書式済みの文字なので光る。§08「値は <Value> 1 つ」) -->
             <Value class="last-enhance dim" value={`${fmtMonthDay(up)} / ${daysAgo(up)}`}>
-              {#snippet children()}最後の強化 <span class="num">{fmtMonthDay(up)}</span>
-                ({daysAgo(up) === 0 ? "今日" : `${daysAgo(up)} 日前`}){/snippet}
+              {#snippet children()}{t("最後の強化")} <span class="num">{fmtMonthDay(up)}</span>
+                ({daysAgo(up) === 0 ? t("今日") : t("{v} 日前", { v: daysAgo(up) })}){/snippet}
             </Value>
           {/if}
         </div>
         <div class="today-grid">
           <button type="button" class="today-tile" class:open={openTile === "sacredRelic"} onclick={() => toggleTile("sacredRelic")}>
             <div class="today-tile-head">
-              <Icon kind="source" id="relic" size={20} label="神鳥の聖物" />
-              <span class="today-tile-name">神鳥の聖物</span>
+              <Icon kind="source" id="relic" size={20} label={t("神鳥の聖物")} />
+              <span class="today-tile-name">{t("神鳥の聖物")}</span>
               {#if !sacredRelicSet}
-                <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+                <span class="badge" style={badgeStyle({ label: t("未設定"), state: "edge" })}>{t("未設定")}</span>
               {:else if sacredRelicRemaining <= 0}
-                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
+                <span class="badge" style={badgeStyle({ label: t("上限まで到達"), state: "met" })}>{t("上限まで到達")}</span>
               {/if}
             </div>
             {#if sacredRelicSet && sacredRelicRemaining > 0}
               <Value class="today-tile-note" value={String(sacredRelicRemaining)}
-                >{#snippet children()}残り {fmtInt(sacredRelicRemaining)}{/snippet}</Value
+                >{#snippet children()}{t("残り {v}", { v: fmtInt(sacredRelicRemaining) })}{/snippet}</Value
               >
             {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "cuffs"} onclick={() => toggleTile("cuffs")}>
             <div class="today-tile-head">
-              <Icon kind="equipment" id="rising-holic-cuffs" size={20} label="カフス" />
-              <span class="today-tile-name">カフス</span>
+              <Icon kind="equipment" id="rising-holic-cuffs" size={20} label={t("カフス")} />
+              <span class="today-tile-name">{t("カフス")}</span>
               {#if !cuffsSummary}
-                <span class="badge" style={badgeStyle({ label: cuffsUnsetLabel ?? "未設定", state: "edge" })}>{cuffsUnsetLabel ?? "未設定"}</span>
+                <span class="badge" style={badgeStyle({ label: cuffsUnsetLabel ?? t("未設定"), state: "edge" })}>{cuffsUnsetLabel ?? t("未設定")}</span>
               {:else if cuffsRemaining !== null && cuffsRemaining <= 0}
-                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
+                <span class="badge" style={badgeStyle({ label: t("上限まで到達"), state: "met" })}>{t("上限まで到達")}</span>
               {/if}
             </div>
             {#if cuffsRemaining !== null && cuffsRemaining > 0}
               <Value class="today-tile-note" value={String(cuffsRemaining)}
-                >{#snippet children()}この段階 残り {fmtInt(cuffsRemaining)}{/snippet}</Value
+                >{#snippet children()}{t("この段階 残り {v}", { v: fmtInt(cuffsRemaining) })}{/snippet}</Value
               >
             {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "enchant"} onclick={() => toggleTile("enchant")}>
             <div class="today-tile-head">
-              <Icon kind="source" id="enchant" size={20} label="エンチャント" />
-              <span class="today-tile-name">エンチャント</span>
+              <Icon kind="source" id="enchant" size={20} label={t("エンチャント")} />
+              <span class="today-tile-name">{t("エンチャント")}</span>
               {#if !enchantSummary}
-                <span class="badge" style={badgeStyle({ label: "対象なし", state: "edge" })}>対象なし</span>
+                <span class="badge" style={badgeStyle({ label: t("対象なし"), state: "edge" })}>{t("対象なし")}</span>
               {:else if enchantRemaining.remain <= 0}
-                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
+                <span class="badge" style={badgeStyle({ label: t("上限まで到達"), state: "met" })}>{t("上限まで到達")}</span>
               {/if}
             </div>
             {#if enchantSummary && enchantRemaining.remain > 0}
               <Value class="today-tile-note" value={String(enchantRemaining.remain)}
-                >{#snippet children()}{fmtInt(enchantRemaining.parts)}部位 残り {fmtInt(enchantRemaining.remain)}{/snippet}</Value
+                >{#snippet children()}{t("{parts}部位 残り {v}", { parts: fmtInt(enchantRemaining.parts), v: fmtInt(enchantRemaining.remain) })}{/snippet}</Value
               >
             {/if}
           </button>
           <button type="button" class="today-tile" class:open={openTile === "equipRelic"} onclick={() => toggleTile("equipRelic")}>
             <div class="today-tile-head">
-              <Icon kind="equipment" id="godbird-pendant-plus1" size={20} label="レリック" />
-              <span class="today-tile-name">レリック</span>
+              <Icon kind="equipment" id="godbird-pendant-plus1" size={20} label={t("レリック")} />
+              <span class="today-tile-name">{t("レリック")}</span>
               {#if relicEquippedSides.length === 0}
-                <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+                <span class="badge" style={badgeStyle({ label: t("未設定"), state: "edge" })}>{t("未設定")}</span>
               {:else if relicEquippedSides.every((s) => s.info!.done)}
-                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
+                <span class="badge" style={badgeStyle({ label: t("上限まで到達"), state: "met" })}>{t("上限まで到達")}</span>
               {/if}
             </div>
             {#if relicEquippedSides.length > 0 && !relicEquippedSides.every((s) => s.info!.done)}
               <Value class="today-tile-note" value={relicEquippedSides.map((s) => s.info!.text).join()}
-                >{#snippet children()}{relicEquippedSides.map((s) => `${s.side} ${s.info!.done ? "上限" : s.info!.text}`).join(" ・ ")}{/snippet}</Value
+                >{#snippet children()}{relicEquippedSides.map((s) => `${s.side} ${s.info!.done ? t("上限") : s.info!.text}`).join(" ・ ")}{/snippet}</Value
               >
             {/if}
           </button>
           <button
             type="button" class="today-tile today-tile-nav" onclick={() => focusCharacterSource("siena")}
-            title="キャラタブへ移動して編集します"
+            title={t("キャラタブへ移動して編集します")}
           >
             <div class="today-tile-head">
-              <Icon kind="source" id="siena" size={20} label="シエナのオーラ" />
-              <span class="today-tile-name">シエナのオーラ</span>
+              <Icon kind="source" id="siena" size={20} label={t("シエナのオーラ")} />
+              <span class="today-tile-name">{t("シエナのオーラ")}</span>
               {#if !sienaSummary}
-                <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+                <span class="badge" style={badgeStyle({ label: t("未設定"), state: "edge" })}>{t("未設定")}</span>
               {:else if sienaSummary.max - sienaSummary.value <= 0}
-                <span class="badge" style={badgeStyle({ label: "上限まで到達", state: "met" })}>上限まで到達</span>
+                <span class="badge" style={badgeStyle({ label: t("上限まで到達"), state: "met" })}>{t("上限まで到達")}</span>
               {/if}
               <span class="chev dim" aria-hidden="true">↗</span>
             </div>
             {#if sienaSummary && sienaSummary.max - sienaSummary.value > 0}
               {@const remain = sienaSummary.max - sienaSummary.value}
               <Value class="today-tile-note" value={String(remain)}
-                >{#snippet children()}増幅 残り {fmtInt(remain)} 段{/snippet}</Value
+                >{#snippet children()}{t("増幅 残り {v} 段", { v: fmtInt(remain) })}{/snippet}</Value
               >
             {/if}
           </button>
@@ -1308,15 +1312,15 @@
           <div class="today-expand open-in" use:changed={() => openTile}>
             {#if openTile === "sacredRelic"}
               <div class="expand-head">
-                <span class="expand-title">神鳥の聖物</span>
-                <span class="dim expand-note">ステごとの加算({limits.sacred_relic_value_per_stage} きざみ・0–{SACRED_RELIC_MAX_VALUE})</span>
+                <span class="expand-title">{t("神鳥の聖物")}</span>
+                <span class="dim expand-note">{t("ステごとの加算({step} きざみ・0–{max})", { step: limits.sacred_relic_value_per_stage, max: SACRED_RELIC_MAX_VALUE })}</span>
               </div>
               <div class="expand-rows two-col">
                 {#each STAT_KINDS as k (k)}
                   <div class="expand-row" use:changed={() => String(sacredRelicValueOf(character, k))}>
                     <span class="expand-row-label">{STAT_LABELS[k]}</span>
                     <NumberField
-                      label="{STAT_LABELS[k]}の聖物"
+                      label={t("{stat}の聖物", { stat: STAT_LABELS[k] })}
                       max={SACRED_RELIC_MAX_VALUE} step={limits.sacred_relic_value_per_stage}
                       bind:value={
                         () => sacredRelicValueOf(character, k),
@@ -1328,13 +1332,13 @@
               </div>
             {:else if openTile === "cuffs"}
               <div class="expand-head">
-                <span class="expand-title">カフス</span>
-                <span class="dim expand-note">この段階の実値。下限は直前段階の完成値、上限はこの段階のMAX</span>
+                <span class="expand-title">{t("カフス")}</span>
+                <span class="dim expand-note">{t("この段階の実値。下限は直前段階の完成値、上限はこの段階のMAX")}</span>
               </div>
               {#if cuffsGrowthKeys.length === 0}
                 <button type="button" class="expand-nav" onclick={() => focusCharacterSource("equipment", "shield_plus")}>
-                  <span class="badge" style={badgeStyle({ label: cuffsUnsetLabel ?? "未設定", state: "edge" })}>{cuffsUnsetLabel ?? "未設定"}</span>
-                  <span class="expand-nav-text">キャラタブで装備を選ぶ</span>
+                  <span class="badge" style={badgeStyle({ label: cuffsUnsetLabel ?? t("未設定"), state: "edge" })}>{cuffsUnsetLabel ?? t("未設定")}</span>
+                  <span class="expand-nav-text">{t("キャラタブで装備を選ぶ")}</span>
                   <span class="chev dim">›</span>
                 </button>
               {:else}
@@ -1344,7 +1348,7 @@
                     <div class="expand-row" use:changed={() => String(cuffsPart(character)?.base[k] ?? 0)}>
                       <span class="expand-row-label">{EQUIPMENT_STAT_LABELS[k]}</span>
                       <NumberField
-                        label="{EQUIPMENT_STAT_LABELS[k]}の装備補正"
+                        label={t("{stat}の装備補正", { stat: EQUIPMENT_STAT_LABELS[k] })}
                         min={item!.values_min[k]} max={item!.growth_caps![k]}
                         bind:value={
                           () => cuffsPart(character)?.base[k] ?? 0,
@@ -1357,12 +1361,12 @@
               {/if}
             {:else if openTile === "enchant"}
               <div class="expand-head">
-                <span class="expand-title">エンチャント</span>
-                <span class="dim expand-note">主軸: {enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・")}</span>
-                <button type="button" class="cta expand-more" onclick={() => (app.tab = "chars")}>ほかのステはキャラタブへ ›</button>
+                <span class="expand-title">{t("エンチャント")}</span>
+                <span class="dim expand-note">{t("主軸: {v}", { v: enchantDepKeys.map((k) => EQUIPMENT_STAT_SHORT[k]).join("・") })}</span>
+                <button type="button" class="cta expand-more" onclick={() => (app.tab = "chars")}>{t("ほかのステはキャラタブへ ›")}</button>
               </div>
               {#if enchantRows.length === 0}
-                <p class="dim expand-empty">主軸スキルの依存ステを盛れる部位が装備されていません。</p>
+                <p class="dim expand-empty">{t("主軸スキルの依存ステを盛れる部位が装備されていません。")}</p>
               {:else}
                 <div class="expand-rows">
                   {#each enchantRows as row (row.slot)}
@@ -1370,7 +1374,7 @@
                       <span class="expand-row-label">{ENCHANT_SLOT_LABELS[row.slot]}</span>
                       {#if row.capUnknown}
                         <button type="button" class="expand-nav" onclick={() => focusCharacterSource("equipment", row.slot)}>
-                          <span class="badge unknown" title="カタログ外(カスタム名)装備でエンチャント上限が未入力です">上限未入力</span>
+                          <span class="badge unknown" title={t("カタログ外(カスタム名)装備でエンチャント上限が未入力です")}>{t("上限未入力")}</span>
                           <span class="chev dim">›</span>
                         </button>
                       {:else}
@@ -1384,7 +1388,7 @@
                             <div class="enchant-stat">
                               <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
                               <NumberField
-                                label="{EQUIPMENT_STAT_SHORT[k]}のエンチャント"
+                                label={t("{stat}のエンチャント", { stat: EQUIPMENT_STAT_SHORT[k] })}
                                 max={cap} increments={ENCHANT_INCREMENTS}
                                 bind:value={
                                   () => cur,
@@ -1401,7 +1405,7 @@
                 </div>
               {/if}
             {:else if openTile === "equipRelic"}
-              <div class="expand-head"><span class="expand-title">レリック</span></div>
+              <div class="expand-head"><span class="expand-title">{t("レリック")}</span></div>
               <div class="expand-rows">
                 {#each RELIC_ROWS as r (r.slot)}
                   {@const part = partOf(r.slot)}
@@ -1409,18 +1413,18 @@
                   {@const item = itemOf(part)}
                   {@const growthKeys = relicGrowthKeys(item)}
                   <div class="expand-row relic-row">
-                    <span class="expand-row-label">レリック{r.side}</span>
+                    <span class="expand-row-label">{t("レリック{side}", { side: r.side })}</span>
                     {#if rs}
                       <div class="relic-row-body">
                         <div class="relic-row-head">
                           <span class="badge" style={badgeStyle({ label: RELIC_KIND_LABELS[rs.kind], state: "unknown" })}>{RELIC_KIND_LABELS[rs.kind]}</span>
                           <div class="today-stepper">
-                            <button type="button" class="dst" aria-label="レリック{r.side}を下げる" disabled={!rs.can_down} onclick={() => stepRelicLevel(r.slot, "down")}>−</button>
+                            <button type="button" class="dst" aria-label={t("レリック{side}を下げる", { side: r.side })} disabled={!rs.can_down} onclick={() => stepRelicLevel(r.slot, "down")}>−</button>
                             <span class="today-stepper-val">
                               <Value motion={() => rs!.level} value={`Lv${rs.level}`} />
                               <span class="num dim">/ {rs.max_level}</span>
                             </span>
-                            <button type="button" class="dst" aria-label="レリック{r.side}を上げる" disabled={!rs.can_up} onclick={() => stepRelicLevel(r.slot, "up")}>+</button>
+                            <button type="button" class="dst" aria-label={t("レリック{side}を上げる", { side: r.side })} disabled={!rs.can_up} onclick={() => stepRelicLevel(r.slot, "up")}>+</button>
                           </div>
                         </div>
                         {#if growthKeys.length > 0}
@@ -1429,7 +1433,7 @@
                               <div class="enchant-stat" use:changed={() => String(partOf(r.slot)?.base[k] ?? 0)}>
                                 <span class="enchant-stat-label">{EQUIPMENT_STAT_SHORT[k]}</span>
                                 <NumberField
-                                  label="{EQUIPMENT_STAT_SHORT[k]}の補正値"
+                                  label={t("{stat}の補正値", { stat: EQUIPMENT_STAT_SHORT[k] })}
                                   min={item!.values_min[k]} max={item!.growth_caps![k]}
                                   bind:value={
                                     () => partOf(r.slot)?.base[k] ?? 0,
@@ -1440,7 +1444,7 @@
                             {/each}
                           </div>
                           {#if !rs.growth_done}
-                            <p class="relic-hint dim">補正値が上限まで届くと次の段へ進めます</p>
+                            <p class="relic-hint dim">{t("補正値が上限まで届くと次の段へ進めます")}</p>
                           {/if}
                         {:else}
                           <span class="expand-row-vals num dim">{valuesSummary(partTotalValues(r.slot), part!.enchant)}</span>
@@ -1448,7 +1452,7 @@
                       </div>
                     {:else}
                       <button type="button" class="expand-nav" onclick={() => focusCharacterSource("equipment", r.slot)}>
-                        <span class="badge" style={badgeStyle({ label: "未設定", state: "edge" })}>未設定</span>
+                        <span class="badge" style={badgeStyle({ label: t("未設定"), state: "edge" })}>{t("未設定")}</span>
                         <span class="chev dim">›</span>
                       </button>
                     {/if}
@@ -1459,27 +1463,27 @@
           </div>
         {/if}
 
-        <button type="button" class="cta tile-more" onclick={() => (app.tab = "chars")}>そのほかの設定(武器・鎧の強化・ペット・ルーン・バフ) ›</button>
+        <button type="button" class="cta tile-more" onclick={() => (app.tab = "chars")}>{t("そのほかの設定(武器・鎧の強化・ペット・ルーン・バフ) ›")}</button>
       </div>
 
 
       <!-- ===== どこまでいける?: 畳み既定。エリア 4 行 → 押すと直下に一覧が展開(§09 規則 1) ===== -->
       <Disclosure class="fold reach-fold">
         {#snippet summary()}
-          <span class="area-name">どこまでいける?</span>
+          <span class="area-name">{t("どこまでいける?")}</span>
           <span class="fold-count">
-            クリア済み <Value motion={() => clearedCount} value={fmtInt(clearedCount)} />
+            {t("クリア済み")} <Value motion={() => clearedCount} value={fmtInt(clearedCount)} />
             <span class="dim">/ {fmtInt(totalCount)}</span>
           </span>
           {#if uncoveredCount > 0}
-            <span class="fold-note dim">未収録 <span class="num">{fmtInt(uncoveredCount)}</span></span>
+            <span class="fold-note dim">{t("未収録")} <span class="num">{fmtInt(uncoveredCount)}</span></span>
           {/if}
         {/snippet}
         <div class="fold-body">
           {#if !app.evaluations[character.id]}
             <div class="retry-row">
-              <span class="dim">到達判定を取得できていません。</span>
-              <button type="button" class="btn" onclick={() => character && refreshEvaluation(character)}>再判定</button>
+              <span class="dim">{t("到達判定を取得できていません。")}</span>
+              <button type="button" class="btn" onclick={() => character && refreshEvaluation(character)}>{t("再判定")}</button>
             </div>
           {/if}
           <div class="areas">
@@ -1488,7 +1492,7 @@
               {@const okCount = shown.filter((r) => r.ev?.clear).length}
               <Disclosure class="area" summaryClass="mini-row">
                 {#snippet summary()}
-                  <span class="mini-row-name">{area.name}</span>
+                  <span class="mini-row-name">{t(area.name)}</span>
                   <span class="meter mini-row-meter">
                     <span
                       class="fill"
@@ -1514,44 +1518,44 @@
                         onkeydown={(e) => e.key === "Enter" && openInCalc(r.content.id)}
                       >
                         {#if r.content.id === frontierId}
-                          <div class="frontier">次はここ</div>
+                          <div class="frontier">{t("次はここ")}</div>
                         {/if}
                         <div class="row-main">
                           <!-- コンテンツの絵(ゲーム内のコンテンツ一覧と同じ絵)。行頭の枠は
                                サイズ固定なので、未収録のコンテンツが混ざっても行の高さは動かない -->
-                          <Icon kind="content" id={r.content.id} fallback={{ kind: "mob", id: r.content.enemy_id }} size={28} label={r.content.name} />
+                          <Icon kind="content" id={r.content.id} fallback={{ kind: "mob", id: r.content.enemy_id }} size={28} label={t(r.content.name)} />
                           <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。完全な行には出さない -->
-                          {#if cov !== null}<span class="badge unknown">{cov}</span>{/if}
+                          {#if cov !== null}<span class="badge unknown">{t(cov)}</span>{/if}
                           {#if r.content.series}
                             {@const series = r.content.series}
                             {@const list = seriesRowsOf(series.id)}
                             {@const maxStep = list[list.length - 1]?.content.series?.step ?? series.step}
-                            <span class="name">{series.name}</span>
+                            <span class="name">{t(series.name)}</span>
                             <span class="series-stepper">
                               <button
-                                type="button" class="st" aria-label="難易度を下げる"
+                                type="button" class="st" aria-label={t("難易度を下げる")}
                                 disabled={series.step <= (list[0]?.content.series?.step ?? series.step)}
                                 onclick={(e) => stepSeries(e, series.id, -1)}
                               >◀</button>
-                              <span class="st-label num">難易度 {series.step} / {maxStep}</span>
+                              <span class="st-label num">{t("難易度 {v} / {max}", { v: series.step, max: maxStep })}</span>
                               <button
-                                type="button" class="st" aria-label="難易度を上げる"
+                                type="button" class="st" aria-label={t("難易度を上げる")}
                                 disabled={series.step >= maxStep}
                                 onclick={(e) => stepSeries(e, series.id, 1)}
                               >▶</button>
                             </span>
                           {:else}
-                            <span class="name">{r.content.name}</span>
+                            <span class="name">{t(r.content.name)}</span>
                           {/if}
-                          <Value class="dmg" motion={() => r.ev?.damage?.per_hit_primary ?? null} value={r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"} title="表記ダメージ(スキル分のみ)" />
+                          <Value class="dmg" motion={() => r.ev?.damage?.per_hit_primary ?? null} value={r.ev?.damage ? fmtInt(r.ev.damage.per_hit_primary) : "—"} title={t("表記ダメージ(スキル分のみ)")} />
                           <span class="chev dim">›</span>
                         </div>
                         <div class="row-bar">
                           <div class="meter"><div class="fill" style="width: {pctOf(r)}; background: {STATE[BADGE[st].state].bar};"></div></div>
                           {#if r.content.enemy_id === null}
-                            <span class="need num dim">入場条件のみ</span>
+                            <span class="need num dim">{t("入場条件のみ")}</span>
                           {:else}
-                            <span class="need num dim">目安 {fmtDuration(closeSeconds)}以内</span>
+                            <span class="need num dim">{t("目安 {v}以内", { v: fmtDuration(closeSeconds) })}</span>
                             {#if r.ev?.reach === "comfortable" && r.ev.damage?.defeat_seconds != null}
                               <span class="over num">{fmtDuration(r.ev.damage.defeat_seconds)}</span>
                             {/if}
@@ -1562,7 +1566,7 @@
                           <span class="entry-dot" style="background: {r.content.requirements.length === 0 ? STATE.unknown.bd : r.ev?.entry_ok ? STATE.met.bd : STATE.short.bd};"></span>
                           <span class="note-text" class:unmet={note.unmet}>{note.text}</span>
                           {#if r.content.team_note}
-                            <span class="team" title="チーム条件: {r.content.team_note}">チーム</span>
+                            <span class="team" title={t("チーム条件: {v}", { v: t(r.content.team_note) })}>{t("チーム")}</span>
                           {/if}
                         </div>
                       </div>
@@ -1577,9 +1581,9 @@
       </Disclosure>
 
       <p class="foot dim">
-        入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。
-        火力は「ソロで倒しきるまでの時間」で見ます({fmtDuration(tables.reach_seconds.comfortable)}以内 = 余裕、{fmtDuration(tables.reach_seconds.reached)}以内 = 通る、{fmtDuration(closeSeconds)}以内 = ぎりぎり)。
-        敵の HP はユーザー提供の実測表が出典で、PT 時の HP 増加は入っていません。
+        {t("入場条件は swiki「コンテンツ入場条件」由来。装備条件は使うスキルの依存(突き/斬り/魔攻/魔防/複合)で比較先が変わります。")}
+        {t("火力は「ソロで倒しきるまでの時間」で見ます({comfortable}以内 = 余裕、{reached}以内 = 通る、{close}以内 = ぎりぎり)。", { comfortable: fmtDuration(tables.reach_seconds.comfortable), reached: fmtDuration(tables.reach_seconds.reached), close: fmtDuration(closeSeconds) })}
+        {t("敵の HP はユーザー提供の実測表が出典で、PT 時の HP 増加は入っていません。")}
       </p>
     {/if}
     </div>
@@ -1588,26 +1592,26 @@
          更新が来ているときだけ、いちばん上にその 1 行を出す(§00 02 要らないものを見せない) -->
     <aside class="rail">
       <div class="rail-head">
-        <span class="area-name">お知らせ</span>
+        <span class="area-name">{t("お知らせ")}</span>
         <span class="area-rule"></span>
       </div>
       {#if updater.status === "available"}
         <button type="button" class="rail-update" onclick={() => void installUpdate()}>
-          <span class="rn-flag update-flag">更新</span>
-          <span class="rail-update-text">新しい版 v{updater.version} があります</span>
+          <span class="rn-flag update-flag">{t("更新")}</span>
+          <span class="rail-update-text">{t("新しい版 v{version} があります", { version: updater.version })}</span>
           <span class="chev dim">›</span>
         </button>
       {:else if updater.status === "ready"}
         <button type="button" class="rail-update done" onclick={() => void restartApp()}>
-          <span class="rn-flag update-flag">更新</span>
-          <span class="rail-update-text">v{updater.version} を入れました — 再起動して使う</span>
+          <span class="rn-flag update-flag">{t("更新")}</span>
+          <span class="rail-update-text">{t("v{version} を入れました — 再起動して使う", { version: updater.version })}</span>
           <span class="chev dim">›</span>
         </button>
       {:else if updater.status === "downloading" || updater.status === "installing"}
         <div class="rail-update">
-          <span class="rn-flag update-flag">更新</span>
+          <span class="rn-flag update-flag">{t("更新")}</span>
           <Value class="rail-update-text" motion={() => updater.percent}
-            value={`v${updater.version} を${updater.status === "installing" ? "入れています" : "落としています"} ${updater.percent >= 0 ? `${updater.percent}%` : "…"}`} />
+            value={t("v{version} を{action} {pct}", { version: updater.version, action: updater.status === "installing" ? t("入れています") : t("落としています"), pct: updater.percent >= 0 ? `${updater.percent}%` : "…" })} />
         </div>
       {/if}
       {#if latestRelease}
@@ -1628,16 +1632,16 @@
           {/each}
         </div>
         {#if railRestCount > 0}
-          <span class="rail-more dim">この版の残り {fmtInt(railRestCount)} 件</span>
+          <span class="rail-more dim">{t("この版の残り {n} 件", { n: fmtInt(railRestCount) })}</span>
         {/if}
       {/if}
       {#if news.knownIssues.length > 0}
         <div class="rail-issue">
-          <span class="rn-flag issue">不具合</span>
-          <span class="rail-text">既知の不具合 <span class="num">{fmtInt(news.knownIssues.length)}</span> 件</span>
+          <span class="rn-flag issue">{t("不具合")}</span>
+          <span class="rail-text">{t("既知の不具合")} <span class="num">{fmtInt(news.knownIssues.length)}</span> {t("件")}</span>
         </div>
       {/if}
-      <button type="button" class="cta rail-all" onclick={() => (app.tab = "news")}>お知らせをぜんぶ見る ›</button>
+      <button type="button" class="cta rail-all" onclick={() => (app.tab = "news")}>{t("お知らせをぜんぶ見る ›")}</button>
     </aside>
   </div>
 </div>

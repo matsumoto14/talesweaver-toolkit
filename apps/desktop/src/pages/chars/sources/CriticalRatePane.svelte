@@ -12,6 +12,7 @@
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import type { SourceId } from "../sourceId";
   import ExternalSourceList, { type ExternalSource } from "./ExternalSourceList.svelte";
+  import { t } from "../../../i18n";
 
   interface Props {
     draft: Draft;
@@ -44,65 +45,61 @@
   const criticalFromOthers = $derived<ExternalSource[]>([
     {
       id: "equipment",
-      name: "装備クリティカル補正",
+      name: t("装備クリティカル補正"),
       value: equipmentCriticalTotal,
       format: (v) => fmtSigned(v),
-      note: "(装備クリティカル補正 + 1) × 2 の項",
+      note: t("(装備クリティカル補正 + 1) × 2 の項"),
     },
     {
       id: "status",
-      name: "AGI(最終能力値)",
+      name: t("AGI(最終能力値)"),
       value: preview?.stats.agi ?? 0,
       format: (v) => fmtInt(v),
-      note: "AGI /(AGI + 対象のAGI)の項",
+      note: t("AGI /(AGI + 対象のAGI)の項"),
     },
     {
       id: "status",
-      name: "主軸スキルの Cri値",
+      name: t("主軸スキルの Cri値"),
       value: mainSkill?.critical_rate ?? 0,
       format: (v) => fmtSigned(v, { max: 2 }, "%"),
       note: mainSkill
         ? mainSkill.critical_rate === null
-          ? `${mainSkill.name} は wiki 未記載`
-          : mainSkill.name
-        : "主軸スキル未選択",
+          ? t("{name} は wiki 未記載", { name: t(mainSkill.name) })
+          : t(mainSkill.name)
+        : t("主軸スキル未選択"),
     },
     {
       id: "siena",
-      name: "シエナのオーラのクリティカル確率",
+      name: t("シエナのオーラのクリティカル確率"),
       value: preview?.siena_critical_rate ?? 0,
       format: (v) => fmtRate(1 + v),
-      note: "AGI 由来の項に乗算。下の合計には入らない",
+      note: t("AGI 由来の項に乗算。下の合計には入らない"),
     },
   ]);
 </script>
 
 <div class="card">
   <p class="hint dim">
-    wiki「計算式まとめ <b>#CriticalChance</b>」。クリティカル率は
-    <b>(装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象のAGI)) × ペット会心
-    ＋ スキルの Cri値 ＋ クリティカル率増加 ＋ 対象のクリティカル被撃率</b>で、下限 {limits.critical_rate_min}% / 上限 {limits.critical_rate_max}%。
-    装備クリティカル補正・AGI・スキルの Cri値は登録済みのデータから自動で入るので、
-    ここで選ぶのは<b>ペット会心と「クリティカル率増加」</b>だけです(自動で入る分は下に出します)。
-    対象のAGI とクリティカル被撃率は wiki 狩り場情報一覧に値がある敵だけに入っているので、
-    計算タブでは<b>その敵を選んだときだけ</b>クリティカル率が出ます。
+    {t("wiki「計算式まとめ")} <b>#CriticalChance</b>{t("」。クリティカル率は")}
+    <b>{t("(装備クリティカル補正 + 1) × 2 × (AGI / (AGI + 対象のAGI)) × ペット会心 ＋ スキルの Cri値 ＋ クリティカル率増加 ＋ 対象のクリティカル被撃率")}</b>{t("で、下限 {min}% / 上限 {max}%。", { min: limits.critical_rate_min, max: limits.critical_rate_max })}
+    {t("装備クリティカル補正・AGI・スキルの Cri値は登録済みのデータから自動で入るので、 ここで選ぶのは")}<b>{t("ペット会心と「クリティカル率増加」")}</b>{t("だけです(自動で入る分は下に出します)。 対象のAGI とクリティカル被撃率は wiki 狩り場情報一覧に値がある敵だけに入っているので、 計算タブでは")}<b>{t("その敵を選んだときだけ")}</b>{t("クリティカル率が出ます。")}
   </p>
   <div class="toggle-list">
     <ToggleRow
-      name="ペット会心"
+      name={t("ペット会心")}
       value={`×${limits.pet_critical_rate}`}
       on={draft.statSources.critical_rate.pet}
       onToggle={() => (draft.statSources.critical_rate.pet = !draft.statSources.critical_rate.pet)}
     />
     <ToggleRow
-      name="極のルーン"
-      cond="最大レベル時"
+      name={t("極のルーン")}
+      cond={t("最大レベル時")}
       value={fmtSigned(limits.ultimate_rune_bonus_max, { max: 2 }, "%")}
       on={draft.statSources.critical_rate.ultimate_rune}
       onToggle={() => (draft.statSources.critical_rate.ultimate_rune = !draft.statSources.critical_rate.ultimate_rune)}
     />
     <ToggleRow
-      name="致命打"
+      name={t("致命打")}
       value={fmtSigned(limits.deadly_blow_bonus_max, { max: 2 }, "%")}
       on={draft.statSources.critical_rate.deadly_blow}
       onToggle={() => (draft.statSources.critical_rate.deadly_blow = !draft.statSources.critical_rate.deadly_blow)}
@@ -112,11 +109,11 @@
        オン/オフだと 1〜9 段階の人が入力できない。チェックの列は割らずに下へ置く -->
   <div class="lab-field">
     <span class="lab-label">
-      設計者の研究室
-      <span class="lab-note">B グループの研究段階(0 = 未研究)・ 1 段階 {fmtSigned(limits.architect_lab_per_stage, { max: 2 }, "%")}</span>
+      {t("設計者の研究室")}
+      <span class="lab-note">{t("B グループの研究段階(0 = 未研究)・ 1 段階 {v}", { v: fmtSigned(limits.architect_lab_per_stage, { max: 2 }, "%") })}</span>
     </span>
     <Choose
-      label="設計者の研究室の研究段階"
+      label={t("設計者の研究室の研究段階")}
       options={architectLabOptions}
       cols={architectLabOptions.length}
       cell={34}
@@ -128,10 +125,10 @@
     <Value class="lab-value" motion={() => architectLabBonus} value={architectLabBonus > 0 ? fmtSigned(architectLabBonus, { max: 2 }, "%") : "—"} />
   </div>
   <p class="hint dim">
-    クリティカル率増加の合計: <b>{fmtSigned(Math.min(limits.critical_rate_bonus_max, criticalRateBonus), { max: 2 }, "%")}</b>
-    {#if criticalRateBonus > limits.critical_rate_bonus_max}(上限 {fmtSigned(limits.critical_rate_bonus_max, { max: 2 }, "%")} で頭打ち){/if}
+    {t("クリティカル率増加の合計:")} <b>{fmtSigned(Math.min(limits.critical_rate_bonus_max, criticalRateBonus), { max: 2 }, "%")}</b>
+    {#if criticalRateBonus > limits.critical_rate_bonus_max}{t("(上限 {max} で頭打ち)", { max: fmtSigned(limits.critical_rate_bonus_max, { max: 2 }, "%") })}{/if}
     <br />
-    値が不定の「バフ」、被撃率B(対人)、最終クリティカル率増加は未収録です。
+    {t("値が不定の「バフ」、被撃率B(対人)、最終クリティカル率増加は未収録です。")}
   </p>
 </div>
-<ExternalSourceList rows={criticalFromOthers} title="ほかの補正源から自動で入る分" {onOpenSource} />
+<ExternalSourceList rows={criticalFromOthers} title={t("ほかの補正源から自動で入る分")} {onOpenSource} />

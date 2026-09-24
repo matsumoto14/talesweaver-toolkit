@@ -13,6 +13,7 @@ import init, { invoke as callWasm } from "tw-web";
 import { version as appVersion } from "../../package.json";
 import * as store from "./browserStore";
 import type { BuffSelection, CharacterSkills, NewCharacter } from "./types";
+import { t } from "../i18n";
 
 /**
  * 「追加機能の解除」で取得した追加装備(unlock.svelte.ts)。デスクトップ版は Rust 側が
@@ -72,7 +73,7 @@ const stored: Record<string, (args: Args) => Promise<unknown>> = {
   /** 保存先は OS のパスではない。ブラウザの中だと正直に言う(端末のパスを返すと嘘になる) */
   get_app_info: async () => ({
     version: appVersion,
-    databasePath: "このブラウザの中(IndexedDB: tw-context)",
+    databasePath: t("このブラウザの中(IndexedDB: tw-context)"),
   }),
   /** ブラウザ版にはバックアップからの復元がないので、起動時に伝えることがない */
   get_startup_notice: async () => null,

@@ -12,6 +12,7 @@
   import ToggleRow from "../../../ui/ToggleRow.svelte";
   import type { SourceId } from "../sourceId";
   import ExternalSourceList, { type ExternalSource } from "./ExternalSourceList.svelte";
+  import { t } from "../../../i18n";
 
   interface Props {
     draft: Draft;
@@ -54,50 +55,50 @@
 
   /** 中ディレイ減少に、この補正源の外から入ってくる分 */
   const delayFromOthers = $derived<ExternalSource[]>([
-    { id: "commonSkill", name: "フルスロットル(共通スキル)", value: fullThrottlePercent, format: (v) => fmtSigned(-v, { max: 2 }, "%") },
+    { id: "commonSkill", name: t("フルスロットル(共通スキル)"), value: fullThrottlePercent, format: (v) => fmtSigned(-v, { max: 2 }, "%") },
     {
       id: "skills",
-      name: "マスタリー(キャラスキル)",
+      name: t("マスタリー(キャラスキル)"),
       value: masteryDelayPercent,
       format: (v) => fmtSigned(-v, { max: 2 }, "%"),
-      note: "段ごとに 1 つ。中ディレイ以外に効く選択肢もある",
+      note: t("段ごとに 1 つ。中ディレイ以外に効く選択肢もある"),
     },
     {
       id: "randomOption",
-      name: "ランダムOP(カフス)",
+      name: t("ランダムOP(カフス)"),
       value: pct(preview?.random_option_totals.actual_delay_reduction ?? 0),
       format: (v) => fmtSigned(-v, { max: 2 }, "%"),
     },
-    { id: "siena", name: "シエナのオーラ", value: pct(preview?.siena_actual_delay_rate ?? 0), format: (v) => fmtSigned(-v, { max: 2 }, "%") },
+    { id: "siena", name: t("シエナのオーラ"), value: pct(preview?.siena_actual_delay_rate ?? 0), format: (v) => fmtSigned(-v, { max: 2 }, "%") },
   ]);
 </script>
 
 <div class="card">
   <p class="hint dim">
-    wiki「ステータス」の<b>中ディレイ倍率B</b>。中ディレイは
-    <b>基本中ディレイ × (1 − 減少値) ×(コンボするなら 0.5)</b>で、下限 {fmtNum(limits.actual_delay_min, 1, "s")}・減少値の上限 {fmtPct(limits.actual_delay_reduction_max)}。
-    ここで選ぶのは<b>このキャラのスキル</b>だけです
-    (マスタリーは段ごとに 1 つで中ディレイ以外にも効くので、キャラスキルの欄にまとめてあります)。
-    中ディレイと 1 秒あたりの火力は計算タブに出ます。
+    {t("wiki「ステータス」の")}<b>{t("中ディレイ倍率B")}</b>{t("。中ディレイは")}
+    <b>{t("基本中ディレイ × (1 − 減少値) ×(コンボするなら 0.5)")}</b>{t("で、下限 {min}・減少値の上限 {max}。", {
+      min: fmtNum(limits.actual_delay_min, 1, "s"), max: fmtPct(limits.actual_delay_reduction_max),
+    })}
+    {t("ここで選ぶのは")}<b>{t("このキャラのスキル")}</b>{t("だけです (マスタリーは段ごとに 1 つで中ディレイ以外にも効くので、キャラスキルの欄にまとめてあります)。 中ディレイと 1 秒あたりの火力は計算タブに出ます。")}
   </p>
   <div class="toggle-list">
     {#if delaySkills.length === 0}
-      <p class="empty dim">このキャラには中ディレイ減少のスキルがありません(wiki の表に記載なし)。</p>
+      <p class="empty dim">{t("このキャラには中ディレイ減少のスキルがありません(wiki の表に記載なし)。")}</p>
     {/if}
     {#each delaySkills as def (def.id)}
       {@const label = effectLabel(resolvedEffectsOf(def.id, resolvedSkillEffects))}
       <ToggleRow
-        name={def.name}
-        cond={def.note || undefined}
-        value={label ?? "マスタリー未取得"}
-        title={def.note || undefined}
+        name={t(def.name)}
+        cond={def.note ? t(def.note) : undefined}
+        value={label ?? t("マスタリー未取得")}
+        title={def.note ? t(def.note) : undefined}
         on={skillChecked(def.id)}
         onToggle={() => toggleCharSkill(def.id, !skillChecked(def.id))}
       />
     {/each}
   </div>
   {#if delaySkillPercent > 0}
-    <p class="hint dim">このキャラのスキルぶん: <b>{fmtSigned(-delaySkillPercent, { max: 2 }, "%")}</b></p>
+    <p class="hint dim">{t("このキャラのスキルぶん:")} <b>{fmtSigned(-delaySkillPercent, { max: 2 }, "%")}</b></p>
   {/if}
 </div>
-<ExternalSourceList rows={delayFromOthers} title="ほかの補正源から入る分" {onOpenSource} />
+<ExternalSourceList rows={delayFromOthers} title={t("ほかの補正源から入る分")} {onOpenSource} />

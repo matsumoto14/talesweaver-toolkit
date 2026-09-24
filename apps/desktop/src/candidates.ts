@@ -3,14 +3,15 @@
 // list_upgrade_candidates コマンド)に移した。ここは cost タグの表示だけ残す。
 import type { CandidateCost } from "./api/types";
 import { STATE } from "./ui/states";
+import { t } from "./i18n";
 
 /** cost タグの表示文字列(日本語)。 */
 export const COST_LABELS: Record<CandidateCost, string> = {
-  quick_win: "すぐできる",
-  enchant: "エンチャント",
-  equipment_update: "装備更新",
-  enhance: "強化",
-  aura: "オーラ強化",
+  quick_win: t("すぐできる"),
+  enchant: t("エンチャント"),
+  equipment_update: t("装備更新"),
+  enhance: t("強化"),
+  aura: t("オーラ強化"),
 };
 
 /** cost タグ → [面, 枠, 文字]。状態の 6 系統をそのまま流用する(design-system §03) */

@@ -1,14 +1,15 @@
 // クリ率の段階表示(6 段)。計算タブとホームのスポットライトで共有する。
 // design-system の状態色の段に収める(新しい色は作らない)。
+import { t } from "../i18n";
 import type { StateKey } from "./states";
 
 export const CRIT_CHANCE_STAGES: { max: number; label: string; state: StateKey }[] = [
-  { max: 0, label: "出ない", state: "unknown" },
-  { max: 25, label: "まれ", state: "short" },
-  { max: 50, label: "ときどき", state: "edge" },
-  { max: 75, label: "半分以上", state: "edge" },
-  { max: 100, label: "ほぼ確定", state: "met" },
-  { max: Infinity, label: "確定", state: "goal" },
+  { max: 0, label: t("出ない"), state: "unknown" },
+  { max: 25, label: t("まれ"), state: "short" },
+  { max: 50, label: t("ときどき"), state: "edge" },
+  { max: 75, label: t("半分以上"), state: "edge" },
+  { max: 100, label: t("ほぼ確定"), state: "met" },
+  { max: Infinity, label: t("確定"), state: "goal" },
 ];
 
 /** クリ率(%)→ 段階。閾値は「言葉の実感」に合わせた区切りで、判定には使わない */

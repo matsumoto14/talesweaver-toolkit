@@ -29,6 +29,7 @@
   import { tick, untrack } from "svelte";
   import Value from "../../../ui/Value.svelte";
   import { randomOptionRecordOnlyCount } from "../summaries";
+  import { t } from "../../../i18n";
 
   interface Props {
     draft: Draft;
@@ -44,8 +45,8 @@
    * 集計は Rust 側(preview.random_option_totals)。ここは効き先の日本語ラベルへの対応づけだけ
    */
   const roTotals = $derived.by<{ label: string; value: string }[]>(() => {
-    const t = preview?.random_option_totals;
-    if (!t) return [];
+    const totals = preview?.random_option_totals;
+    if (!totals) return [];
     const rows: { label: string; value: string }[] = [];
     const addPercent = (label: string, v: number) => {
       if (v === 0) return;
@@ -56,21 +57,21 @@
       rows.push({ label, value: fmtSigned(v, { max: 3 }) });
     };
     for (const dep of SKILL_DEPENDENCIES) {
-      addPercent(`与ダメージ増加(${SKILL_DEPENDENCY_LABELS[dep]})`, t.dependency_damage_rate[dep]);
+      addPercent(t("与ダメージ増加({dep})", { dep: SKILL_DEPENDENCY_LABELS[dep] }), totals.dependency_damage_rate[dep]);
     }
-    addPercent("攻撃ダメージ増加", t.attack_damage_rate);
-    addPercent("割合追加ダメージ", t.added_damage_rate);
-    addPercent("割合追加ダメージ(物理依存)", t.physical_added_damage_rate);
-    addPercent("割合追加ダメージ(魔法依存)", t.magic_added_damage_rate);
-    addPercent("ダメージ増幅(物理依存)", t.physical_damage_amplify);
-    addPercent("ダメージ増幅(魔法依存)", t.magic_damage_amplify);
-    addPoint("命中P", t.accuracy_point);
-    addPoint("回避P", t.evasion_point);
-    if (t.actual_delay_reduction !== 0) {
-      rows.push({ label: "中ディレイ", value: fmtSignedPct(-t.actual_delay_reduction, { max: 2 }) });
+    addPercent(t("攻撃ダメージ増加"), totals.attack_damage_rate);
+    addPercent(t("割合追加ダメージ"), totals.added_damage_rate);
+    addPercent(t("割合追加ダメージ(物理依存)"), totals.physical_added_damage_rate);
+    addPercent(t("割合追加ダメージ(魔法依存)"), totals.magic_added_damage_rate);
+    addPercent(t("ダメージ増幅(物理依存)"), totals.physical_damage_amplify);
+    addPercent(t("ダメージ増幅(魔法依存)"), totals.magic_damage_amplify);
+    addPoint(t("命中P"), totals.accuracy_point);
+    addPoint(t("回避P"), totals.evasion_point);
+    if (totals.actual_delay_reduction !== 0) {
+      rows.push({ label: t("中ディレイ"), value: fmtSignedPct(-totals.actual_delay_reduction, { max: 2 }) });
     }
-    if (t.min_evasion_rate !== 0) {
-      rows.push({ label: "最小回避率補正", value: fmtSigned(t.min_evasion_rate, { max: 2 }, "%") });
+    if (totals.min_evasion_rate !== 0) {
+      rows.push({ label: t("最小回避率補正"), value: fmtSigned(totals.min_evasion_rate, { max: 2 }, "%") });
     }
     return rows;
   });
@@ -164,8 +165,8 @@
   const otherPickerOptions = $derived<PickerOption[]>(
     otherAddable.map((d) => ({
       value: d.id,
-      name: d.name,
-      meta: `カテゴリー${d.category} ・ ${randomOptionEffectLabel(d.effect)}`,
+      name: t(d.name),
+      meta: t("カテゴリー{category} ・ {effect}", { category: d.category, effect: t(randomOptionEffectLabel(d.effect)) }),
     })),
   );
   function addRandomOption(slot: PartSlot, id: string) {
@@ -214,14 +215,14 @@
   {@const part = selectedPartOrNull(slot)}
   {#if part === null}
     <div class="empty-note">
-      <span>先にこの部位の装備を登録してください。</span>
-      <Chip onclick={() => onOpenSource("equipment")}>装備へ ›</Chip>
+      <span>{t("先にこの部位の装備を登録してください。")}</span>
+      <Chip onclick={() => onOpenSource("equipment")}>{t("装備へ ›")}</Chip>
     </div>
   {:else}
   {#each part.random_options as option, index (option.option_id)}
     {@const def = randomOptionDef(option.option_id)}
     {#if def}
-      {@const t = tierOf(def, option.rank)}
+      {@const tier = tierOf(def, option.rank)}
       <!-- 1 OP 1 行。名前 / ランク / 効果値 / 外す を列でそろえる(§00 01) -->
       <div
         class="ro-row"
@@ -229,12 +230,12 @@
         data-option-id={option.option_id}
         use:changed={() => focusToken(option.option_id)}
       >
-        <span class="ro-name" title={def.name}>{def.name}</span>
-        <button type="button" class="clear" onclick={() => removeRandomOption(slot, index)}>外す</button>
+        <span class="ro-name" title={t(def.name)}>{t(def.name)}</span>
+        <button type="button" class="clear" onclick={() => removeRandomOption(slot, index)}>{t("外す")}</button>
         <!-- ランクは言葉なので幅は中身なり。ふだんは Special / S・真 だけ -->
         <span class="ro-rank">
           <Choose
-            label="{def.name}のランク"
+            label={t("{name}のランク", { name: t(def.name) })}
             options={rankOptionsNow(def, option.rank)}
             bind:value={
               () => option.rank,
@@ -245,19 +246,19 @@
             <Chip class="quiet"
  on={rankAllOpen}
  onToggle={() => (rankAllOpen = !rankAllOpen)}
-            >{rankAllOpen ? "上位だけ" : "下位も"}</Chip>
+            >{rankAllOpen ? t("上位だけ") : t("下位も")}</Chip>
           {/if}
         </span>
         <NumberField
-          label="{def.name}の値"
-          min={t ? t.min : 0}
-          max={t ? t.max : limits.random_option_value_max}
-          step={t && Number.isInteger(t.min) && Number.isInteger(t.max) ? 1 : 0.5}
-          format={t ? () => `wiki ${t.min}–${t.max}` : undefined}
+          label={t("{name}の値", { name: t(def.name) })}
+          min={tier ? tier.min : 0}
+          max={tier ? tier.max : limits.random_option_value_max}
+          step={tier && Number.isInteger(tier.min) && Number.isInteger(tier.max) ? 1 : 0.5}
+          format={tier ? () => t("wiki {min}–{max}", { min: tier.min, max: tier.max }) : undefined}
           bind:value={() => randomOptionValue(option, def), (v) => (option.value = v)}
         />
       </div>
-      {#if def.note}<p class="hint dim ro-note">{def.note}</p>{/if}
+      {#if def.note}<p class="hint dim ro-note">{t(def.note)}</p>{/if}
     {/if}
   {/each}
   {/if}
@@ -266,23 +267,20 @@
 <!-- 効いている量(結果)。ペイン自体が既に「ランダムOP」の名前を出しているので見出しは持たない -->
 {#if roTotals.length > 0 || roRecordOnly > 0}
   <div class="eq-summary num inset">
-    {#each roTotals as t (t.label)}
-      <span><span class="dim">{t.label}</span> <Value value={t.value} /></span>
+    {#each roTotals as row (row.label)}
+      <span><span class="dim">{row.label}</span> <Value value={row.value} /></span>
     {:else}
-      <span class="dim">計算に入る OP はまだありません</span>
+      <span class="dim">{t("計算に入る OP はまだありません")}</span>
     {/each}
   </div>
   {#if roRecordOnly > 0}
-    <p class="dim tiny">記録するだけの枠が {roRecordOnly} 件あります(発動条件付き・被ダメージ側)。</p>
+    <p class="dim tiny">{t("記録するだけの枠が {n} 件あります(発動条件付き・被ダメージ側)。", { n: roRecordOnly })}</p>
   {/if}
 {/if}
 <div class="card">
   <p class="hint dim">
-    wiki「ランダムオプション」。装備補正 9 値には乗らず、与ダメージ式のカテゴリ(依存別の与ダメージ増加・
-    攻撃ダメージ増加)や命中P・回避P に直接効きます。<b>同じカテゴリーの OP は 1 部位に 1 つだけ</b>です(wiki: 転移)。
-    効果値は触らなければレンジ上限で計算します(オプション変化石で振り直せるため)。
-    <b>収録しているのは火力・命中・回避に関係する OP だけ</b>で、HP・移動速度・経験値などは入れていません。
-    グレーの枠は<b>記録するだけ</b>(発動条件付き・未実装の概念)で計算には入りません。
+    {t("wiki「ランダムオプション」。装備補正 9 値には乗らず、与ダメージ式のカテゴリ(依存別の与ダメージ増加・ 攻撃ダメージ増加)や命中P・回避P に直接効きます。")}<b>{t("同じカテゴリーの OP は 1 部位に 1 つだけ")}</b>{t("です(wiki: 転移)。 効果値は触らなければレンジ上限で計算します(オプション変化石で振り直せるため)。")}
+    <b>{t("収録しているのは火力・命中・回避に関係する OP だけ")}</b>{t("で、HP・移動速度・経験値などは入れていません。 グレーの枠は")}<b>{t("記録するだけ")}</b>{t("(発動条件付き・未実装の概念)で計算には入りません。")}
   </p>
 </div>
 <!-- 部位を押すと**その行のすぐ下**に中身が開く(アコーディオン)。中身は枠 2 つ分の短い編集なので
@@ -311,11 +309,11 @@
                 <span
                   class="ro-badge"
                   class:record-only={!randomOptionIsApplied(def.effect)}
-                  title="{def.name}({randomOptionEffectLabel(def.effect)} {randomOptionValueLabel(o, def)})"
+                  title={t("{name}({effect} {value})", { name: t(def.name), effect: t(randomOptionEffectLabel(def.effect)), value: randomOptionValueLabel(o, def) })}
                 >{def.short}</span>
               {/if}
             {/each}
-            {#if count === 0}<span class="dim">なし</span>{/if}
+            {#if count === 0}<span class="dim">{t("なし")}</span>{/if}
           </span>
           {/snippet}
           {#snippet detail()}
@@ -327,14 +325,14 @@
             {#if selectedPartOrNull(slot) !== null && (selectedPartOrNull(slot)?.random_options.length ?? 0) < randomOptionSlots(slot)}
               <div class="ro-next swap-in">
                 <span class="ro-next-label">
-                  枠 {(selectedPartOrNull(slot)?.random_options.length ?? 0) + 1}
+                  {t("枠 {n}", { n: (selectedPartOrNull(slot)?.random_options.length ?? 0) + 1 })}
                   <span class="dim">/ {randomOptionSlots(slot)}</span>
                 </span>
                 {#if commonAddable.length > 0}
                   <div class="ro-common">
                     {#each commonAddable as o (o.id)}
                       <Chip class="add" onclick={() => addRandomOption(slot, o.id)}>
-                        ＋ {o.name}
+                        {t("＋ {name}", { name: t(o.name) })}
                       </Chip>
                     {/each}
                   </div>
@@ -342,9 +340,9 @@
                 {#if otherAddable.length > 0}
                   <div class="ro-add">
                     <Picker
-                      label="足すランダム OP"
+                      label={t("足すランダム OP")}
                       options={otherPickerOptions}
-                      note="ほかの OP(同じカテゴリーは 1 つまで)"
+                      note={t("ほかの OP(同じカテゴリーは 1 つまで)")}
                       menu
                       bind:value={() => "", (v) => { if (v !== "") addRandomOption(slot, v); }}
                     />
@@ -352,7 +350,7 @@
                 {/if}
               </div>
             {:else}
-              <p class="hint dim">枠は {randomOptionSlots(slot)} つまで。変えるときは外してから足します。</p>
+              <p class="hint dim">{t("枠は {n} つまで。変えるときは外してから足します。", { n: randomOptionSlots(slot) })}</p>
             {/if}
           </div>
           {/snippet}

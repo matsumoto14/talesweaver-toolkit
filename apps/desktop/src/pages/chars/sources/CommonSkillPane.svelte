@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../../../i18n";
   // 「commonSkill」補正源のペイン。キャラ横断のパッシブ(オーグメントが Lv の前提)。
   import type { StatKind, StatPreview, UltimateSkill } from "../../../api/types";
   import type { Draft } from "../../../draft";
@@ -36,7 +37,7 @@
     draft.commonSkills.ultimate.slots
       .filter((u) => u !== null)
       .map((u) => ULTIMATE_SKILL_LABELS[u])
-      .join(" / ") || "未習得",
+      .join(" / ") || t("未習得"),
   );
 
   // アンリーシュ(能力解放)。効き先は能力値倍率B。Lv6 以降はレインフォース(Lv5 まで)が前提。
@@ -54,8 +55,8 @@
       value: String(i),
       label:
         i === 0
-          ? `未習得(アンリーシュ Lv${limits.unleash_free_level_max} まで)`
-          : `Lv${i}(アンリーシュ Lv${i + limits.unleash_free_level_max} まで)`,
+          ? t("未習得(アンリーシュ Lv{n} まで)", { n: limits.unleash_free_level_max })
+          : t("Lv{lv}(アンリーシュ Lv{n} まで)", { lv: i, n: i + limits.unleash_free_level_max }),
     })),
   );
   const unleashStatOptions = STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }));
@@ -74,7 +75,7 @@
   const unleashLevelOptions = $derived(
     Array.from({ length: Math.min(limits.unleash_level_max, reinforceGate) + 1 }, (_, lv) => ({
       value: String(lv),
-      label: lv === 0 ? "未習得" : `Lv${lv}(${fmtSigned(UNLEASH_RATES[lv - 1], { max: 2 }, "%")})`,
+      label: lv === 0 ? t("未習得") : t("Lv{lv}({rate})", { lv, rate: fmtSigned(UNLEASH_RATES[lv - 1], { max: 2 }, "%") }),
     })),
   );
 
@@ -104,7 +105,7 @@
   const gatedLevelOptions = (max: number, label: (lv: number) => string) =>
     Array.from({ length: max + 1 }, (_, lv) => ({
       value: String(lv),
-      label: lv === 0 ? "未習得" : label(lv),
+      label: lv === 0 ? t("未習得") : label(lv),
       disabled: lv > augmentGate,
     })).filter((o) => !o.disabled);
   // 正は crates/domain/src/common_skill.rs の STRONG_WEAPON_RATE_PER_LEVEL
@@ -171,13 +172,13 @@
     const effects = preview?.common_skill.ultimate;
     const out: string[] = [];
     if (u.slots.includes("scope_eye")) {
-      out.push(`クリティカルダメージ ${fmtSignedPct(effects?.critical_damage_rate ?? 0)}`);
+      out.push(t("クリティカルダメージ {v}", { v: fmtSignedPct(effects?.critical_damage_rate ?? 0) }));
     }
     if (u.slots.includes("full_throttle")) {
-      out.push(`中ディレイ ${fmtSigned(-fullThrottlePercent, { max: 2 }, "%")}`);
+      out.push(t("中ディレイ {v}", { v: fmtSigned(-fullThrottlePercent, { max: 2 }, "%") }));
     }
     if (u.slots.includes("wide_focus")) {
-      out.push(`スキル範囲 ${fmtSigned(effects?.skill_range_bonus ?? 0)}`);
+      out.push(t("スキル範囲 {v}", { v: fmtSigned(effects?.skill_range_bonus ?? 0) }));
     }
     return out;
   });
@@ -186,33 +187,33 @@
 
 <!-- 効いている量(結果)。ペイン自体が既に「共通スキル」の名前を出しているので見出しは持たない -->
 <div class="eq-summary num inset">
-  <span><span class="dim">装備攻撃力強化</span> {fmtSigned(enhanceRatePercent, { max: 2 }, "%")}</span>
-  <span><span class="dim">装備防御力</span> 物 {defenseRatePercent.physical}% / 魔 {defenseRatePercent.magic}%</span>
-  <span><span class="dim">割合追加ダメージ</span> {fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}</span>
-  <span><span class="dim">アンリーシュ</span> {unleashSummary}</span>
+  <span><span class="dim">{t("装備攻撃力強化")}</span> {fmtSigned(enhanceRatePercent, { max: 2 }, "%")}</span>
+  <span><span class="dim">{t("装備防御力")}</span> {t("物")} {defenseRatePercent.physical}% / {t("魔")} {defenseRatePercent.magic}%</span>
+  <span><span class="dim">{t("割合追加ダメージ")}</span> {fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}</span>
+  <span><span class="dim">{t("アンリーシュ")}</span> {unleashSummary}</span>
 </div>
-<p class="dim tiny">オーグメント Lv{draft.commonSkills.augment_level} ・ 極限 {ultimatePicked}</p>
+<p class="dim tiny">{t("オーグメント Lv{lv} ・ 極限 {picked}", { lv: draft.commonSkills.augment_level, picked: ultimatePicked })}</p>
 
 <div class="card">
   <div class="card-title inline">
-    まず決める <span class="dim normal">人によって違うのはここ</span>
+    {t("まず決める")} <span class="dim normal">{t("人によって違うのはここ")}</span>
   </div>
   <div class="skill-fields">
     <SkillLevelField
-      label="オーグメント"
+      label={t("オーグメント")}
       options={augmentOptions}
       cols={augmentOptions.length}
       cell={36}
       value={String(draft.commonSkills.augment_level)}
       onChange={(v) => setAugmentLevel(Number(v))}
-      clearLabel="未習得"
+      clearLabel={t("未習得")}
       clearDisabled={draft.commonSkills.augment_level === 0}
       onClear={() => setAugmentLevel(0)}
     >
-      {#snippet icon()}<Icon kind="skill" id="common_augment" size={20} label="オーグメント" />{/snippet}
+      {#snippet icon()}<Icon kind="skill" id="common_augment" size={20} label={t("オーグメント")} />{/snippet}
     </SkillLevelField>
     <div class="skill-field">
-      <span class="k">極限スキル</span>
+      <span class="k">{t("極限スキル")}</span>
       <div class="ultimate-row">
         {#each ULTIMATE_SKILLS as u (u)}
           {@const on = draft.commonSkills.ultimate.slots.includes(u)}
@@ -232,23 +233,22 @@
     </div>
   </div>
   <p class="hint dim">
-    いまの効果:
+    {t("いまの効果:")}
     <b><Value value={ultimateEffectsText}>{#snippet children()}{ultimateEffectsText.length > 0 ? ultimateEffectsText : "—"}{/snippet}</Value></b>
   </p>
   <p class="hint dim">
-    wiki「Skill/共通」「Skill/極限」。<b>オーグメント</b>はストロングウェポン・プロテクトアーマー・
-    ハイパーリミットを Lv2 以上にするための前提で、下げるとそれに縛られる Lv も一緒に下がります。
+    {t("wiki「Skill/共通」「Skill/極限」。")}<b>{t("オーグメント")}</b>{t("はストロングウェポン・プロテクトアーマー・ ハイパーリミットを Lv2 以上にするための前提で、下げるとそれに縛られる Lv も一緒に下がります。")}
   </p>
 </div>
 
 <div class="card">
-  <div class="card-title inline">アンリーシュ(能力解放)</div>
+  <div class="card-title inline">{t("アンリーシュ(能力解放)")}</div>
   <div class="skill-fields">
     {#each draft.commonSkills.unleash as slot, i (i)}
       <div class="skill-field">
-        <span class="k"><Icon kind="skill" id="common_unleash" size={20} label="アンリーシュ" />枠 {i + 1}</span>
+        <span class="k"><Icon kind="skill" id="common_unleash" size={20} label={t("アンリーシュ")} />{t("枠 {n}", { n: i + 1 })}</span>
         <Choose
-          label="アンリーシュ枠 {i + 1} のステ"
+          label={t("アンリーシュ枠{name}のステ", { name: i + 1 })}
           options={unleashStatOptions}
           cols={unleashStatOptions.length}
           disabledValues={unleashDisabled(i)}
@@ -260,7 +260,7 @@
             class="clear"
             disabled={slot.stat === null}
             onclick={() => setUnleashStat(i, "")}
-          >未使用</button>
+          >{t("未使用")}</button>
         </span>
         <Value class="v" value={slot.stat === null ? "-" : `${UNLEASH_RATES[slot.level - 1]}`}
           >{#snippet children()}{slot.stat === null ? "—" : fmtSigned(UNLEASH_RATES[slot.level - 1], { max: 2 }, "%")}{/snippet}</Value
@@ -269,14 +269,12 @@
     {/each}
   </div>
   <p class="hint dim">
-    選んだステが<b>能力値倍率B</b>で増えます(<b>バフ込みの基本能力値 × 倍率</b>なので、
-    バフを盛るほど効きます)。<b>2 ステまで</b>で、同じステは 2 枠に入れられません。
-    Lv は取れる上限(いまは <b>Lv{unleashCap}</b> = {fmtSigned(UNLEASH_RATES[unleashCap - 1], { max: 2 }, "%")})で入ります。
+    {t("選んだステが")}<b>{t("能力値倍率B")}</b>{t("で増えます(")}<b>{t("バフ込みの基本能力値 × 倍率")}</b>{t("なので、バフを盛るほど効きます)。")}<b>{t("2 ステまで")}</b>{t("で、同じステは 2 枠に入れられません。Lv は取れる上限(いまは")} <b>Lv{unleashCap}</b> {t("= {rate})で入ります。", { rate: fmtSigned(UNLEASH_RATES[unleashCap - 1], { max: 2 }, "%") })}
   </p>
 </div>
 
 <div class="card">
-  <div class="card-title inline">シャープネスビジョン</div>
+  <div class="card-title inline">{t("シャープネスビジョン")}</div>
   <div class="skill-fields">
     <SkillLevelField
       label="Lv"
@@ -285,7 +283,7 @@
       cell={36}
       value={String(draft.commonSkills.sharpness_vision_level)}
       onChange={(v) => (draft.commonSkills.sharpness_vision_level = Number(v))}
-      clearLabel="未習得"
+      clearLabel={t("未習得")}
       clearDisabled={draft.commonSkills.sharpness_vision_level === 0}
       onClear={() => (draft.commonSkills.sharpness_vision_level = 0)}
       valueText={draft.commonSkills.sharpness_vision_level === 0
@@ -296,36 +294,35 @@
           ? null
           : SHARPNESS_RATES[draft.commonSkills.sharpness_vision_level - 1]}
     >
-      {#snippet icon()}<Icon kind="skill" id="common_sharpness_vision" size={20} label="シャープネスビジョン" />{/snippet}
+      {#snippet icon()}<Icon kind="skill" id="common_sharpness_vision" size={20} label={t("シャープネスビジョン")} />{/snippet}
       {#snippet extraAction()}
         {#if !sharpnessIsLow}
           <Chip class="quiet"
  on={sharpnessAllOpen}
  onToggle={() => (sharpnessAllOpen = !sharpnessAllOpen)}
-          >{sharpnessAllOpen ? "5 以上" : "1〜4"}</Chip>
+          >{sharpnessAllOpen ? t("5 以上") : t("1〜4")}</Chip>
         {/if}
       {/snippet}
     </SkillLevelField>
   </div>
   <p class="hint dim">
-    割合追加ダメージは<b>合計ダメージ</b>に乗ります(1 発ごとではありません)。
-    Lv6 以上は各 Lv の習得スクロールが要ります。
+    {t("割合追加ダメージは")}<b>{t("合計ダメージ")}</b>{t("に乗ります(1 発ごとではありません)。 Lv6 以上は各 Lv の習得スクロールが要ります。")}
   </p>
 </div>
 
 <div class="card">
   <div class="card-title inline">
-    ほぼ全員が同じ設定 <span class="dim normal">取り切っている前提で入れてあります</span>
+    {t("ほぼ全員が同じ設定")} <span class="dim normal">{t("取り切っている前提で入れてあります")}</span>
   </div>
   <Disclosure class="fold">
-    {#snippet summary()}取っていない・Lv が違うときだけ開く(8 項目){/snippet}
+    {#snippet summary()}{t("取っていない・Lv が違うときだけ開く(8 項目)")}{/snippet}
     <!-- 開いた先も上と同じ形。ラベル / 段 / 操作 / 効いている値の 4 列でそろえる -->
     <div class="fold-body skill-fields">
       <div class="skill-field">
-        <span class="k"><Icon kind="skill" id="common_power_weapon" size={20} label="パワーウェポン" />パワーウェポン</span>
+        <span class="k"><Icon kind="skill" id="common_power_weapon" size={20} label={t("パワーウェポン")} />{t("パワーウェポン")}</span>
         <span class="toggle-cell">
           <ToggleRow
-            name="取っている"
+            name={t("取っている")}
             value={draft.commonSkills.power_weapon ? fmtSignedPct(limits.power_weapon_rate) : "—"}
             on={draft.commonSkills.power_weapon}
             onToggle={() => (draft.commonSkills.power_weapon = !draft.commonSkills.power_weapon)}
@@ -333,28 +330,28 @@
         </span>
       </div>
       <SkillLevelField
-        label="ストロングウェポン"
+        label={t("ストロングウェポン")}
         options={strongWeaponLevels}
         cols={strongWeaponLevels.length}
         cell={36}
         disabledValues={strongWeaponLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
         value={String(draft.commonSkills.strong_weapon_level)}
         onChange={(v) => (draft.commonSkills.strong_weapon_level = Number(v))}
-        clearLabel="未習得"
+        clearLabel={t("未習得")}
         clearDisabled={draft.commonSkills.strong_weapon_level === 0}
         onClear={() => (draft.commonSkills.strong_weapon_level = 0)}
         valueText={draft.commonSkills.strong_weapon_level === 0 ? "—" : fmtSigned(draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL, { max: 2 }, "%")}
         motion={() => draft.commonSkills.strong_weapon_level * STRONG_WEAPON_RATE_PER_LEVEL}
       >
-        {#snippet icon()}<Icon kind="skill" id="common_strong_weapon" size={20} label="ストロングウェポン" />{/snippet}
+        {#snippet icon()}<Icon kind="skill" id="common_strong_weapon" size={20} label={t("ストロングウェポン")} />{/snippet}
       </SkillLevelField>
       <div class="skill-field">
-        <span class="k"><Icon kind="skill" id="common_coat_armor" size={20} label="コートアーマー" />コートアーマー</span>
+        <span class="k"><Icon kind="skill" id="common_coat_armor" size={20} label={t("コートアーマー")} />{t("コートアーマー")}</span>
         <span class="toggle-cell">
           <ToggleRow
-            name="取っている"
+            name={t("取っている")}
             value={draft.commonSkills.coat_armor
-              ? `物${fmtPct(limits.coat_armor_physical_rate)} / 魔${fmtPct(limits.coat_armor_magic_rate)}`
+              ? t("物{physical} / 魔{magic}", { physical: fmtPct(limits.coat_armor_physical_rate), magic: fmtPct(limits.coat_armor_magic_rate) })
               : "—"}
             on={draft.commonSkills.coat_armor}
             onToggle={() => (draft.commonSkills.coat_armor = !draft.commonSkills.coat_armor)}
@@ -362,86 +359,86 @@
         </span>
       </div>
       <SkillLevelField
-        label="プロテクトアーマー"
+        label={t("プロテクトアーマー")}
         options={protectArmorLevels}
         cols={protectArmorLevels.length}
         cell={36}
         disabledValues={protectArmorLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
         value={String(draft.commonSkills.protect_armor_level)}
         onChange={(v) => (draft.commonSkills.protect_armor_level = Number(v))}
-        clearLabel="未習得"
+        clearLabel={t("未習得")}
         clearDisabled={draft.commonSkills.protect_armor_level === 0}
         onClear={() => (draft.commonSkills.protect_armor_level = 0)}
         valueText={draft.commonSkills.protect_armor_level === 0
           ? "—"
-          : `物${PROTECT_ARMOR_RATES[draft.commonSkills.protect_armor_level - 1]} / 魔${PROTECT_ARMOR_MAGIC[draft.commonSkills.protect_armor_level - 1]}%`}
+          : t("物{physical} / 魔{magic}%", { physical: PROTECT_ARMOR_RATES[draft.commonSkills.protect_armor_level - 1], magic: PROTECT_ARMOR_MAGIC[draft.commonSkills.protect_armor_level - 1] })}
         motion={() => draft.commonSkills.protect_armor_level}
       >
-        {#snippet icon()}<Icon kind="skill" id="common_protect_armor" size={20} label="プロテクトアーマー" />{/snippet}
+        {#snippet icon()}<Icon kind="skill" id="common_protect_armor" size={20} label={t("プロテクトアーマー")} />{/snippet}
       </SkillLevelField>
       <SkillLevelField
-        label="改・プロテクト"
+        label={t("改・プロテクト")}
         options={kaiProtectArmorLevels}
         cols={kaiProtectArmorLevels.length}
         cell={36}
         value={String(draft.commonSkills.kai_protect_armor_level)}
         onChange={(v) => (draft.commonSkills.kai_protect_armor_level = Number(v))}
-        clearLabel="未習得"
+        clearLabel={t("未習得")}
         clearDisabled={draft.commonSkills.kai_protect_armor_level === 0}
         onClear={() => (draft.commonSkills.kai_protect_armor_level = 0)}
         valueText={draft.commonSkills.kai_protect_armor_level === 0
           ? "—"
-          : `物${KAI_PROTECT_ARMOR_RATES[draft.commonSkills.kai_protect_armor_level - 1]} / 魔${KAI_PROTECT_ARMOR_MAGIC[draft.commonSkills.kai_protect_armor_level - 1]}%`}
+          : t("物{physical} / 魔{magic}%", { physical: KAI_PROTECT_ARMOR_RATES[draft.commonSkills.kai_protect_armor_level - 1], magic: KAI_PROTECT_ARMOR_MAGIC[draft.commonSkills.kai_protect_armor_level - 1] })}
         motion={() => draft.commonSkills.kai_protect_armor_level}
       >
-        {#snippet icon()}<Icon kind="skill" id="common_kai_protect_armor" size={20} label="改・プロテクト" />{/snippet}
+        {#snippet icon()}<Icon kind="skill" id="common_kai_protect_armor" size={20} label={t("改・プロテクト")} />{/snippet}
       </SkillLevelField>
       <div class="skill-field">
-        <span class="k"><Icon kind="skill" id="common_super_limit" size={20} label="スーパーリミット" />スーパーリミット</span>
+        <span class="k"><Icon kind="skill" id="common_super_limit" size={20} label={t("スーパーリミット")} />{t("スーパーリミット")}</span>
         <span class="toggle-cell">
           <ToggleRow
-            name="取っている"
-            value={draft.commonSkills.ultimate.super_limit ? "極限に加算" : "—"}
+            name={t("取っている")}
+            value={draft.commonSkills.ultimate.super_limit ? t("極限に加算") : "—"}
             on={draft.commonSkills.ultimate.super_limit}
             onToggle={() => (draft.commonSkills.ultimate.super_limit = !draft.commonSkills.ultimate.super_limit)}
           />
         </span>
       </div>
       <SkillLevelField
-        label="ハイパーリミット"
+        label={t("ハイパーリミット")}
         options={hyperLimitLevels}
         cols={hyperLimitLevels.length}
         cell={36}
         disabledValues={hyperLimitLevels.filter((o) => Number(o.value) > augmentGate).map((o) => o.value)}
         value={String(draft.commonSkills.ultimate.hyper_limit_level)}
         onChange={(v) => (draft.commonSkills.ultimate.hyper_limit_level = Number(v))}
-        clearLabel="未習得"
+        clearLabel={t("未習得")}
         clearDisabled={draft.commonSkills.ultimate.hyper_limit_level === 0}
         onClear={() => (draft.commonSkills.ultimate.hyper_limit_level = 0)}
         valueText={draft.commonSkills.ultimate.hyper_limit_level === 0 ? "—" : `Lv${draft.commonSkills.ultimate.hyper_limit_level}`}
       >
-        {#snippet icon()}<Icon kind="skill" id="common_hyper_limit" size={20} label="ハイパーリミット" />{/snippet}
+        {#snippet icon()}<Icon kind="skill" id="common_hyper_limit" size={20} label={t("ハイパーリミット")} />{/snippet}
       </SkillLevelField>
       <SkillLevelField
-        label="レインフォース"
+        label={t("レインフォース")}
         options={reinforceLevels}
         cols={reinforceLevels.length}
         cell={36}
         value={String(draft.commonSkills.reinforce_level)}
         onChange={(v) => setReinforceLevel(Number(v))}
-        clearLabel="未習得"
+        clearLabel={t("未習得")}
         clearDisabled={draft.commonSkills.reinforce_level === 0}
         onClear={() => setReinforceLevel(0)}
-        valueText={`Lv${unleashCap} まで`}
+        valueText={t("Lv{lv} まで", { lv: unleashCap })}
       >
-        {#snippet icon()}<Icon kind="skill" id="common_reinforce" size={20} label="レインフォース" />{/snippet}
+        {#snippet icon()}<Icon kind="skill" id="common_reinforce" size={20} label={t("レインフォース")} />{/snippet}
       </SkillLevelField>
       {#each draft.commonSkills.unleash as slot, i (i)}
         {#if slot.stat !== null}
           <div class="skill-field">
-            <span class="k"><Icon kind="skill" id="common_unleash" size={20} label="アンリーシュ" />解放 {i + 1} の Lv</span>
+            <span class="k"><Icon kind="skill" id="common_unleash" size={20} label={t("アンリーシュ")} />{t("解放 {n} の Lv", { n: i + 1 })}</span>
             <Choose
-              label="アンリーシュ解放 {i + 1} の Lv"
+              label={t("アンリーシュ解放{name}の Lv", { name: i + 1 })}
               options={unleashLevelChoices}
               cols={unleashLevelChoices.length}
           cell={36}
@@ -454,9 +451,9 @@
         {/if}
       {/each}
       <p class="hint dim">
-        オーグメントで解放されていない段は押せません。
-        {#if sienaDefenseRate > 0}装備防御力にはシエナのオーラの {fmtSigned(sienaDefenseRate, { max: 2 }, "%")} を含みます。{/if}
-        <b>リンゴの島・ベリネンルミでは装備防御力は常に 100%</b>(wiki 計算式まとめ §防御力)。
+        {t("オーグメントで解放されていない段は押せません。")}
+        {#if sienaDefenseRate > 0}{t("装備防御力にはシエナのオーラの {v} を含みます。", { v: fmtSigned(sienaDefenseRate, { max: 2 }, "%") })}{/if}
+        <b>{t("リンゴの島・ベリネンルミでは装備防御力は常に 100%")}</b>{t("(wiki 計算式まとめ §防御力)。")}
       </p>
     </div>
 

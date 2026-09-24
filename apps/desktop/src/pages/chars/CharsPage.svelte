@@ -3,6 +3,7 @@
   import { app, selectedCharacter } from "../../state.svelte";
   import RegisterPane from "./RegisterPane.svelte";
   import Workspace from "./Workspace.svelte";
+  import { t } from "../../i18n";
 
   const character = $derived(selectedCharacter());
   const showRegister = $derived(app.registerOpen || !character);
@@ -10,8 +11,8 @@
 
 <div class="page">
   <div class="head-bar">
-    <span class="title">キャラの登録と補正源</span>
-    <span class="note">{showRegister ? "名前とキャラだけで登録できます" : "編集すると自動で保存されます"}</span>
+    <span class="title">{t("キャラの登録と補正源")}</span>
+    <span class="note">{showRegister ? t("名前とキャラだけで登録できます") : t("編集すると自動で保存されます")}</span>
   </div>
   {#if showRegister}
     <div class="register-wrap">

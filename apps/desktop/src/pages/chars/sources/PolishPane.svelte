@@ -19,6 +19,7 @@
   import Drill from "../../../ui/Drill.svelte";
   import Picker, { type PickerOption } from "../../../ui/Picker.svelte";
   import { equipmentAttackKindsFor } from "../summaries";
+  import { t } from "../../../i18n";
 
   interface Props {
     draft: Draft;
@@ -49,7 +50,7 @@
   const totalsLabel = $derived(
     EQUIPMENT_STAT_KINDS.filter((k) => totals[k] > 0)
       .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(totals[k])}`)
-      .join(" ・ ") || "未使用",
+      .join(" ・ ") || t("未使用"),
   );
   /** いまバフ「装備研磨」が ON か(いつものバフでの判定。正は Rust 側 `equipment_polish_active`) */
   const polishActive = $derived(preview?.equipment_polish_active ?? false);
@@ -65,7 +66,7 @@
     const stat = targetStatOf(slot);
     const rate = (kind: PolishKind) => kind === "sparkle" ? "3% ・ " : kind === "artisan" ? "5% ・ " : "";
     return [
-      { value: "", name: "なし", meta: "記録しない" },
+      { value: "", name: t("なし"), meta: t("記録しない") },
       ...POLISH_KINDS.map((kind) => ({
         value: kind, name: POLISH_KIND_LABELS[kind],
         meta: `${rate(kind)}${EQUIPMENT_STAT_SHORT[stat]} ${fmtSigned(amountFor(slot, kind, stat))}`,
@@ -82,7 +83,7 @@
 
   function partRowSummary(slot: PartSlot): string {
     const entry = entryOf(slot);
-    if (!entry) return isEquipped(slot) ? "未使用" : "装備なし";
+    if (!entry) return isEquipped(slot) ? t("未使用") : t("装備なし");
     const amount = amountOf(entry);
     const kindLabel = POLISH_KIND_LABELS[entry.kind];
     const statLabel = EQUIPMENT_STAT_SHORT[entry.stat];
@@ -121,14 +122,14 @@
 </script>
 
 <div class="result-value num">
-  <span class="dim tiny">研磨 効いている量(基本能力値へ合流)</span>
+  <span class="dim tiny">{t("研磨 効いている量(基本能力値へ合流)")}</span>
   <Value class="strong" value={totalsLabel} />
   {#if preview !== null}
     <p class="hint dim">
       {#if polishActive}
-        いつものバフで「装備研磨」が ON なので、この量が効いています。
+        {t("いつものバフで「装備研磨」が ON なので、この量が効いています。")}
       {:else}
-        効かせるには計算タブの材料「研磨」を ON にしてください(バフ「装備研磨」と同じスイッチ)。
+        {t("効かせるには計算タブの材料「研磨」を ON にしてください(バフ「装備研磨」と同じスイッチ)。")}
       {/if}
     </p>
   {/if}
@@ -136,15 +137,14 @@
 
 <div class="card">
   <Disclosure class="fold">
-    {#snippet summary()}この画面の読み方{/snippet}
+    {#snippet summary()}{t("この画面の読み方")}{/snippet}
     <div class="fold-body">
       <p class="hint dim">
-        装備研磨は消耗品で、選んだ装備の能力値 1 つを上げます。種類は 3 つ:
-        <b>ピカピカ</b> = 素の補正(エンチャントを除く実測値)の 3% 切り上げ、
-        <b>職人</b> = 5% 切り上げ、<b>聖なる</b> = 固定値(武器・鎧 +4 / それ以外 +2)。
-        1 部位に同時 1 つで、期限はありません。レリックは段階成長の別モデルなので対象外です。
+        {t("装備研磨は消耗品で、選んだ装備の能力値 1 つを上げます。種類は 3 つ:")}
+        <b>{t("ピカピカ")}</b>{t(" = 素の補正(エンチャントを除く実測値)の 3% 切り上げ、")}
+        <b>{t("職人")}</b>{t(" = 5% 切り上げ、")}<b>{t("聖なる")}</b>{t(" = 固定値(武器・鎧 +4 / それ以外 +2)。 1 部位に同時 1 つで、期限はありません。レリックは段階成長の別モデルなので対象外です。")}
       </p>
-      <p class="hint dim">「研磨剤」(武器・鎧)/「ワックス」(それ以外)の呼び名は部位から決まります。</p>
+      <p class="hint dim">{t("「研磨剤」(武器・鎧)/「ワックス」(それ以外)の呼び名は部位から決まります。")}</p>
     </div>
 
   </Disclosure>
@@ -154,35 +154,36 @@
       {@const summary = partRowSummary(slot)}
       {@const entry = entryOf(slot)}
       {@const equipped = isEquipped(slot)}
+      {@const summaryDim = !entry}
       <Drill
         open={openSlot === slot}
         onOpen={() => openPartRow(slot)}
         detailClass="avatar-editor inset"
-        detailLabel={`${PART_SLOT_LABELS[slot]}の研磨`}
+        detailLabel={t("{part}の研磨", { part: PART_SLOT_LABELS[slot] })}
       >
         {#snippet line()}
         <span class="part-main">
           <span class="part-name">{PART_SLOT_LABELS[slot]}</span>
-          <Value class={"part-item " + (summary === "未使用" || summary === "装備なし" ? "dim" : "")} value={summary} />
+          <Value class={"part-item " + (summaryDim ? "dim" : "")} value={summary} />
         </span>
         {/snippet}
         {#snippet detail()}
-          <div class="polish-kind-row" aria-label={`${PART_SLOT_LABELS[slot]}の${polishProductLabel(slot)}`}>
-            <span class="dim tiny">{polishProductLabel(slot)}</span>
+          <div class="polish-kind-row" aria-label={t("{part}の{product}", { part: PART_SLOT_LABELS[slot], product: t(polishProductLabel(slot)) })}>
+            <span class="dim tiny">{t(polishProductLabel(slot))}</span>
             <Picker
-              label="{PART_SLOT_LABELS[slot]}の{polishProductLabel(slot)}"
+              label={t("{part}の{product}", { part: PART_SLOT_LABELS[slot], product: t(polishProductLabel(slot)) })}
               options={kindOptions(slot)}
               bind:value={() => entry?.kind ?? "", (v) => selectKind(slot, v === "" ? null : v as PolishKind)}
             />
           </div>
           {#if !equipped}
-            <p class="hint dim">この部位は未装備です。加算値は装備してから決まります(いまは 0)。</p>
+            <p class="hint dim">{t("この部位は未装備です。加算値は装備してから決まります(いまは 0)。")}</p>
           {/if}
           {#if entry}
             <div class="polish-stat-row">
-              <span class="dim tiny">乗せる先</span>
+              <span class="dim tiny">{t("乗せる先")}</span>
               <Picker
-                label="{PART_SLOT_LABELS[slot]}の研磨を乗せる先"
+                label={t("{part}の研磨を乗せる先", { part: PART_SLOT_LABELS[slot] })}
                 options={statOptions(slot, entry)}
                 bind:value={() => entry.stat, (v) => selectStat(slot, v as EquipmentStatKind)}
               />

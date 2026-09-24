@@ -41,6 +41,7 @@
   import { EQUIPMENT_STAT_SHORT, PET_SKILL_TIER_LABELS, STAT_KINDS, STAT_LABELS } from "../../labels";
   import Value from "../../ui/Value.svelte";
   import { equipmentAttackKindsFor } from "./summaries";
+  import { t } from "../../i18n";
 
   /** 2 列のステ入力は、ゲーム内で対応を見る組み合わせを同じ段に置く。 */
   const PAIRED_STAT_KINDS: StatKind[] = ["stab", "def", "hack", "dex", "int", "agi", "mr"];
@@ -66,7 +67,7 @@
   const petSkillBonusOf = (tier: PetSkillTier) =>
     tables.pet_skill_tier_bonus.find((b) => b.tier === tier)?.bonus ?? 0;
   const petSkillOptions = $derived([
-    { value: "", label: "なし" },
+    { value: "", label: t("なし") },
     ...tables.pet_skill_tier_bonus.map((b) => ({
       value: b.tier,
       label: `${PET_SKILL_TIER_LABELS[b.tier]} ${fmtSigned(b.bonus)}`,
@@ -105,7 +106,7 @@
   const crownPresetOptions = $derived(
     [...new Set([260, 280, limits.crown_selected_max])].map((v) => ({
       value: String(v),
-      label: v === limits.crown_selected_max ? "MAX" : String(v),
+      label: v === limits.crown_selected_max ? t("MAX") : String(v),
     })),
   );
   function setCrownPreset(value: number) {
@@ -149,36 +150,42 @@
       .filter((k) => preview.soul_link.equipment_values[k] !== 0)
       .map((k) => `${EQUIPMENT_STAT_SHORT[k]} ${fmtSigned(preview.soul_link.equipment_values[k])}`)
       .join(" ・ ");
-    return excluded ? `ゲーム内の表示と同じ ・ ソウルリンク(${excluded})は含まない` : "";
+    return excluded ? t("ゲーム内の表示と同じ ・ ソウルリンク({excluded})は含まない", { excluded }) : "";
   });
 
   const TITLES: Record<SourceId,{ title: string; note: string }> = {
-    status: { title: "キャラステータス", note: "素ステ・覚醒・主軸スキル" },
-    element: { title: "属性", note: "主属性と、装備から自動で入る属性値" },
-    lumina: { title: "ルミナの回廊", note: "回廊効果(テイルズID 内の全キャラに効く恒常バフ)" },
-    equipment: { title: "装備", note: "部位ごとのアイテム・エンチャント・強化" },
-    soulLink: { title: "ソウルリンク", note: "全項目を計算に反映" },
-    pet: { title: "ペット S スキル", note: "ステごとに 1 段階" },
-    rune: { title: "ルーンスキル", note: `スキル Lv がそのままステに乗る(Lv 0–${limits.rune_level_max})` },
+    status: { title: t("キャラステータス"), note: t("素ステ・覚醒・主軸スキル") },
+    element: { title: t("属性"), note: t("主属性と、装備から自動で入る属性値") },
+    lumina: { title: t("ルミナの回廊"), note: t("回廊効果(テイルズID 内の全キャラに効く恒常バフ)") },
+    equipment: { title: t("装備"), note: t("部位ごとのアイテム・エンチャント・強化") },
+    soulLink: { title: t("ソウルリンク"), note: t("全項目を計算に反映") },
+    pet: { title: t("ペット S スキル"), note: t("ステごとに 1 段階") },
+    rune: { title: t("ルーンスキル"), note: t("スキル Lv がそのままステに乗る(Lv 0–{max})", { max: limits.rune_level_max }) },
     crown: {
-      title: "クラウン",
-      note: `10 きざみ・通常上限 ${limits.crown_base_max} / 選択報酬は ${limits.crown_selected_max}`,
+      title: t("クラウン"),
+      note: t("10 きざみ・通常上限 {base} / 選択報酬は {selected}", { base: limits.crown_base_max, selected: limits.crown_selected_max }),
     },
-    monsterCard: { title: "モンスターカード", note: `装着カードのステータス(0–${limits.monster_card_max})` },
+    monsterCard: { title: t("モンスターカード"), note: t("装着カードのステータス(0–{max})", { max: limits.monster_card_max }) },
     relic: {
-      title: "神鳥の聖物",
-      note: `ステごとの加算(${limits.sacred_relic_value_per_stage} きざみ・0–${limits.sacred_relic_stage_max * limits.sacred_relic_value_per_stage})`,
+      title: t("神鳥の聖物"),
+      note: t("ステごとの加算({step} きざみ・0–{max})", {
+        step: limits.sacred_relic_value_per_stage,
+        max: limits.sacred_relic_stage_max * limits.sacred_relic_value_per_stage,
+      }),
     },
-    siena: { title: "シエナのオーラ", note: "部位ごとに登録し、装着中の 1 件だけが反映" },
-    randomOption: { title: "ランダムOP", note: "部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)" },
-    title: { title: "称号", note: "表示中の 1 件だけ有効" },
-    commonSkill: { title: "共通スキル", note: "キャラ横断のパッシブ(オーグメントが Lv の前提)" },
-    thesis: { title: "テシスコア", note: "地域ごとに 6 枠(能力値は対象地域内のみ有効)" },
-    avatar: { title: "アバター", note: "兜・頭・体・脚・エフェクトの5部位。強化剤と補正付きアバター(末尾「Ａ」)" },
-    polish: { title: "研磨", note: "部位ごとに能力値1つを研磨剤/ワックスで上げる" },
-    skills: { title: "キャラスキル", note: "マスタリー(段ごとに 1 つ)と、自分・味方のスキル" },
-    actualDelay: { title: "中ディレイ減少", note: "このキャラ固有のパッシブ・マスタリー(倍率B)" },
-    criticalRate: { title: "クリティカル率", note: `ペット会心と増加(上限 ${fmtSigned(limits.critical_rate_bonus_max, { max: 2 }, "%")})` },
+    siena: { title: t("シエナのオーラ"), note: t("部位ごとに登録し、装着中の 1 件だけが反映") },
+    randomOption: { title: t("ランダムOP"), note: t("部位ごとの追加効果(同じカテゴリーは 1 部位 1 つ)") },
+    title: { title: t("称号"), note: t("表示中の 1 件だけ有効") },
+    commonSkill: { title: t("共通スキル"), note: t("キャラ横断のパッシブ(オーグメントが Lv の前提)") },
+    thesis: { title: t("テシスコア"), note: t("地域ごとに 6 枠(能力値は対象地域内のみ有効)") },
+    avatar: { title: t("アバター"), note: t("兜・頭・体・脚・エフェクトの5部位。強化剤と補正付きアバター(末尾「Ａ」)") },
+    polish: { title: t("研磨"), note: t("部位ごとに能力値1つを研磨剤/ワックスで上げる") },
+    skills: { title: t("キャラスキル"), note: t("マスタリー(段ごとに 1 つ)と、自分・味方のスキル") },
+    actualDelay: { title: t("中ディレイ減少"), note: t("このキャラ固有のパッシブ・マスタリー(倍率B)") },
+    criticalRate: {
+      title: t("クリティカル率"),
+      note: t("ペット会心と増加(上限 {max})", { max: fmtSigned(limits.critical_rate_bonus_max, { max: 2 }, "%") }),
+    },
   };
 </script>
 
@@ -215,7 +222,7 @@
       <!-- 8 ステが同じ形で並ぶので 1 ステ 1 行。段は列を固定して行をまたいで揃える(§00 01) -->
       {#snippet petRow(k: StatKind)}
         <Choose
-          label="{STAT_LABELS[k]}のペット S スキル"
+          label={t("{stat}のペット S スキル", { stat: STAT_LABELS[k] })}
           options={petSkillOptions}
           cols={petSkillOptions.length}
           bind:value={() => petSkillValue(k), (v) => setPetSkillValue(k, v)}
@@ -228,7 +235,7 @@
     <div class="card">
       {#snippet runeRow(k: StatKind)}
         <NumberField
-          label="{STAT_LABELS[k]}のルーンスキル Lv"
+          label={t("{stat}のルーンスキル Lv", { stat: STAT_LABELS[k] })}
           max={limits.rune_level_max}
           bind:value={draft.statSources.rune_levels[k]}
         />
@@ -238,16 +245,16 @@
   {:else if sourceId === "crown"}
     <div class="card">
       <div class="crown-choice">
-        <span class="crown-choice-label">選択報酬</span>
+        <span class="crown-choice-label">{t("選択報酬")}</span>
         <!-- 選んだ 1 つを押すと外せる(値は checkbox 群。radio は押し直しで外せない) -->
         <Choose
-          label="選択報酬の能力値"
+          label={t("選択報酬の能力値")}
           class="chiprow crown-choice-stats"
           options={PAIRED_STAT_KINDS.map((k) => ({ value: k, label: STAT_LABELS[k] }))}
           values={draft.statSources.crown.selected_stat === null ? [] : [draft.statSources.crown.selected_stat]}
           onToggle={(v) => toggleCrownSelectedStat(v as StatKind)}
         />
-        <div class="crown-presets" aria-label="選択報酬のよく使う値">
+        <div class="crown-presets" aria-label={t("選択報酬のよく使う値")}>
           <Chip
             class="num"
             disabled={draft.statSources.crown.selected_stat === null ||
@@ -255,7 +262,7 @@
             onclick={() => addCrownSelected(20)}
           >+20</Chip>
           <Choose
-            label="選択報酬のよく使う値"
+            label={t("選択報酬のよく使う値")}
             class="chiprow"
             options={crownPresetOptions}
             disabled={draft.statSources.crown.selected_stat === null}
@@ -263,11 +270,11 @@
             bind:value={() => String(crownSelectedValue() ?? ""), (v) => setCrownPreset(Number(v))}
           />
         </div>
-        <span class="hint dim">選んだ能力値だけ上限 {fmtSigned(limits.crown_selected_max)}。もう一度押すと外せます。</span>
+        <span class="hint dim">{t("選んだ能力値だけ上限 {max}。もう一度押すと外せます。", { max: fmtSigned(limits.crown_selected_max) })}</span>
       </div>
       {#snippet crownRow(k: StatKind)}
         <NumberField
-          label="{STAT_LABELS[k]}の王冠"
+          label={t("{stat}の王冠", { stat: STAT_LABELS[k] })}
           max={crownMax(k)}
           step={limits.crown_step}
           bind:value={draft.statSources.crown[k]}
@@ -278,13 +285,12 @@
   {:else if sourceId === "monsterCard"}
     <div class="card">
       <p class="hint dim">
-        wiki「ステータス」の固定値増加にある<b>カード装着</b>。装着したカードのステータスが
-        そのまま乗ります(ステごと 0〜{limits.monster_card_max})。
-        <b>固定値層</b>なので、能力値倍率A(テイルズウィーバーのエネルギー等)の影響を受けます。
+        {t("wiki「ステータス」の固定値増加にある")}<b>{t("カード装着")}</b>{t("。装着したカードのステータスが そのまま乗ります(ステごと 0〜{max})。", { max: limits.monster_card_max })}
+        <b>{t("固定値層")}</b>{t("なので、能力値倍率A(テイルズウィーバーのエネルギー等)の影響を受けます。")}
       </p>
       {#snippet monsterCardRow(k: StatKind)}
         <NumberField
-          label="{STAT_LABELS[k]}のカード装着"
+          label={t("{stat}のカード装着", { stat: STAT_LABELS[k] })}
           max={limits.monster_card_max}
           bind:value={draft.statSources.monster_cards[k]}
         />
@@ -297,7 +303,7 @@
         <!-- 段階ではなく**実際に増える値**で入れる(1 段階 = +{limits.sacred_relic_value_per_stage} なので
              ＋ を押すとその値ずつ)。多くの人は 200 で止まるので、そこを 1 押しで置く。保存は段階のまま -->
         <NumberField
-          label="{STAT_LABELS[k]}の神鳥の聖物"
+          label={t("{stat}の神鳥の聖物", { stat: STAT_LABELS[k] })}
           max={limits.sacred_relic_stage_max * limits.sacred_relic_value_per_stage}
           step={limits.sacred_relic_value_per_stage}
           presets={[{ value: 200, label: "200" }]}

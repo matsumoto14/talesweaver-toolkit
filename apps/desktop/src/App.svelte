@@ -23,21 +23,22 @@
   } from "./state.svelte";
   import { dismissError, reportError, reportNotice, runUndo, toast } from "./toast.svelte";
   import { checkForUpdate, updater } from "./update.svelte";
+  import { t } from "./i18n";
   import { persisted } from "./ui/persistedState.svelte";
   import { isLockedTab, refreshDownloadedEquipmentIds } from "./unlock.svelte";
   import Choose from "./ui/Choose.svelte";
   import Splitter from "./ui/Splitter.svelte";
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: "home", label: "ホーム" },
-    { id: "calc", label: "ダメージ計算" },
-    { id: "buffs", label: "バフ" },
-    { id: "chars", label: "キャラ" },
-    { id: "versus", label: "対人" },
-    { id: "measure", label: "実測" },
-    { id: "inkri", label: "インクリ" },
-    { id: "ask", label: "調べる" },
-    { id: "news", label: "お知らせ" },
+    { id: "home", label: t("ホーム") },
+    { id: "calc", label: t("ダメージ計算") },
+    { id: "buffs", label: t("バフ") },
+    { id: "chars", label: t("キャラ") },
+    { id: "versus", label: t("対人") },
+    { id: "measure", label: t("実測") },
+    { id: "inkri", label: t("インクリ") },
+    { id: "ask", label: t("調べる") },
+    { id: "news", label: t("お知らせ") },
   ];
 
   // ロック中のタブは並べない(unlock.svelte.ts)。開いたまま施錠されたらホームへ
@@ -89,9 +90,9 @@
       <img src={brandLogo} alt="TW Context" />
     </div>
     <Choose
-      label="画面"
+      label={t("画面")}
       class="tabs"
-      options={visibleTabs.map((t) => ({ value: t.id, label: t.label }))}
+      options={visibleTabs.map((tab) => ({ value: tab.id, label: tab.label }))}
       bind:value={() => app.tab, (v) => (app.tab = v as Tab)}
     >
       {#snippet item(o)}
@@ -104,13 +105,13 @@
         {:else}
           {o.label}
         {/if}
-        {#if o.value === "news" && updateWaiting}<span class="tab-dot" aria-label="新しい版があります"></span>{/if}
+        {#if o.value === "news" && updateWaiting}<span class="tab-dot" aria-label={t("新しい版があります")}></span>{/if}
       {/snippet}
     </Choose>
     {#if simIsDirty()}
       <div class="sim-note">
         <span class="dot"></span>
-        <span>試し変更中 — 保存されていません</span>
+        <span>{t("試し変更中 — 保存されていません")}</span>
       </div>
     {/if}
     <div class="utility-actions" class:pushed={!simIsDirty()}>
@@ -118,14 +119,14 @@
         type="button"
         class="utility-open"
         onclick={() => (aboutOpen = true)}
-        aria-label="インフォメーション"
-        title="このアプリについて"
-      ><span aria-hidden="true">i</span>インフォメーション</button>
+        aria-label={t("インフォメーション")}
+        title={t("このアプリについて")}
+      ><span aria-hidden="true">i</span>{t("インフォメーション")}</button>
       <button
         type="button"
         class="utility-open"
         onclick={() => (inquiryOpen = true)}
-      ><span aria-hidden="true">?</span>問い合わせ</button>
+      ><span aria-hidden="true">?</span>{t("問い合わせ")}</button>
     </div>
   </header>
 
@@ -139,13 +140,13 @@
           type="button"
           class="toast-goto"
           onclick={() => { focusErrorTarget(target); dismissError(); }}
-        >ここを開く ›</button>
+        >{t("ここを開く ›")}</button>
       {/if}
       <!-- 消したものを戻す。押せるのはこの帯が出ているあいだだけ -->
       {#if toast.undoable}
-        <button type="button" class="toast-goto" onclick={runUndo}>元に戻す</button>
+        <button type="button" class="toast-goto" onclick={runUndo}>{t("元に戻す")}</button>
       {/if}
-      <button type="button" onclick={dismissError} aria-label="閉じる">×</button>
+      <button type="button" onclick={dismissError} aria-label={t("閉じる")}>×</button>
     </div>
   {/if}
 
@@ -172,7 +173,7 @@
         max={380}
         defaultValue={DEFAULT_RAIL_WIDTH}
         controls="prev"
-        label="キャラレールとメインの境界"
+        label={t("キャラレールとメインの境界")}
       />
     {:else}
       <div></div>

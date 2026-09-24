@@ -16,6 +16,7 @@ import {
 import type {
   BuffSet, CharacterIcon, DamageSnapshot, NewCharacter, RegisteredCharacter,
 } from "./types";
+import { t } from "../i18n";
 
 /** 中身が変わったら上げる。読み込み側は知らない版を拒む(黙って一部だけ入れない) */
 const FORMAT = "tw-context-data";
@@ -58,14 +59,14 @@ export async function exportAll(): Promise<TransferFile> {
 export function parseTransferFile(value: unknown): TransferFile {
   const file = value as TransferFile | null;
   if (typeof file !== "object" || file === null || file.format !== FORMAT) {
-    throw new Error("このファイルは TW Context の書き出しファイルではありません");
+    throw new Error(t("このファイルは TW Context の書き出しファイルではありません"));
   }
   if (file.version !== FORMAT_VERSION) {
-    throw new Error(`このファイル(形式 v${file.version})は、いまの版では読み込めません`);
+    throw new Error(t("このファイル(形式 v{version})は、いまの版では読み込めません", { version: file.version }));
   }
   if (!Array.isArray(file.characters) || !Array.isArray(file.buffSets)
     || !Array.isArray(file.icons) || !Array.isArray(file.snapshots)) {
-    throw new Error("ファイルの中身が壊れています");
+    throw new Error(t("ファイルの中身が壊れています"));
   }
   return file;
 }

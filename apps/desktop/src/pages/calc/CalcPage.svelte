@@ -11,6 +11,7 @@
     RotationChoices, Skill, UpgradeCandidate,
   } from "../../api/types";
   import { fmtDuration, fmtInt, fmtNum, fmtPct, fmtSigned, fmtSignedPct } from "../../format";
+  import { t } from "../../i18n";
   import { ELEMENT_LABELS, STAT_KINDS } from "../../labels";
   import { limits } from "../../limits.svelte";
   import { tables } from "../../tables.svelte";
@@ -39,9 +40,9 @@
   const DEFAULT_RIGHT_WIDTH = 380;
 
   const COMBO_SKILL_TYPE_OPTIONS = [
-    { value: "general", label: "一般" },
-    { value: "instant", label: "瞬撃" },
-    { value: "chain", label: "連撃" },
+    { value: "general", label: t("一般") },
+    { value: "instant", label: t("瞬撃") },
+    { value: "chain", label: t("連撃") },
   ];
 
   /** 試し変更(この計算だけの変更。保存しない)。KNOBS と上限は calc/simStore */
@@ -203,7 +204,7 @@
     normalAttacks.map((s) => ({
       value: s.id,
       // 「†極・突き」の飾りは段では邪魔なので落とし、CI を添える(未収録は ?)
-      label: `${s.name.replace(/^†[^・]*・/, "")} ${s.combo_interval !== null ? fmtNum(s.combo_interval, 2, "s") : "?"}`,
+      label: `${t(s.name.replace(/^†[^・]*・/, ""))} ${s.combo_interval !== null ? fmtNum(s.combo_interval, 2, "s") : "?"}`,
     })),
   );
   const normalAttackId = $derived(
@@ -306,7 +307,7 @@
   /** 召喚獣(熊・精霊)が撃つスキル本体(結果 JSON は id しか持たないので skills 一覧から引く) */
   const summonSkillFull = $derived(skills.find((s) => s.id === summon?.skill_id) ?? null);
   /** 召喚獣が撃つスキルの表示名 */
-  const summonSkillName = $derived(summonSkillFull?.name ?? "");
+  const summonSkillName = $derived(summonSkillFull ? t(summonSkillFull.name) : "");
   /** 召喚獣の鎖のラベル(熊 / 精霊) */
   // 合計(本体 + 召喚獣)の内訳。値も増減も Rust(combine_damage の `parts`)が出したものを
   // そのまま並べる(画面で足し引きしない)。割合は「基準に対する増減」の見せ方なのでここで割る
@@ -335,9 +336,9 @@
     const gain = parts?.summon_rotation_gain;
     const full = summon?.result.expected_dps;
     if (gain == null || full == null || full <= 0) return null;
-    const causes = [summonLoss !== null ? "陣" : null, summonBonus !== null ? "極・ダメージプラス" : null]
+    const causes = [summonLoss !== null ? t("陣") : null, summonBonus !== null ? t("極・ダメージプラス") : null]
       .filter((c) => c !== null)
-      .join("と");
+      .join(t("と"));
     return { amount: gain, rate: gain / full, causes };
   });
   /** 精霊の鎖に出す「回しの中で実際に入る DPS」。陣の不在・極・ダメージプラスが無ければ
@@ -348,8 +349,8 @@
     return { dps, absentLoss: summonLoss?.amount ?? null, hitBonus: summonBonus };
   });
   /** 差し込んでいる技の名前(合計の内訳の注記用) */
-  const rotationInsertNames = $derived(rotation ? rotation.inserts.map((i) => i.skill_name).join("・") : "");
-  const summonLabel = $derived(summonSkillFull?.attacker === "destruction_spirit" ? "精霊" : "熊");
+  const rotationInsertNames = $derived(rotation ? rotation.inserts.map((i) => t(i.skill_name)).join("・") : "");
+  const summonLabel = $derived(summonSkillFull?.attacker === "destruction_spirit" ? t("精霊") : t("熊"));
   /** 召喚獣の鎖のバッジに置く絵。熊はルシベア専用スキル(anais_rucy_*)ならルシベア、他はミカベア
    *  (突き・ジャッジメントスピン等は両方の人形が撃つので、どちらの人形かは保存していない)。
    *  精霊はそのスキルの属性(雷/水/火)からアンフェル/グレシス/イグニーを選ぶ(陣は本体扱いで
@@ -370,9 +371,10 @@
   /** 召喚獣の DPS 節に出す間隔の注記。中ディレイ未収録(interval_seconds が null)なら出さない */
   const summonIntervalNote = $derived(
     summon?.interval_seconds != null
-      ? `${fmtNum(summon.interval_seconds, 2)}s 間隔(${
-          summonIntervalCapped ? "CT で頭打ち" : "中ディレイ + 0.0705s"
-        })・コンボは乗りません`
+      ? t("{v}s 間隔({bound})・コンボは乗りません", {
+          v: fmtNum(summon.interval_seconds, 2),
+          bound: summonIntervalCapped ? t("CT で頭打ち") : t("中ディレイ + 0.0705s"),
+        })
       : null,
   );
   const requestLatest = latest({ debounce: 120 });
@@ -487,7 +489,7 @@
     return REACH_STATE[reach];
   });
   // 言葉はこの画面のもの、色は 6 系統から選ぶ(design-system §03)。先頭 6 件は共通(ui/states.ts)
-  const BADGE: Badge[] = [...REACH_BADGES, { label: "判定中", state: "unknown" }];
+  const BADGE: Badge[] = [...REACH_BADGES, { label: t("判定中"), state: "unknown" }];
 
   // --- なぜこの数字?(トレースの式から組み立て) ---------------------------
   // 段の組み立ては calc/damageDetail.ts、面そのものは calc/WhyPanel.svelte(本体だけ。
@@ -621,28 +623,28 @@
 </script>
 
 <SplitPage
-  midTitle="行ける？"
-  midNote="→ なぜこの数字？"
-  rightTitle="計算の材料"
+  midTitle={t("行ける？")}
+  midNote={t("→ なぜこの数字？")}
+  rightTitle={t("計算の材料")}
   rightNote={character?.name ?? ""}
   persistKey="tw-v4-calc"
   defaultRight={DEFAULT_RIGHT_WIDTH}
   minMid={320}
   minRight={280}
-  splitterLabel="計算シートと材料の境界"
+  splitterLabel={t("計算シートと材料の境界")}
   rightScrollStyle="padding: 11px;"
 >
   {#snippet mid()}
       {#if !character}
-        <p class="empty dim">キャラを登録するとダメージ計算ができます。</p>
+        <p class="empty dim">{t("キャラを登録するとダメージ計算ができます。")}</p>
       {:else if !target}
-        <p class="empty dim">コンテンツデータがありません。</p>
+        <p class="empty dim">{t("コンテンツデータがありません。")}</p>
       {:else}
         <!-- 攻撃 / 防御(同列タブ) -->
         <Choose
-          label="攻撃 / 防御"
+          label={t("攻撃 / 防御")}
           class="chiprow side-tabs"
-          options={[{ value: "attack", label: "攻撃" }, { value: "defense", label: "防御" }]}
+          options={[{ value: "attack", label: t("攻撃") }, { value: "defense", label: t("防御") }]}
           bind:value={() => side, (v) => (side = v as "attack" | "defense")}
         />
       {/if}
@@ -657,31 +659,31 @@
              掛けていたときは、防御 → 攻撃 に戻すと 1,500 の文字が無音で出ていた(実機 2026-09-17) -->
         <div class="swap-in">
         <!-- 行ける?カード -->
-        <SheetCard tone="gold" title="行ける？" note={character.name} busy={calculating}>
+        <SheetCard tone="gold" title={t("行ける？")} note={character.name} busy={calculating}>
           <!-- 対象プレート -->
           <div class="target-row">
             <button type="button" class="step" onclick={() => stepTarget(-1)}>◀</button>
-            <Popover label="計算する対象" triggerClass="target-trigger" panelClass="target-pop">
+            <Popover label={t("計算する対象")} triggerClass="target-trigger" panelClass="target-pop">
               {#snippet trigger(open)}
               <span class="t-line1">
-                <Icon kind="content" id={target.content.id} fallback={{ kind: "mob", id: target.content.enemy_id }} size={28} label={target.content.name} />
-                <Value class="t-name" value={target.content.name} />
+                <Icon kind="content" id={target.content.id} fallback={{ kind: "mob", id: target.content.enemy_id }} size={28} label={t(target.content.name)} />
+                <Value class="t-name" value={t(target.content.name)} />
                 <span class="caret" class:rot={open}>▼</span>
                 <Value class="t-index dim" motion={() => targetIndex + 1} value={`${targetIndex + 1} / ${contents.length}`} />
               </span>
               <span class="t-line2">
-                <Value class="t-area dim" value={target.areaName} />
-                <Value class="t-def" motion={() => defenseValue} value={defenseValue !== null ? `防御 ${fmtInt(defenseValue)}` : "防御 —"} />
-                <Value class="t-need" motion={() => closeSeconds} value={`目安 ${fmtDuration(closeSeconds)}以内`} />
+                <Value class="t-area dim" value={t(target.areaName)} />
+                <Value class="t-def" motion={() => defenseValue} value={defenseValue !== null ? t("防御 {v}", { v: fmtInt(defenseValue) }) : t("防御 —")} />
+                <Value class="t-need" motion={() => closeSeconds} value={t("目安 {v}以内", { v: fmtDuration(closeSeconds) })} />
               </span>
               {/snippet}
               {#snippet children(close)}
               {#each targetAreas as area (area.id)}
-                <div class="pop-head"><span class="pop-diamond"></span><span>{area.name}</span><span class="num dim">{area.contents.length} 件</span></div>
+                <div class="pop-head"><span class="pop-diamond"></span><span>{t(area.name)}</span><span class="num dim">{t("{n} 件", { n: area.contents.length })}</span></div>
                 {#each area.contents as c (c.id)}
                   {@const ev = evals.find((e) => e.content_id === c.id)}
                   <!-- 収録度は行頭に 1 つだけ(§14 決定 5)。分かっている行には出さない -->
-                  {@const cov = !ev ? "判定中" : c.enemy_id === null ? "敵データなし" : !ev.damage ? "スキル未収録" : null}
+                  {@const cov = !ev ? t("判定中") : c.enemy_id === null ? t("敵データなし") : !ev.damage ? t("スキル未収録") : null}
                   <button
                     type="button"
                     class="pop-row"
@@ -693,9 +695,9 @@
                   >
                     <span class="dot" style="background: {ev?.clear ? STATE.met.bd : ev?.entry_ok === false ? STATE.short.bd : STATE.unknown.bd};"></span>
                     <!-- コンテンツの絵が無ければそのコンテンツの敵の絵。サイズ固定なので行の高さは動かない -->
-                    <Icon kind="content" id={c.id} fallback={{ kind: "mob", id: c.enemy_id }} size={20} label={c.name} />
+                    <Icon kind="content" id={c.id} fallback={{ kind: "mob", id: c.enemy_id }} size={20} label={t(c.name)} />
                     {#if cov !== null}<span class="badge unknown">{cov}</span>{/if}
-                    <span class="pop-name">{c.name}</span>
+                    <span class="pop-name">{t(c.name)}</span>
                     <span class="num dim">{ev?.damage ? fmtInt(ev.damage.per_hit_primary) : "—"}</span>
                   </button>
                 {/each}
@@ -708,10 +710,10 @@
           <!-- スキル行 -->
           <div class="skill-row">
             {#if bodySkills.length === 0}
-              <span class="dim">このキャラのスキルデータは未収録です(仮スキルはありません)。</span>
+              <span class="dim">{t("このキャラのスキルデータは未収録です(仮スキルはありません)。")}</span>
             {:else}
               <Popover
-                label="計算するスキル"
+                label={t("計算するスキル")}
                 triggerClass="skill-trigger"
                 panelClass="skill-pop"
                 disabled={bodySkills.length <= 1}
@@ -719,26 +721,26 @@
               >
                 {#snippet trigger(open)}
                 <span class="sk-line1">
-                  <Icon kind="skill" id={skill?.id ?? null} size={20} label={skill?.name ?? "スキル"} />
-                  <span class="sk-name">{skill?.name ?? ""}</span>
+                  <Icon kind="skill" id={skill?.id ?? null} size={20} label={skill ? t(skill.name) : t("スキル")} />
+                  <span class="sk-name">{skill ? t(skill.name) : ""}</span>
                   {#if bodySkills.length > 1}<span class="caret" class:rot={open}>▼</span>{/if}
                   <!-- 主軸(キャラタブ)と違うスキルで計算している例外状態。保存されないので
                        ラベンダー(--sim)。行の高さは変えない -->
                   {#if skillOverridden}
-                    <span class="sk-override badge-in" use:changed={() => skillId}>ここで上書き中</span>
+                    <span class="sk-override badge-in" use:changed={() => skillId}>{t("ここで上書き中")}</span>
                   {/if}
                 </span>
                 <span class="sk-meta num dim">
                   ×<Value value={body ? fmtNum(body.effective_skill_multiplier) : "—"} />
-                  ・ <Value value={body ? String(body.hit_count) : "—"} />段
-                  ・ 中 <Value value={body?.effective_base_actual_delay != null ? `${fmtNum(body.effective_base_actual_delay)}s` : "?"} />
+                  ・ <Value value={body ? String(body.hit_count) : "—"} />{t("段")}
+                  ・ {t("中")} <Value value={body?.effective_base_actual_delay != null ? `${fmtNum(body.effective_base_actual_delay)}s` : "?"} />
                   ・ Cri×{skill ? fmtNum(skill.critical_multiplier) : "—"}
-                  {#if skill}・ {ELEMENT_LABELS[skill.element]}属性{/if}
-                  {#if body?.accuracy_point != null}・ 命中P {fmtInt(body.accuracy_point)}{/if}
+                  {#if skill}・ {t("{el}属性", { el: ELEMENT_LABELS[skill.element] })}{/if}
+                  {#if body?.accuracy_point != null}・ {t("命中P {v}", { v: fmtInt(body.accuracy_point) })}{/if}
                 </span>
                 {/snippet}
                 {#snippet children(close)}
-                <div class="pop-head gold"><span>スキル {bodySkills.length} 種 ／ この対象への合計ダメージ順</span></div>
+                <div class="pop-head gold"><span>{t("スキル {n} 種 ／ この対象への合計ダメージ順", { n: bodySkills.length })}</span></div>
                 {#each pickerSkills as s (s.id)}
                   {@const d = skillTotals[s.id]}
                   <button
@@ -750,9 +752,9 @@
                       close();
                     }}
                   >
-                    <Icon kind="skill" id={s.id} size={20} label={s.name} />
-                    <span class="pop-name">{s.name}</span>
-                    <span class="num dim">×{fmtNum(s.multiplier)} / {s.hit_count}段</span>
+                    <Icon kind="skill" id={s.id} size={20} label={t(s.name)} />
+                    <span class="pop-name">{t(s.name)}</span>
+                    <span class="num dim">×{fmtNum(s.multiplier)} / {t("{n}段", { n: s.hit_count })}</span>
                     <span class="num strong">{d ? fmtInt(d.total) : "…"}</span>
                   </button>
                 {/each}
@@ -762,9 +764,9 @@
               {#if skillOverridden}
                 <button
                   type="button" class="sk-reset badge-in"
-                  title={mainSkill ? `主軸スキル「${mainSkill.name}」に戻す` : ""}
+                  title={mainSkill ? t("主軸スキル「{name}」に戻す", { name: t(mainSkill.name) }) : ""}
                   onclick={() => (skillOverride = null)}
-                >主軸に戻す</button>
+                >{t("主軸に戻す")}</button>
               {/if}
             {/if}
           </div>
@@ -772,9 +774,9 @@
           {#if skill && skill.combo_variants.length > 0}
             <div class="combo-type-row inset">
               <div class="field">
-                <span class="field-label">コンボタイプ</span>
+                <span class="field-label">{t("コンボタイプ")}</span>
                 <Choose
-                  label="コンボタイプ"
+                  label={t("コンボタイプ")}
                   options={COMBO_SKILL_TYPE_OPTIONS}
                   full
                   bind:value={
@@ -785,8 +787,8 @@
               </div>
               <span class="combo-type-note dim">
                 {comboSkillType === "chain"
-                  ? "シエナのオーラの中ディレイ減少に応じて倍率・段数も変わります"
-                  : "タイプを押すと倍率・段数・中ディレイへすぐ反映します"}
+                  ? t("シエナのオーラの中ディレイ減少に応じて倍率・段数も変わります")
+                  : t("タイプを押すと倍率・段数・中ディレイへすぐ反映します")}
               </span>
             </div>
           {/if}
@@ -806,7 +808,7 @@
             {#if body}
               <DamageChain
                 result={body} {skill} store={details}
-                attackerLabel="本体" attackerSkillName={skill?.name ?? ""}
+                attackerLabel={t("本体")} attackerSkillName={skill ? t(skill.name) : ""}
                 icon={{ kind: "character", id: character?.game_character_id ?? null, source: character ? (app.characterIcons[character.id] ?? null) : null }}
                 showDefeat={!summon} heroNumber={true}
                 onView={() => viewWhy("body")}
@@ -844,19 +846,19 @@
                    主役の数字(44px の金の帯 = 答えは 1 つ)と競わせないため、本文の大きさに留める。
                    討伐時間そのものの判定(バッジ・メーター・文)は下の「行ける?」帯が持つ -->
               <div class="combined readrows inset">
-                <span class="combined-title">合計(本体 + {summonLabel})</span>
+                <span class="combined-title">{t("合計(本体 + {who})", { who: summonLabel })}</span>
                 <!-- 合計の内訳。本体は回しがあればその DPS(主軸単独ではない)、召喚獣は陣で消えている
                      ぶんを引いた値。合計だけ出すと「本体の鎖の数字 + 召喚獣の鎖の数字」に見えて
                      合わないので(実機 2026-09-23)、足し算の 2 項をそのまま行にする -->
                 {#if bodyGain !== null && parts?.body_expected_dps != null}
                   <!-- 値は実際の DPS(合計の足し算の項)。増減は隣に符号つきで(割合だけだと取り分に見える。実機 2026-09-23) -->
                   <ReadRow
-                    label="本体"
+                    label={t("本体")}
                     value={fmtInt(Math.round(parts.body_expected_dps))}
                     motion={() => Math.round(parts?.body_expected_dps ?? 0)}
                     delta={{}}
                   >
-                    {#snippet note()}<Value class="gain" tone={bodyGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(bodyGain.amount))}(${fmtSignedPct(bodyGain.rate, 1)})`} /> {skill?.name ?? "主軸"}だけを撃ち続けるより、{rotationInsertNames} を差し込んだぶん{/snippet}
+                    {#snippet note()}<Value class="gain" tone={bodyGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(bodyGain.amount))}(${fmtSignedPct(bodyGain.rate, 1)})`} /> {t("{skill}だけを撃ち続けるより、{inserts} を差し込んだぶん", { skill: skill ? t(skill.name) : t("主軸"), inserts: rotationInsertNames })}{/snippet}
                   </ReadRow>
                 {/if}
                 {#if summonGain !== null && parts?.summon_expected_dps != null}
@@ -868,24 +870,24 @@
                   >
                     <!-- 本体の行と同じく差し引きの ± を 1 つ(2 つ並べると 1 行に収まらず後ろが切れた。実機 2026-09-23)。
                          内訳(陣 − / ダメージプラス +)は精霊の鎖の「1 秒あたり」 -->
-                    {#snippet note()}<Value class="gain" tone={summonGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(summonGain.amount))}(${fmtSignedPct(summonGain.rate, 1)})`} /> {summonGain.causes}のぶん(内訳は{summonLabel}の 1 秒あたり){/snippet}
+                    {#snippet note()}<Value class="gain" tone={summonGain.amount >= 0 ? "up" : "down"} value={`${fmtSigned(Math.round(summonGain.amount))}(${fmtSignedPct(summonGain.rate, 1)})`} /> {t("{causes}のぶん(内訳は{who}の 1 秒あたり)", { causes: summonGain.causes, who: summonLabel })}{/snippet}
                   </ReadRow>
                 {/if}
                 <ReadRow
-                  label="合計 DPS"
+                  label={t("合計 DPS")}
                   value={combined?.expected_dps != null ? fmtInt(Math.round(combined.expected_dps)) : "—"}
                   motion={() => (combined?.expected_dps == null ? null : Math.round(combined.expected_dps))}
                   delta={{}}
                 >
-                  {#snippet note()}本体 + {summonLabel}{/snippet}
+                  {#snippet note()}{t("本体 + {who}", { who: summonLabel })}{/snippet}
                 </ReadRow>
                 <ReadRow
-                  label="討伐時間"
+                  label={t("討伐時間")}
                   value={combined?.defeat_seconds != null ? fmtDuration(combined.defeat_seconds) : "—"}
                   motion={() => (combined?.defeat_seconds == null ? null : Math.round(combined.defeat_seconds))}
-                  delta={{ unit: "秒", digits: 0 }} deltaClass="less-is-better"
+                  delta={{ unit: t("秒"), digits: 0 }} deltaClass="less-is-better"
                 >
-                  {#snippet note()}敵 HP ÷ 合計 DPS(ソロ){/snippet}
+                  {#snippet note()}{t("敵 HP ÷ 合計 DPS(ソロ)")}{/snippet}
                 </ReadRow>
               </div>
             {/if}
@@ -894,27 +896,27 @@
                  は討伐時間の有無に関わらず伝えるべき事実なので、その 2 つだけは別枠で出す -->
             {#if perHit === null}
               <div class="meter big"><div class="fill" style="width: 0%; background: {STATE.unknown.bar};"></div></div>
-              <div class="hero-sentence"><span class="sentence">計算中…</span></div>
+              <div class="hero-sentence"><span class="sentence">{t("計算中…")}</span></div>
             {:else if noPierce}
               <div class="meter big"><div class="fill" style="width: 0%; background: {STATE.short.bar};"></div></div>
               <div class="hero-sentence">
-                <span class="sentence ng">防御力を抜けていません(攻撃力 {atkA !== null ? fmtInt(atkA) : "—"} ≤ 防御力 {defenseValue !== null ? fmtInt(defenseValue) : "—"})</span>
+                <span class="sentence ng">{t("防御力を抜けていません(攻撃力 {a} ≤ 防御力 {b})", { a: atkA !== null ? fmtInt(atkA) : "—", b: defenseValue !== null ? fmtInt(defenseValue) : "—" })}</span>
               </div>
             {:else if defeatSeconds !== null && reach !== null}
               <div class="meter big"><div class="fill" style="width: {meterRatio * 100}%; background: {STATE[BADGE[badgeState].state].bar};"></div></div>
               <div class="hero-sentence">
                 <span class="sentence" class:ok={reached} class:ng={!reached}>
                   {#if reach === "comfortable"}
-                    {fmtDuration(tables.reach_seconds.comfortable)}かからずに倒せます。
+                    {t("{v}かからずに倒せます。", { v: fmtDuration(tables.reach_seconds.comfortable) })}
                   {:else if reach === "reached"}
-                    {fmtDuration(defeatSeconds)} で倒せます。
+                    {t("{v} で倒せます。", { v: fmtDuration(defeatSeconds) })}
                   {:else if reach === "close"}
-                    {fmtDuration(defeatSeconds)}。{fmtDuration(closeSeconds)}の目安ぎりぎりです。
+                    {t("{a}。{b}の目安ぎりぎりです。", { a: fmtDuration(defeatSeconds), b: fmtDuration(closeSeconds) })}
                   {:else}
-                    {fmtDuration(defeatSeconds)}。{fmtDuration(closeSeconds)}を超えるので厳しいです。
+                    {t("{a}。{b}を超えるので厳しいです。", { a: fmtDuration(defeatSeconds), b: fmtDuration(closeSeconds) })}
                   {/if}
                 </span>
-                <span class="num dim">目安 {fmtDuration(closeSeconds)}以内</span>
+                <span class="num dim">{t("目安 {v}以内", { v: fmtDuration(closeSeconds) })}</span>
               </div>
             {/if}
             <!-- 足りない分をどう埋める? を 1 行に(旧: 紫のパネル)。候補が無い・すでに目安に
@@ -928,16 +930,16 @@
                   disabled={leavingWhatIfId === top.id}
                   onclick={() => applyWhatIf(top)}
                 >
-                  <span class="dim">→ 一番効くのは</span>
-                  <span class="fill-label">{top.label}</span>
-                  <span class="num fill-pct" class:flat={top.delta_pct === 0}>表記 {deltaText(top.delta_pct)}</span>
-                  <span class="num fill-total dim">合計 {deltaText(top.delta_total_pct)}</span>
+                  <span class="dim">{t("→ 一番効くのは")}</span>
+                  <span class="fill-label">{t(top.label)}</span>
+                  <span class="num fill-pct" class:flat={top.delta_pct === 0}>{t("表記 {v}", { v: deltaText(top.delta_pct) })}</span>
+                  <span class="num fill-total dim">{t("合計 {v}", { v: deltaText(top.delta_total_pct) })}</span>
                 </button>
                 {#if whatIf.length > 1}
                   <!-- トリガは上の行の中、一覧は行の下。<details> を行に溶かして(display: contents)
                        両方を .fill-line の直接の子にする -->
                   <Disclosure class="fill-fold" summaryClass="fill-more-toggle" bind:open={fillMoreOpen}>
-                    {#snippet summary(open)}{open ? "閉じる" : `他 ${whatIf.length - 1} 件`}{/snippet}
+                    {#snippet summary(open)}{open ? t("閉じる") : t("他 {n} 件", { n: whatIf.length - 1 })}{/snippet}
                     {#snippet children(open)}
                     {#if open}
                 <div class="fill-list inset">
@@ -948,9 +950,9 @@
                       disabled={leavingWhatIfId === w.id}
                       onclick={() => applyWhatIf(w)}
                     >
-                      <span class="fill-more-label">{w.label}</span>
-                      <span class="num">表記 {deltaText(w.delta_pct)}</span>
-                      <span class="num fill-total dim">合計 {deltaText(w.delta_total_pct)}</span>
+                      <span class="fill-more-label">{t(w.label)}</span>
+                      <span class="num">{t("表記 {v}", { v: deltaText(w.delta_pct) })}</span>
+                      <span class="num fill-total dim">{t("合計 {v}", { v: deltaText(w.delta_total_pct) })}</span>
                     </button>
                   {/each}
                 </div>
@@ -963,37 +965,39 @@
             {#if body?.actual_delay}
               {@const d = body.actual_delay}
               <div class="delay-note dim">
-                中ディレイ {fmtNum(d.base, 2, "s")}
+                {t("中ディレイ {v}", { v: fmtNum(d.base, 2, "s") })}
                 {#if d.fixed}
-                  ×(固定・減少が効かない)
+                  {t("×(固定・減少が効かない)")}
                 {:else if d.reduction > 0}
-                  × (1 − {fmtPct(d.reduction)}){#if d.reduction_raw > d.reduction}<span class="warn"> ※減少値は上限 {fmtPct(limits.actual_delay_reduction_max)}({fmtPct(d.reduction_raw)} ぶん選択中)</span>{/if}
+                  {t("× (1 − {v})", { v: fmtPct(d.reduction) })}{#if d.reduction_raw > d.reduction}<span class="warn"> {t("※減少値は上限 {cap}({v} ぶん選択中)", { cap: fmtPct(limits.actual_delay_reduction_max), v: fmtPct(d.reduction_raw) })}</span>{/if}
                 {/if}
-                {#if d.combo_rate < 1}× {fmtNum(d.combo_rate)}(コンボ){/if}
+                {#if d.combo_rate < 1}{t("× {v}(コンボ)", { v: fmtNum(d.combo_rate) })}{/if}
                 <!-- チャージは中ディレイ減少も倍率A も下限も受けず、下限を取ったあとに足す。
                      式が表示中の値に到達するように、足している間は段を出す -->
                 {#if d.charge > 0}
-                  ＋ チャージ <Value motion={() => d.charge} value={fmtNum(d.charge, 2, "s")} />
+                  {t("＋ チャージ")} <Value motion={() => d.charge} value={fmtNum(d.charge, 2, "s")} />
                 {/if}
-                = <Value motion={() => d.value} value={fmtNum(d.value, 2, "s")} />{#if d.floored}<span class="warn"> ※下限 {fmtNum(limits.actual_delay_min, 1, "s")}</span>{/if}
+                = <Value motion={() => d.value} value={fmtNum(d.value, 2, "s")} />{#if d.floored}<span class="warn"> {t("※下限 {v}", { v: fmtNum(limits.actual_delay_min, 1, "s") })}</span>{/if}
                 {#if d.contributions.length > 0}
-                  ／ 減少源: {d.contributions.map((c) => `${c.source} ${fmtPct(c.rate)}`).join(" ・ ")}
+                  {t("／ 減少源: {v}", { v: d.contributions.map((c) => `${t(c.source)} ${fmtPct(c.rate)}`).join(" ・ ") })}
                 {/if}
                 <br />
                 {#if body?.combo}
                   {@const c = body.combo}
-                  1 サイクル = 通常攻撃 {fmtNum(c.normal_delay, 2, "s")} + max(スキル {fmtNum(c.skill_delay, 2, "s")},
-                  CI {c.interval !== null ? fmtNum(c.interval, 2, "s") : "?"}) = {fmtNum(c.seconds, 2, "s")}
-                  ／ 1 秒あたり = (スキル + {c.normal_attack_name})の合計 ÷ 1 サイクル
+                  {t("1 サイクル = 通常攻撃 {a} + max(スキル {b}, CI {ci}) = {v}", {
+                    a: fmtNum(c.normal_delay, 2, "s"), b: fmtNum(c.skill_delay, 2, "s"),
+                    ci: c.interval !== null ? fmtNum(c.interval, 2, "s") : "?", v: fmtNum(c.seconds, 2, "s"),
+                  })}
+                  {t("／ 1 秒あたり = (スキル + {name})の合計 ÷ 1 サイクル", { name: t(c.normal_attack_name) })}
                 {:else if rotation}
                   <!-- 回しがあるときの DPS は「この回数で連打」ではない。上の回しの段と食い違う式を出さない -->
-                  連打し続けた場合は {Math.round(d.uses_per_minute)} 回/分。DPS は上の「スキル回し」(連打 + 差し込み)の配分で出しています
+                  {t("連打し続けた場合は {n} 回/分。DPS は上の「スキル回し」(連打 + 差し込み)の配分で出しています", { n: Math.round(d.uses_per_minute) })}
                 {:else}
-                  1 秒あたり = 合計 × {Math.round(d.uses_per_minute)} 回/分 ÷ 60
+                  {t("1 秒あたり = 合計 × {n} 回/分 ÷ 60", { n: Math.round(d.uses_per_minute) })}
                   {#if d.uses_measured}
-                    (<b>実測表</b>: 総減少 {fmtPct(d.reduction)} × 基本 {fmtNum(d.base, 2, "s")})
+                    ({t("実測表")}: {t("総減少 {a} × 基本 {b}", { a: fmtPct(d.reduction), b: fmtNum(d.base, 2, "s") })})
                   {:else}
-                    (実測表の範囲外なので 60 ÷ 中ディレイ の式で算出)
+                    ({t("実測表の範囲外なので 60 ÷ 中ディレイ の式で算出")})
                   {/if}
                 {/if}
               </div>
@@ -1001,20 +1005,22 @@
             {#if body?.critical_rate}
               {@const c = body.critical_rate}
               <div class="delay-note dim">
-                クリティカル率 (装備クリ補正 {fmtInt(c.equipment_critical)} + 1) × 2 × (AGI {fmtInt(c.agi)} / (AGI + 対象AGI {fmtInt(c.target_agi)}))
-                {#if c.siena_rate > 0}× シエナのオーラ {fmtNum(1 + c.siena_rate, 2)}{/if}
+                {t("クリティカル率 (装備クリ補正 {ec} + 1) × 2 × (AGI {agi} / (AGI + 対象AGI {tagi}))", {
+                  ec: fmtInt(c.equipment_critical), agi: fmtInt(c.agi), tagi: fmtInt(c.target_agi),
+                })}
+                {#if c.siena_rate > 0}{t("× シエナのオーラ {v}", { v: fmtNum(1 + c.siena_rate, 2) })}{/if}
                 = {fmtNum(c.from_agi, 1, "%")}
-                ＋ スキル Cri値 {fmtInt(c.skill)}%{#if c.bonus > 0} ＋ 増加 {fmtInt(c.bonus)}%{/if}
-                − 対象のクリティカル被撃率 {fmtInt(-c.target_taken_rate)}%
-                = <b>{fmtNum(c.value, 1, "%")}</b>{#if c.raw < 0}<span class="warn"> ※下限 0%</span>{:else if c.raw > 100}<span class="warn"> ※上限 100%</span>{/if}
+                {t("＋ スキル Cri値 {v}%", { v: fmtInt(c.skill) })}{#if c.bonus > 0} {t("＋ 増加 {v}%", { v: fmtInt(c.bonus) })}{/if}
+                {t("− 対象のクリティカル被撃率 {v}%", { v: fmtInt(-c.target_taken_rate) })}
+                = <b>{fmtNum(c.value, 1, "%")}</b>{#if c.raw < 0}<span class="warn"> {t("※下限 0%")}</span>{:else if c.raw > 100}<span class="warn"> {t("※上限 100%")}</span>{/if}
               </div>
             {:else if body && skill}
               <div class="delay-note dim">
-                クリティカル率は出せません(この敵の AGI / クリティカル被撃率、またはスキルの Cri値が wiki 未記載)。
+                {t("クリティカル率は出せません(この敵の AGI / クリティカル被撃率、またはスキルの Cri値が wiki 未記載)。")}
               </div>
             {/if}
             {#if body && body.effective_base_actual_delay === null}
-              <div class="delay-note dim">このスキルは wiki に基本中ディレイ(「動作」列)が無いため、1 秒あたりの火力を出せません。</div>
+              <div class="delay-note dim">{t("このスキルは wiki に基本中ディレイ(「動作」列)が無いため、1 秒あたりの火力を出せません。")}</div>
             {/if}
           </div>
         </SheetCard>
@@ -1042,7 +1048,7 @@
           bind:combo bind:normalAttackOverride
         />
       {:else}
-        <p class="empty dim">キャラを選択してください。</p>
+        <p class="empty dim">{t("キャラを選択してください。")}</p>
       {/if}
   {/snippet}
 </SplitPage>

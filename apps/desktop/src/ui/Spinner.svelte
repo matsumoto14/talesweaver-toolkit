@@ -8,12 +8,14 @@
   //
   // 動き(回転)は app.css の `tw-spin`。prefers-reduced-motion では止まって、
   // 静止した円弧が残る(出ていること自体は opacity で伝わる)。
+  import { t } from "../i18n";
+
   interface Props {
     active: boolean;
     /** 読み上げ用。何を待っているかを言う(「集計しています」など) */
     label?: string;
   }
-  let { active, label = "計算しています" }: Props = $props();
+  let { active, label = t("計算しています") }: Props = $props();
 </script>
 
 <span class="spinner" class:on={active} role="status" aria-label={active ? label : undefined}></span>

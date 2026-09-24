@@ -15,6 +15,7 @@
   import Icon from "../../ui/Icon.svelte";
   import Picker from "../../ui/Picker.svelte";
   import TextField from "../../ui/TextField.svelte";
+  import { t } from "../../i18n";
 
   let name = $state("");
   let gameCharacterId = $state("boris");
@@ -43,10 +44,10 @@
   const mainSkillOptions = $derived(
     buildMainSkillOptions(
       skills,
-      "未選択",
+      t("未選択"),
       inheritedMainSkill
-        ? `コピーは「${skills.find((s) => s.id === inheritedMainSkill)?.name ?? inheritedMainSkill}」のまま`
-        : "あとで選ぶ",
+        ? t("コピーは「{name}」のまま", { name: t(skills.find((s) => s.id === inheritedMainSkill)?.name ?? inheritedMainSkill) })
+        : t("あとで選ぶ"),
     ),
   );
   /** キャラを選び直したら前キャラのスキル id を残さない */
@@ -117,52 +118,52 @@
 
 <div class="pane">
   <div class="card">
-    <div class="card-title big">キャラを登録</div>
+    <div class="card-title big">{t("キャラを登録")}</div>
     <div class="row">
-      <span class="label">名前</span>
-      <TextField label="呼び名" bind:value={name} max={32} auto={selectedGame?.name ?? ""} autoNote="キャラ名を使用" />
+      <span class="label">{t("名前")}</span>
+      <TextField label={t("呼び名")} bind:value={name} max={32} auto={selectedGame?.name ?? ""} autoNote={t("キャラ名を使用")} />
     </div>
     <div class="row">
-      <span class="label">キャラ</span>
-      <span class="picked">{selectedGame?.name ?? ""}</span>
-      <span class="hint dim">素ステ・覚醒はあとで「キャラステータス」で</span>
+      <span class="label">{t("キャラ")}</span>
+      <span class="picked">{t(selectedGame?.name ?? "")}</span>
+      <span class="hint dim">{t("素ステ・覚醒はあとで「キャラステータス」で")}</span>
     </div>
     <div class="grid">
       {#each app.gameCharacters as c (c.id)}
         {@const on = c.id === gameCharacterId}
         <button type="button" class="pick" class:on onclick={() => pickGameCharacter(c.id)}>
-          <Icon kind="character" id={c.id} size={40} label={c.name} />
-          <span class="pick-name">{c.name}</span>
+          <Icon kind="character" id={c.id} size={40} label={t(c.name)} />
+          <span class="pick-name">{t(c.name)}</span>
         </button>
       {/each}
     </div>
     <!-- 候補チップが横に並ぶので、ラベルと注記を上の行に置き、Picker は幅いっぱいの 1 行にする -->
     <div class="row skill-row">
-      <span class="label">主軸スキル</span>
+      <span class="label">{t("主軸スキル")}</span>
       <span class="hint dim">
-        {skills.length === 0 ? "このキャラのスキルは未収録" : "攻撃力の依存種別を決めます。あとで変更できます"}
+        {skills.length === 0 ? t("このキャラのスキルは未収録") : t("攻撃力の依存種別を決めます。あとで変更できます")}
       </span>
     </div>
     <div class="skill-select">
-      <Picker label="主軸スキル" options={mainSkillOptions} note="単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)" bind:value={mainSkillId} />
+      <Picker label={t("主軸スキル")} options={mainSkillOptions} note={t("単体を優先・継続火力の目安順(倍率 × 段数 ÷ 基本中ディレイ)")} bind:value={mainSkillId} />
     </div>
     <div class="actions">
       <button type="button" class="btn primary" disabled={saving} onclick={() => register(false)}>
-        {saving ? "登録中…" : "未装備で登録"}
+        {saving ? t("登録中…") : t("未装備で登録")}
       </button>
       {#if source}
         <button type="button" class="btn" disabled={saving} onclick={() => register(true)}>
-          {source.name} をコピー
+          {t("{name} をコピー", { name: source.name })}
         </button>
       {/if}
       {#if app.characters.length > 0}
-        <button type="button" class="btn cancel" onclick={() => (app.registerOpen = false)}>閉じる</button>
+        <button type="button" class="btn cancel" onclick={() => (app.registerOpen = false)}>{t("閉じる")}</button>
       {/if}
     </div>
   </div>
   <p class="note dim">
-    登録は名前だけでOK。装備やステータスは登録後にこの画面で育てます(空の項目は中立値で計算されます)。
-    パワーウェポンとストロングウェポン Lv6(合計 +20%)は既定で入ります(装備ペインで変更できます)。
+    {t("登録は名前だけでOK。装備やステータスは登録後にこの画面で育てます(空の項目は中立値で計算されます)。")}
+    {t("パワーウェポンとストロングウェポン Lv6(合計 +20%)は既定で入ります(装備ペインで変更できます)。")}
   </p>
 </div>
 

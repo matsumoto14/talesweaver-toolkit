@@ -11,6 +11,7 @@
   import {
     fmtCooldown, fmtDuration, fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned, fmtSignedPct,
   } from "../../format";
+  import { t } from "../../i18n";
   import { limits } from "../../limits.svelte";
   import Icon, { type IconKind } from "../../ui/Icon.svelte";
   import Value from "../../ui/Value.svelte";
@@ -126,18 +127,18 @@
   const perHitDetail = $derived.by<Detail | null>(() => {
     if (perHit === null || pierced === null) return null;
     const mats: Mat[] = flowRows.map((f) => ({
-      label: f.k,
+      label: t(f.k),
       mult: f.mult === "—" ? undefined : f.mult,
       value: fmtSigned(f.add),
-      sub: `ここまで ${fmtInt(Math.round(f.to))}`,
+      sub: t("ここまで {v}", { v: fmtInt(Math.round(f.to)) }),
       n: Math.round(f.add),
     }));
     if (result.capped_loss.max > 0) {
       mats.push({
-        label: "ダメージ上限(1 段ごと)",
+        label: t("ダメージ上限(1 段ごと)"),
         value: fmtInt(result.damage_cap),
         n: result.damage_cap,
-        sub: `上限で ${fmtSigned(-result.capped_loss.max, { max: 3 })}`,
+        sub: t("上限で {v}", { v: fmtSigned(-result.capped_loss.max, { max: 3 }) }),
       });
     }
     return {
@@ -146,7 +147,7 @@
       to: perHit,
       mats,
       idle: 0,
-      expr: "ゲームの表記ダメージ(スキル分のみ)。武器強化の追加固定ダメージは含まない(合計の内訳を見る)",
+      expr: t("ゲームの表記ダメージ(スキル分のみ)。武器強化の追加固定ダメージは含まない(合計の内訳を見る)"),
     };
   });
 
@@ -156,7 +157,7 @@
     const skillTotal = pickSide(result.skill_total, critMode) ?? 0;
     const mats: Mat[] = [
       {
-        label: `1 発(表記ダメージ) ${fmtInt(perHit)} × ${result.hit_count} 段`,
+        label: t("1 発(表記ダメージ) {perHit} × {hits} 段", { perHit: fmtInt(perHit), hits: result.hit_count }),
         mult: `×${result.hit_count}`,
         value: fmtInt(skillTotal),
         n: skillTotal,
@@ -164,43 +165,43 @@
     ];
     if (result.weapon_added_per_hit !== 0) {
       mats.push({
-        label: "武器強化(追加固定)",
+        label: t("武器強化(追加固定)"),
         mult: "+",
         value: fmtInt(result.weapon_added_total),
         n: result.weapon_added_total,
-        sub: "上限なし・表記ダメージとは別枠",
+        sub: t("上限なし・表記ダメージとは別枠"),
       });
     }
     if (added !== 0) {
       mats.push({
-        label: "割合追加ダメージ(合計に乗る)",
+        label: t("割合追加ダメージ(合計に乗る)"),
         mult: fmtSignedPct(result.added_damage_rate, { max: 4 }),
         value: fmtInt(added),
         n: added,
-        sub: "シャープネスビジョン・ランダムOP・称号・キャラスキル",
+        sub: t("シャープネスビジョン・ランダムOP・称号・キャラスキル"),
       });
     }
     if (burst) {
       // 技とは別枠のダメージ。技 1 回につき 1 度なので、1 発の合計にそのまま合流する
       mats.push({
-        label: `<フラグ> 爆発(スタック ${flag?.stacks ?? 0})`,
-        mult: `×${burst.hit_count} 段`,
+        label: t("<フラグ> 爆発(スタック {n})", { n: flag?.stacks ?? 0 }),
+        mult: t("×{n} 段", { n: burst.hit_count }),
         value: fmtInt(burst.total_primary),
         n: burst.total_primary,
-        sub: `技とは別枠・倍率 ${fmtPct(flag?.multiplier ?? 0)}・Cri倍率 ×2.5`,
+        sub: t("技とは別枠・倍率 {v}・Cri倍率 ×2.5", { v: fmtPct(flag?.multiplier ?? 0) }),
       });
     }
     if (!critMode) {
       mats.push({
-        label: "クリティカルなら",
+        label: t("クリティカルなら"),
         mult: skill ? `×${fmtNum(skill.critical_multiplier)}` : undefined,
         value: fmtInt(result.total.critical),
         n: result.total.critical,
       });
     }
-    mats.push({ label: "乱数が最小のとき", value: fmtInt(result.total.min), n: result.total.min });
+    mats.push({ label: t("乱数が最小のとき"), value: fmtInt(result.total.min), n: result.total.min });
     return {
-      mult: `×${result.hit_count} 段`,
+      mult: t("×{n} 段", { n: result.hit_count }),
       delta: totalValue - perHit,
       to: totalValue,
       mats,
@@ -214,101 +215,101 @@
     const d = result.actual_delay;
     if (d === null || result.dps === null || dpsValue === null) return null;
     const mats: Mat[] = [
-      { label: "合計ダメージ", value: fmtInt(totalValue), n: totalValue },
+      { label: t("合計ダメージ"), value: fmtInt(totalValue), n: totalValue },
       {
-        label: "基本中ディレイ",
+        label: t("基本中ディレイ"),
         value: fmtNum(d.base, 2, "s"),
         n: d.base, unit: "s",
-        sub: d.fixed ? "固定(減少が効かない)" : undefined,
+        sub: d.fixed ? t("固定(減少が効かない)") : undefined,
       },
     ];
     for (const c of d.contributions) {
-      mats.push({ label: `↳ ${c.source}`, value: fmtSignedPct(-c.rate), n: -Math.round(c.rate * 100), unit: "%" });
+      mats.push({ label: `↳ ${t(c.source)}`, value: fmtSignedPct(-c.rate), n: -Math.round(c.rate * 100), unit: "%" });
     }
     mats.push({
-      label: `中ディレイ減少(上限 ${fmtPct(limits.actual_delay_reduction_max)})`,
+      label: t("中ディレイ減少(上限 {v})", { v: fmtPct(limits.actual_delay_reduction_max) }),
       value: fmtPct(d.reduction),
       n: Math.round(d.reduction * 100), unit: "%",
-      sub: d.reduction_raw > d.reduction ? `選択中は ${fmtPct(d.reduction_raw)}` : undefined,
+      sub: d.reduction_raw > d.reduction ? t("選択中は {v}", { v: fmtPct(d.reduction_raw) }) : undefined,
     });
     if (d.combo_rate < 1) {
-      mats.push({ label: "コンボ(倍率A。間に通常攻撃を挟む)", mult: `×${fmtNum(d.combo_rate)}`, value: "" });
+      mats.push({ label: t("コンボ(倍率A。間に通常攻撃を挟む)"), mult: `×${fmtNum(d.combo_rate)}`, value: "" });
     }
     if (d.charge > 0) {
       // チャージは中ディレイ減少も倍率A も下限 0.3s も受けず、下限を取ったあとに足す
       mats.push({
-        label: "チャージ(最大までためる)",
+        label: t("チャージ(最大までためる)"),
         mult: "+",
         value: fmtNum(d.charge, 2, "s"),
         n: d.charge, unit: "s",
-        sub: "減少も下限も効かない(そのまま足す)",
+        sub: t("減少も下限も効かない(そのまま足す)"),
       });
     }
     mats.push({
-      label: intervalNote ? "攻撃間隔" : "中ディレイ",
+      label: intervalNote ? t("攻撃間隔") : t("中ディレイ"),
       value: fmtNum(d.value, 2, "s"),
       n: d.value, unit: "s",
       // 召喚獣は 基本 × (1 − 減少) + 0.0705s(発動遅延)と CT の長いほう。下限 0.3s もコンボ倍率も無い
       // (domain::apply_summon_interval)
       sub: intervalNote
         ? intervalCapped
-          ? `CT ${fmtNum(d.value, 1, "s")} で頭打ち`
-          : "基本 × (1 − 減少) + 0.0705s(発動遅延)"
-        : d.floored ? `下限 ${fmtNum(limits.actual_delay_min, 1, "s")} で頭打ち` : undefined,
+          ? t("CT {v} で頭打ち", { v: fmtNum(d.value, 1, "s") })
+          : t("基本 × (1 − 減少) + 0.0705s(発動遅延)")
+        : d.floored ? t("下限 {v} で頭打ち", { v: fmtNum(limits.actual_delay_min, 1, "s") }) : undefined,
     });
     const cycle = result.combo;
     if (cycle) {
       // コンボは 1 サイクル(通常攻撃 → スキル)で割る。実測表はコンボなしの計測なので使わない
       mats.push({
-        label: `通常攻撃(${cycle.normal_attack_name})`,
+        label: t("通常攻撃({name})", { name: t(cycle.normal_attack_name) }),
         value: fmtInt(pickSide(cycle.normal_attack_total, critMode) ?? 0),
         n: pickSide(cycle.normal_attack_total, critMode) ?? 0,
-        sub: `中ディレイ ${fmtNum(cycle.normal_delay, 2, "s")}`,
+        sub: t("中ディレイ {v}", { v: fmtNum(cycle.normal_delay, 2, "s") }),
       });
       mats.push({
-        label: "コンボインターバル",
+        label: t("コンボインターバル"),
         value: cycle.interval !== null ? fmtNum(cycle.interval, 2, "s") : "?",
         n: cycle.interval ?? undefined, unit: "s",
         sub: cycle.interval === null
-          ? "wiki 未収録。スキルの中ディレイをそのまま使っています"
+          ? t("wiki 未収録。スキルの中ディレイをそのまま使っています")
           : cycle.interval_binding
-            ? "スキルの中ディレイより長いので、こちらが下限になります"
-            : "スキルの中ディレイのほうが長いので効きません",
+            ? t("スキルの中ディレイより長いので、こちらが下限になります")
+            : t("スキルの中ディレイのほうが長いので効きません"),
       });
       mats.push({
-        label: "1 サイクル",
+        label: t("1 サイクル"),
         value: fmtNum(cycle.seconds, 2, "s"),
         n: cycle.seconds, unit: "s",
-        sub: `通常攻撃 ${fmtNum(cycle.normal_delay, 2, "s")} + ${fmtNum(cycle.skill_gap, 2, "s")}`,
+        sub: t("通常攻撃 {a} + {b}", { a: fmtNum(cycle.normal_delay, 2, "s"), b: fmtNum(cycle.skill_gap, 2, "s") }),
       });
     } else {
       mats.push({
-        label: "スキル回数",
-        value: `${Math.round(d.uses_per_minute)} 回/分`,
+        label: t("スキル回数"),
+        value: t("{n} 回/分", { n: Math.round(d.uses_per_minute) }),
         n: Math.round(d.uses_per_minute),
         // 回しの中では「差し込みは間隔ごとに 1 回」「連打は空いた時間ぶん」なので、
         // この回数は連打し続けたときの上限になる(実際の回数は下の段)
-        sub: (intervalNote ?? (d.uses_measured ? "実測表から" : "式 60 ÷ 中ディレイ"))
-          + (rotation ? " ・ 連打し続けたときの回数(実際は下のスキル回しのとおり)" : ""),
+        sub: (intervalNote ?? (d.uses_measured ? t("実測表から") : t("式 60 ÷ 中ディレイ")))
+          + (rotation ? t(" ・ 連打し続けたときの回数(実際は下のスキル回しのとおり)") : ""),
       });
     }
     // 本体の回しが精霊に及ぼすぶん(値は Rust の combine_damage。この節の値に含めている)
     const absentLoss = summonInRotation?.absentLoss ?? null;
     if (absentLoss !== null && absentLoss > 0) {
       mats.push({
-        label: "陣で精霊が消えるぶん",
+        label: t("陣で精霊が消えるぶん"),
         value: `−${fmtInt(Math.round(absentLoss))}`,
         n: -Math.round(absentLoss),
-        sub: "陣を置くと精霊が消え、呼び直すまで攻撃が止まる",
+        sub: t("陣を置くと精霊が消え、呼び直すまで攻撃が止まる"),
       });
     }
     const hitBonus = summonInRotation?.hitBonus ?? null;
     if (hitBonus !== null && hitBonus > 0) {
       mats.push({
-        label: "極・ダメージプラス",
+        label: t("極・ダメージプラス"),
         value: `+${fmtInt(Math.round(hitBonus))}`,
         n: Math.round(hitBonus),
-        sub: "10 秒間、命中ごとに 1 段 × 割合 × 2 回(1 秒に 1 回まで)。本体が撃ち、精霊の攻撃にだけ効く",
+        sub: t("10 秒間、命中ごとに 1 段 × 割合 × 2 回(1 秒に 1 回まで)。本体が撃ち、精霊の攻撃にだけ効く"),
       });
     }
     // チャネリング技(押している間、一定間隔で攻撃を繰り返す)。上の「合計ダメージ」は
@@ -316,11 +317,12 @@
     if (skill?.channeling) {
       const { ticks, tick_seconds } = skill.channeling;
       mats.push({
-        label: "チャネリング",
-        value: `${fmtInt(ticks)} 回`,
+        label: t("チャネリング"),
+        value: t("{n} 回", { n: fmtInt(ticks) }),
         n: ticks,
-        sub: `合計ダメージ(${fmtInt(result.hit_count)} 段)を ${fmtNum(tick_seconds, 2, "s")} 毎に、`
-          + `最大 ${fmtNum(tick_seconds * ticks, 2, "s")} 撃ち続けます`,
+        sub: t("合計ダメージ({hits} 段)を {tick} 毎に、最大 {max} 撃ち続けます", {
+          hits: fmtInt(result.hit_count), tick: fmtNum(tick_seconds, 2, "s"), max: fmtNum(tick_seconds * ticks, 2, "s"),
+        }),
       });
     }
     // 回し(連打する技 + 差し込む CT 技)。**技ごとの寄与・取り分・合間の回数は主役カードの
@@ -334,28 +336,32 @@
         // 陣は置くと精霊が消えるので、呼び直しの時間と、不在のぶん召喚獣の DPS を削っていることも言う
         const absentNote =
           insert.is_field && rotation.summon_absent_share > 0
-            ? `。置くと精霊が消えるので呼び直しを所要に足し、不在の ${(rotation.summon_absent_share * 100).toFixed(1)}% ぶん召喚獣の DPS を削っています`
+            ? t("。置くと精霊が消えるので呼び直しを所要に足し、不在の {pct}% ぶん召喚獣の DPS を削っています", {
+                pct: (rotation.summon_absent_share * 100).toFixed(1),
+              })
             : "";
         const reason = {
-          crowded: "差し込む技だけで時間が埋まり、頻度を縮めています(全部は CT どおりに撃てません)",
+          crowded: t("差し込む技だけで時間が埋まり、頻度を縮めています(全部は CT どおりに撃てません)"),
           cooldown: insert.is_field
-            ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れるまで連打技を挟み、切れたら置き直すので、この間隔になります${absentNote}`
-            : `CT ${fmtCooldown(insert.cooldown_seconds)} が明くまで連打技を挟むので、この間隔になります`,
-          reapply: `<フラグ> を積み直すのに連打技を ${insert.filler_uses} 回挟むので、CT より長くなります`,
+            ? t("持続 {cd} が切れるまで連打技を挟み、切れたら置き直すので、この間隔になります{note}", {
+                cd: fmtCooldown(insert.cooldown_seconds), note: absentNote,
+              })
+            : t("CT {cd} が明くまで連打技を挟むので、この間隔になります", { cd: fmtCooldown(insert.cooldown_seconds) }),
+          reapply: t("<フラグ> を積み直すのに連打技を {n} 回挟むので、CT より長くなります", { n: insert.filler_uses }),
           free: insert.is_field
-            ? `持続 ${fmtCooldown(insert.cooldown_seconds)} が切れたらすぐ置き直せます${absentNote}`
-            : `CT ${fmtCooldown(insert.cooldown_seconds)} が明けたらすぐ撃てます`,
+            ? t("持続 {cd} が切れたらすぐ置き直せます{note}", { cd: fmtCooldown(insert.cooldown_seconds), note: absentNote })
+            : t("CT {cd} が明けたらすぐ撃てます", { cd: fmtCooldown(insert.cooldown_seconds) }),
         }[insert.pace];
         // 極・ダメージプラス: 撃つのは本体だが効くのは精霊。上乗せ額は精霊の鎖(1 秒あたり)に出す
         const bonusNote =
           insert.summon_hit_bonus_seconds > 0 && rotation.summon_hit_bonus_dps > 0
-            ? "。効くのは精霊の攻撃だけで、上乗せは精霊の鎖に出しています"
+            ? t("。効くのは精霊の攻撃だけで、上乗せは精霊の鎖に出しています")
             : "";
         mats.push({
-          label: `↳ ${insert.skill_name} の間隔`,
+          label: t("↳ {skill} の間隔", { skill: t(insert.skill_name) }),
           value: fmtNum(insert.interval_seconds, 2, "s"),
           n: insert.interval_seconds, unit: "s",
-          sub: reason + bonusNote + (insert.burst ? " ・ <フラグ> 爆発つき" : ""),
+          sub: reason + bonusNote + (insert.burst ? t(" ・ <フラグ> 爆発つき") : ""),
         });
       }
     }
@@ -364,44 +370,49 @@
     if (flag) {
       const durationDps = pickSide(flag.duration.dps, critMode);
       mats.push({
-        label: `<フラグ> 持続(${fmtNum(flag.tick_seconds, 1, "s")}ごと)`,
+        label: t("<フラグ> 持続({v}ごと)", { v: fmtNum(flag.tick_seconds, 1, "s") }),
         value: durationDps !== null ? fmtInt(Math.round(durationDps)) : "—",
         n: durationDps === null ? undefined : Math.round(durationDps),
-        sub: `1 回 ${fmtInt(pickSide(flag.duration.total, critMode) ?? 0)}・持続 ${fmtNum(flag.lasts_seconds, 0, "s")}`,
+        sub: t("1 回 {v}・持続 {d}", {
+          v: fmtInt(pickSide(flag.duration.total, critMode) ?? 0), d: fmtNum(flag.lasts_seconds, 0, "s"),
+        }),
       });
     }
     if (burst) {
       const burstDps = pickSide(burst.dps, critMode);
       mats.push({
-        label: "<フラグ> 爆発",
+        label: t("<フラグ> 爆発"),
         value: burstDps !== null ? fmtInt(Math.round(burstDps)) : "—",
         n: burstDps === null ? undefined : Math.round(burstDps),
         sub: mainInsert
-          ? `${attackerSkillName} 1 回につき 1 度(${fmtNum(mainInsert.interval_seconds, 2, "s")} に 1 回)`
-          : "技 1 回につき 1 度",
+          ? t("{skill} 1 回につき 1 度({v} に 1 回)", { skill: t(attackerSkillName), v: fmtNum(mainInsert.interval_seconds, 2, "s") })
+          : t("技 1 回につき 1 度"),
       });
     }
     if (expectedDps !== null && result.critical_chance > 0 && result.critical_chance < 1) {
       mats.push({
-        label: "期待値(クリ率で按分)",
+        label: t("期待値(クリ率で按分)"),
         value: fmtInt(Math.round(expectedDps)),
         n: Math.round(expectedDps),
-        sub: `${flag ? "<フラグ> 込みの" : ""}合計(非クリ) × ${fmtPct(1 - result.critical_chance, 1)} + 合計(クリ) × ${fmtPct(result.critical_chance, 1)}`,
+        sub: t("{prefix}合計(非クリ) × {a} + 合計(クリ) × {b}", {
+          prefix: flag ? t("<フラグ> 込みの") : "",
+          a: fmtPct(1 - result.critical_chance, 1), b: fmtPct(result.critical_chance, 1),
+        }),
       });
     }
     return {
-      mult: dpsDenominator !== null ? `÷ ${fmtNum(dpsDenominator, 2, "s")}` : "スキル回し",
+      mult: dpsDenominator !== null ? t("÷ {v}", { v: fmtNum(dpsDenominator, 2, "s") }) : t("スキル回し"),
       delta: null,
       to: Math.round(dpsValue),
       mats,
       idle: 0,
       expr: rotation
-        ? "1 秒あたり = 差し込む技(＋ <フラグ> 爆発) ÷ その間隔 ＋ 連打技 × 空いた時間"
-          + (flag ? " ＋ <フラグ> 持続(1 秒ごと)" : "")
+        ? t("1 秒あたり = 差し込む技(＋ <フラグ> 爆発) ÷ その間隔 ＋ 連打技 × 空いた時間")
+          + (flag ? t(" ＋ <フラグ> 持続(1 秒ごと)") : "")
         : (cycle
-            ? "1 秒あたり = (スキルの合計 + 通常攻撃の合計) ÷ 1 サイクル"
-            : "1 秒あたり = 合計 × スキル回数(回/分) ÷ 60")
-          + (flag ? " ＋ <フラグ> 持続(1 秒ごと)" : ""),
+            ? t("1 秒あたり = (スキルの合計 + 通常攻撃の合計) ÷ 1 サイクル")
+            : t("1 秒あたり = 合計 × スキル回数(回/分) ÷ 60"))
+          + (flag ? t(" ＋ <フラグ> 持続(1 秒ごと)") : ""),
     };
   });
 </script>
@@ -419,7 +430,7 @@
       type="button" class="node gate"
       aria-expanded={store.isOpen("perHit")} onclick={() => toggle("perHit")}
     >
-      <span class="nl">表記ダメージ(1 発)</span>
+      <span class="nl">{t("表記ダメージ(1 発)")}</span>
       <Value class={heroNumber ? "hero-num nv" : "nv"} motion={() => perHit} value={fmtInt(perHit)} />
       <span class="nsub num">
         <span class="nsub-line">
@@ -435,19 +446,19 @@
       type="button" class="node mid"
       aria-expanded={store.isOpen("total")} onclick={() => toggle("total")}
     >
-      <span class="nl">合計ダメージ <span class="num">(×<Value motion={() => result.hit_count} value={String(result.hit_count)} /> 段)</span></span>
+      <span class="nl">{t("合計ダメージ")} <span class="num">(×<Value motion={() => result.hit_count} value={String(result.hit_count)} /> {t("段")})</span></span>
       <Value class="nv" motion={() => totalValue} value={fmtInt(totalValue)} />
       <span class="nsub num">
         <span class="nsub-line"><Value motion={() => totalValue} delta={{}} /></span>
         <span class="nsub-line">
           {#if result.critical_rate === null}
-            <span>クリ率 未記載 → 確定扱い</span>
+            <span>{t("クリ率 未記載 → 確定扱い")}</span>
           {:else}
             <Value
               class={`${result.critical_chance <= 0 ? "crit-none" : ""} ${result.critical_chance > 0 && result.critical_chance < 1 ? "crit-partial" : ""}`}
               value={critChanceStage(result.critical_chance * 100).label}
             >
-              {#snippet children()}クリ率 {fmtNum(result.critical_rate!.value, 1, "%")}{critMode ? ` ・ ${critChanceStage(result.critical_chance * 100).label}` : ""}{/snippet}
+              {#snippet children()}{t("クリ率 {v}", { v: fmtNum(result.critical_rate!.value, 1, "%") })}{critMode ? ` ・ ${critChanceStage(result.critical_chance * 100).label}` : ""}{/snippet}
             </Value>
           {/if}
         </span>
@@ -457,7 +468,7 @@
       type="button" class="node rate"
       aria-expanded={store.isOpen("dps")} onclick={() => toggle("dps")}
     >
-      <span class="nl">DPS {#if dpsDenominator !== null}<span class="num">(÷ <Value motion={() => dpsDenominator} value={fmtNum(dpsDenominator, 2, "s")} />{mainInsert ? " ごとに 1 回" : ""})</span>{:else if rotation}<span class="num">(スキル回し)</span>{/if}</span>
+      <span class="nl">{t("DPS")} {#if dpsDenominator !== null}<span class="num">(÷ <Value motion={() => dpsDenominator} value={fmtNum(dpsDenominator, 2, "s")} />{mainInsert ? ` ${t("ごとに 1 回")}` : ""})</span>{:else if rotation}<span class="num">({t("スキル回し")})</span>{/if}</span>
       <Value class="nv" motion={() => dpsValue} value={dpsValue !== null ? fmtInt(Math.round(dpsValue)) : null} />
       <span class="nsub dim">
         <span class="nsub-line"><Value motion={() => (dpsValue === null ? null : Math.round(dpsValue))} delta={{}} /></span>
@@ -466,32 +477,32 @@
             {#if intervalNote}
               {intervalNote}
             {:else if usesPerMinute !== null}
-              {attackerSkillName} {fmtNum(usesPerMinute, 1)} 回/分{rotation && filler && !filler.is_main ? ` ・ 合間に ${filler.skill_name}` : ""} ・{critMode ? "クリ確定" : "非クリ"}
+              {t("{skill} {n} 回/分", { skill: t(attackerSkillName), n: fmtNum(usesPerMinute, 1) })}{rotation && filler && !filler.is_main ? t(" ・ 合間に {filler}", { filler: t(filler.skill_name) }) : ""} ・{critMode ? t("クリ確定") : t("非クリ")}
             {:else if rotation}
-              連打と差し込みのスキル回し ・{critMode ? "クリ確定" : "非クリ"}
+              {t("連打と差し込みのスキル回し")} ・{critMode ? t("クリ確定") : t("非クリ")}
             {/if}
           </span>
         </span>
         {#if expectedDps !== null && result.critical_chance > 0 && result.critical_chance < 1}
           <span class="nsub-line">
-            期待値 <Value motion={() => expectedDps} value={fmtInt(Math.round(expectedDps ?? 0))} />(クリ率 {fmtPct(result.critical_chance, 1)})
+            {t("期待値")} <Value motion={() => expectedDps} value={fmtInt(Math.round(expectedDps ?? 0))} />{t("(クリ率 {v})", { v: fmtPct(result.critical_chance, 1) })}
           </span>
         {/if}
       </span>
     </button>
     {#if showDefeat && defeatSeconds !== null && result.enemy_hp !== null}
       <div class="node rate">
-        <span class="nl">討伐時間 <Value motion={() => result.enemy_hp} value={`(HP ${fmtInt(result.enemy_hp ?? 0)})`} /></span>
+        <span class="nl">{t("討伐時間")} <Value motion={() => result.enemy_hp} value={t("(HP {v})", { v: fmtInt(result.enemy_hp ?? 0) })} /></span>
         <Value class="nv" motion={() => defeatSeconds} value={fmtDuration(defeatSeconds ?? 0)} />
         <span class="nsub dim">
           <span class="nsub-line">
             <Value
               motion={() => (defeatSeconds == null ? null : Math.round(defeatSeconds))}
-              delta={{ unit: "秒", digits: 0 }}
+              delta={{ unit: t("秒"), digits: 0 }}
               deltaClass="less-is-better"
             />
           </span>
-          <span class="nsub-line">ソロ</span>
+          <span class="nsub-line">{t("ソロ")}</span>
         </span>
       </div>
     {/if}

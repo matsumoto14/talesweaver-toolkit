@@ -7,6 +7,7 @@
    */
   import type { Attacker, DamageCategory, DamageResult, DefenseProfile } from "../../api/types";
   import { fmtInt, fmtNum, fmtPct, fmtRate, fmtSigned } from "../../format";
+  import { t } from "../../i18n";
   import Chip from "../../ui/Chip.svelte";
   import Disclosure from "../../ui/Disclosure.svelte";
   import Value from "../../ui/Value.svelte";
@@ -38,7 +39,7 @@
     onAttacker?: (attacker: Attacker) => void;
   }
   let { result, defense, perHit, critMode, store, attacker, summonAttacker = null, onAttacker }: Props = $props();
-  const summonAttackerLabel = $derived(summonAttacker === "destruction_spirit" ? "精霊" : "熊");
+  const summonAttackerLabel = $derived(summonAttacker === "destruction_spirit" ? t("精霊") : t("熊"));
 
   const steps = $derived(stepsOf(result, critMode));
   const atkRows = $derived(attackRows(result?.trace.attack ?? null));
@@ -92,7 +93,7 @@
   const leverGain = (c: Lever) => c.gain;
   const bestLeverGain = $derived(bestLever ? leverGain(bestLever) : 0);
   const fmtHeadroom = (c: Lever) =>
-    c.headroom !== null ? `上限まで あと ${fmtNum(c.headroom * 100)}%` : "上限なし";
+    c.headroom !== null ? t("上限まで あと {v}%", { v: fmtNum(c.headroom * 100) }) : t("上限なし");
   /** topLever が乗っている段(帯の行を太字にするため) */
   const topLeverStep = $derived(
     topLever ? (steps.find((s) => s.categories.includes(topLever.category as DamageCategory))?.name ?? null) : null,
@@ -100,10 +101,10 @@
   /** 次の候補は段を持たない一覧なので、見出し(倍率 / 実数 / 結果)を出さずに行だけ並べる */
   const nextLeverDetail = $derived({
     mult: "—", delta: null, to: null, idle: 0, expr: null, head: false,
-    note: "+1% 足したときの最終ダメージの伸び。いま積んでいる量が少ないカテゴリほど 1% の価値が高い。",
+    note: t("+1% 足したときの最終ダメージの伸び。いま積んでいる量が少ないカテゴリほど 1% の価値が高い。"),
     mats: nextLevers.map((c, i): Mat => ({
       prefix: `${i + 2}.`,
-      label: `${c.symbol} ${c.label}`,
+      label: `${c.symbol} ${t(c.label)}`,
       mult: fmtCatValue(c),
       value: fmtSigned(leverGain(c), 2, "%"),
       n: leverGain(c),
@@ -119,20 +120,20 @@
        (button の入れ子は不正)ので、同じ帯の上に隣として重ねる。召喚獣がいないキャラでは何も置かない -->
   <div class="panel-head-wrap">
     <button type="button" class="panel-head blue" aria-expanded={store.flowOpen} onclick={() => (store.flowOpen = !store.flowOpen)}>
-      <span class="panel-title dark">なぜこの数字？</span>
-      <span class="panel-note dark">{store.flowOpen ? "閉じる" : "内訳をひらく"}</span>
+      <span class="panel-title dark">{t("なぜこの数字？")}</span>
+      <span class="panel-note dark">{store.flowOpen ? t("閉じる") : t("内訳をひらく")}</span>
       <span class="caret" class:rot={store.flowOpen}>▼</span>
     </button>
     {#if onAttacker && summonAttacker}
-      <div class="who-switch" role="group" aria-label="なぜこの数字? を本体 / {summonAttackerLabel}のどちらで見るか">
-        <Chip class="quiet" name="why-attacker" value="player" on={attacker === "player"} onToggle={() => onAttacker?.("player")}>本体</Chip>
+      <div class="who-switch" role="group" aria-label={t("なぜこの数字? を本体 / {who}のどちらで見るか", { who: summonAttackerLabel })}>
+        <Chip class="quiet" name="why-attacker" value="player" on={attacker === "player"} onToggle={() => onAttacker?.("player")}>{t("本体")}</Chip>
         <Chip class="quiet" name="why-attacker" value={summonAttacker} on={attacker === summonAttacker} onToggle={() => onAttacker?.(summonAttacker)}>{summonAttackerLabel}</Chip>
       </div>
     {/if}
   </div>
   <div class="panel-body">
     <div class="flow-line">
-      <span class="dim">防御を抜けた攻撃力</span>
+      <span class="dim">{t("防御を抜けた攻撃力")}</span>
       <Value
         class="strong"
         motion={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}
@@ -140,7 +141,7 @@
         delta={{}}
       />
       <span class="arrow num dim">→</span>
-      <span class="dim">倍率</span>
+      <span class="dim">{t("倍率")}</span>
       <!-- 材料を変えると倍率も変わる。跳ねないと 1 つだけ古い値に見える(§00 04。
            実機の tools/design-audit/live/motion.js が検出した) -->
       <Value class="good strong" value={flowMultLabel} />
@@ -153,20 +154,22 @@
          畳むと「なぜこの数字?」に答えないまま閉じることになる -->
     {#if noPierce}
       <div class="lever-note">
-        攻撃力が相手の防御力に届いていないので、倍率は何もかかりません。まず攻撃力を上げる必要があります。
+        {t("攻撃力が相手の防御力に届いていないので、倍率は何もかかりません。まず攻撃力を上げる必要があります。")}
       </div>
     {:else if topLever}
       <Disclosure class="lever-toggle" summaryClass="chip quiet" bind:open={leverOpen}>
-        {#snippet summary(open)}{open ? "閉じる" : "どこが効いてる？"}{/snippet}
+        {#snippet summary(open)}{open ? t("閉じる") : t("どこが効いてる？")}{/snippet}
       <div class="lever-note">
-        いま一番効いている積み上げは「{topLever.symbol} {topLever.label}」の {fmtCatValue(topLever)}(×{fmtNum(topLever.factor)}){catAtCap(topLever) ? "。上限に達しています" : ""}。
+        {t("いま一番効いている積み上げは「{cat}」の {val}(×{factor})。", {
+          cat: `${topLever.symbol} ${t(topLever.label)}`, val: fmtCatValue(topLever), factor: fmtNum(topLever.factor),
+        })}{catAtCap(topLever) ? t("上限に達しています。") : ""}
         {#if bestLever}
-          <br />伸ばすなら「{bestLever.symbol} {bestLever.label}」。+1% ごとに最終ダメージが <Value motion={() => bestLeverGain} value={fmtSigned(bestLeverGain, 2, "%")} delta={{ unit: "%", digits: 2 }} /> 伸びます({fmtHeadroom(bestLever)})。
+          <br />{t("伸ばすなら「{cat}」。+1% ごとに最終ダメージが", { cat: `${bestLever.symbol} ${t(bestLever.label)}` })} <Value motion={() => bestLeverGain} value={fmtSigned(bestLeverGain, 2, "%")} delta={{ unit: "%", digits: 2 }} /> {t("伸びます({room})。", { room: fmtHeadroom(bestLever) })}
           {#if nextLevers.length > 0}
             <!-- 次の候補。押した行は動かず、直下に増える(§00 03)。列は内訳と同じ段。
                  チップは文中に居るので <details> は段に溶かす(display: contents) -->
             <Disclosure class="next-levers" summaryClass="chip quiet" bind:open={nextLeversOpen}>
-              {#snippet summary()}次の候補 {nextLevers.length}{/snippet}
+              {#snippet summary()}{t("次の候補 {n}", { n: nextLevers.length })}{/snippet}
               <div class="lever-list inset"><DetailRows d={nextLeverDetail} {store} /></div>
             </Disclosure>
           {/if}
@@ -174,7 +177,7 @@
       </div>
       </Disclosure>
     {:else}
-      <div class="lever-note">倍率はまだ何もかかっていません。</div>
+      <div class="lever-note">{t("倍率はまだ何もかかっていません。")}</div>
     {/if}
 
     <!-- 閉じていても描画して隠す。閉じている間の変更でも材料の前回値が残り、開いたとき・↑ を辿るときに
@@ -183,7 +186,7 @@
       <!-- ① 攻撃力をつくる -->
       <div class="stage">
         <span class="stage-no" style="background: var(--flow-1);">1</span>
-        <span class="stage-title">攻撃力をつくる</span>
+        <span class="stage-title">{t("攻撃力をつくる")}</span>
         <Value
           class="strong stage-val" motion={() => atkA} value={atkA !== null ? fmtInt(atkA) : "—"}
           delta={{}} deltaClass={changedAtkKeys.length > 0 ? "follow" : ""}
@@ -203,7 +206,7 @@
           >
             {#snippet summary()}
             <span class="swatch" style="background: {a.c};"></span>
-            <span class="br-label">{a.k}</span>
+            <span class="br-label">{t(a.k)}</span>
             <span class="br-note dim">{a.note}</span>
             <Value class="br-val" motion={() => Math.round(a.v)} value={fmtInt(Math.round(a.v))} delta={{}} />
             <Value class="br-share dim" motion={() => parseFloat(a.share)} value={a.share} />
@@ -216,7 +219,7 @@
       <!-- ② 防御力を抜く -->
       <div class="stage">
         <span class="stage-no" style="background: var(--danger);">2</span>
-        <span class="stage-title">相手の防御力を抜く</span>
+        <span class="stage-title">{t("相手の防御力を抜く")}</span>
         <Value
           class="strong stage-val"
           motion={() => (pierced === null ? null : Math.max(0, Math.trunc(pierced)))}
@@ -229,18 +232,20 @@
         <div style="width: {defShare}%; background: var(--hatch-lost);"></div>
       </div>
       <div class="pierce-note num">
-        <span>攻撃力 {atkA !== null ? fmtInt(atkA) : "—"}</span>
-        <span class="bad">− 防御 {defenseValue !== null ? fmtInt(defenseValue) : "—"}</span>
+        <span>{t("攻撃力 {v}", { v: atkA !== null ? fmtInt(atkA) : "—" })}</span>
+        <span class="bad">{t("− 防御 {v}", { v: defenseValue !== null ? fmtInt(defenseValue) : "—" })}</span>
         <span class="def-warn" class:bad={defShare >= 60}>
-          {defShare >= 60 ? `攻撃力の ${Math.round(defShare)}% が防御力で消えています` : `防御で消えるのは ${Math.round(defShare)}%`}
+          {defShare >= 60
+            ? t("攻撃力の {pct}% が防御力で消えています", { pct: Math.round(defShare) })
+            : t("防御で消えるのは {pct}%", { pct: Math.round(defShare) })}
         </span>
       </div>
 
       <!-- ③ 倍率で伸ばす -->
       <div class="stage">
         <span class="stage-no" style="background: var(--flow-3);">3</span>
-        <span class="stage-title">倍率で伸ばす</span>
-        <span class="stage-note dim">帯の幅＝足した分(赤字は減る倍率)</span>
+        <span class="stage-title">{t("倍率で伸ばす")}</span>
+        <span class="stage-note dim">{t("帯の幅＝足した分(赤字は減る倍率)")}</span>
         <Value
           class="strong stage-val" motion={() => perHit} value={perHit !== null ? fmtInt(perHit) : "—"}
           delta={{}} deltaClass={changedFlow.length > 0 ? "follow" : ""}
@@ -260,7 +265,7 @@
           >
             {#snippet summary()}
             <span class="swatch" style="background: {f.c};"></span>
-            <span class="br-label" class:strong={topLeverStep === f.k} class:bad={f.add < 0}>{f.k}</span>
+            <span class="br-label" class:strong={topLeverStep === f.k} class:bad={f.add < 0}>{t(f.k)}</span>
             <span class="num br-mult dim">{f.mult}</span>
             <Value
               class={`br-val ${f.add < 0 ? "bad" : ""}`} motion={() => Math.round(f.add)} value={fmtSigned(f.add)}
@@ -281,56 +286,52 @@
       <!-- 効いていない分(§14 決定 2)。5 階層に散っていた「捨てた量」をここに集める -->
       <div class="materials">
         <div class="mat-head">
-          <span class="mat-title">どこで頭打ち？</span>
-          <span class="dim">積んだのに上限で捨てている量</span>
+          <span class="mat-title">{t("どこで頭打ち？")}</span>
+          <span class="dim">{t("積んだのに上限で捨てている量")}</span>
         </div>
         {#if lostRows.length === 0}
-          <p class="lost-none dim">まだどの上限にも当たっていません。積んだ分はすべて効いています。</p>
+          <p class="lost-none dim">{t("まだどの上限にも当たっていません。積んだ分はすべて効いています。")}</p>
         {:else}
           <div class="lost">
             {#each lostRows as r (r.k)}
               <div class="lost-row inset">
                 <span class="lost-label">{r.k}</span>
                 <Value class="lost-raw" value={r.raw} />
-                <span class="lost-arrow dim">→ 上限</span>
+                <span class="lost-arrow dim">{t("→ 上限")}</span>
                 <Value class="lost-val" value={r.val} />
                 <span class="lost-bar" aria-hidden="true">
                   <i style="width: {r.kept * 100}%"></i>
                   <i class="cut" style="width: {100 - r.kept * 100}%"></i>
                 </span>
-                <Value class="lost-loss" value={`${r.loss} は無効`} />
+                <Value class="lost-loss" value={t("{loss} は無効", { loss: r.loss })} />
               </div>
             {/each}
           </div>
-          <p class="lost-note dim">斜線が捨てている量です。ここが太い枠は、伸ばしても数字が動きません。</p>
+          <p class="lost-note dim">{t("斜線が捨てている量です。ここが太い枠は、伸ばしても数字が動きません。")}</p>
         {/if}
       </div>
 
       <!-- 倍率の材料 -->
       <div class="materials">
         <div class="mat-head">
-          <span class="mat-title">倍率の材料</span>
-          <span class="dim">上限に届いた枠は「満」</span>
+          <span class="mat-title">{t("倍率の材料")}</span>
+          <span class="dim">{t("上限に届いた枠は「満」")}</span>
         </div>
         <div class="mat-chips">
           {#each activeCategories as c (c.category)}
             <span class="mat-chip" class:cap={catAtCap(c)} use:changed={() => (catAtCap(c) ? "cap" : "open")}>
-              <span class="dim">{c.label}</span>
+              <span class="dim">{t(c.label)}</span>
               <Value class="strong" value={fmtCatValue(c)} />
-              {#if catAtCap(c)}<span class="full">満</span>{/if}
+              {#if catAtCap(c)}<span class="full">{t("満")}</span>{/if}
             </span>
           {/each}
           {#if activeCategories.length === 0}
-            <span class="dim">まだ倍率の材料がありません(バフ・称号などを設定すると増えます)。</span>
+            <span class="dim">{t("まだ倍率の材料がありません(バフ・称号などを設定すると増えます)。")}</span>
           {/if}
         </div>
         <!-- 計算に入らないものを明示する(黙って 0 にしない) -->
         <p class="mat-note dim">
-          称号・ランダムOP は<b>キャラ</b>タブで選んだものが入ります(発動条件付きの
-          ランダムOP と称号の条件付き効果は記録するだけで計算に入りません)。
-          属性値はキャラの基礎値 + 装備の属性強化で計算しますが、wiki の一覧から属性を読み取れない
-          スキルは属性差ボーナスなし(×1.00)で出ます。
-          防御側(防御力・カット率・回避)は<b>防御</b>タブに出しています。
+          {t("称号・ランダムOP は")}<b>{t("キャラ")}</b>{t("タブで選んだものが入ります(発動条件付きのランダムOP と称号の条件付き効果は記録するだけで計算に入りません)。属性値はキャラの基礎値 + 装備の属性強化で計算しますが、wiki の一覧から属性を読み取れないスキルは属性差ボーナスなし(×1.00)で出ます。防御側(防御力・カット率・回避)は")}<b>{t("防御")}</b>{t("タブに出しています。")}
         </p>
       </div>
 

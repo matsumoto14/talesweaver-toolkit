@@ -69,6 +69,7 @@
     thesisCoreBestTotal,
     unleashSummary as unleashSummaryOf,
   } from "./summaries";
+  import { t } from "../../i18n";
 
   interface Props {
     character: RegisteredCharacter;
@@ -156,7 +157,7 @@
   const canAutoSave = $derived(draft.name.trim().length > 0 && draft.gameCharacterId !== "");
   /** ツールバーの状態表示用。保存できない理由(§00 05 考えさせない — 理由を言葉で出す) */
   const unsavedReason = $derived(
-    draft.gameCharacterId === "" ? "キャラを選んでください" : draft.name.trim().length === 0 ? "名前を入力してください" : null,
+    draft.gameCharacterId === "" ? t("キャラを選んでください") : draft.name.trim().length === 0 ? t("名前を入力してください") : null,
   );
 
   /**
@@ -318,7 +319,7 @@
       initialSnapshot = sent;
       upsertCharacter(saved);
       lastAutoSaveError = null;
-      if (hadSim) reportNotice("キャラを保存したので、ダメージ計算の試し変更を解除しました");
+      if (hadSim) reportNotice(t("キャラを保存したので、ダメージ計算の試し変更を解除しました"));
     } catch (e) {
       // どこの話か分かるエラーは帯から飛べるようにする。キャラは呼び出し側しか知らない。
       // ただし自動保存は手動より高頻度なので、直前と同じメッセージなら再表示しない(連打防止)
@@ -422,7 +423,7 @@
   // (最終ダメ → クリダメ → 武器倍率 → 基本値)に並べて先頭 2 件だけを残す
   // (開いた先の ContribCard.svelte で全項目が見える)
   const soulLinkSummary = $derived.by(() => {
-    if (!preview) return "計算中";
+    if (!preview) return t("計算中");
     const v = preview.soul_link.equipment_values;
     const finalRate = preview.soul_link.final_damage_rate;
     const critRate = preview.soul_link.critical_damage_rate;
@@ -430,13 +431,13 @@
     // 小数 1 桁に丸めて 0 になる値は出さない(0.04% を「+0%」と見せない)
     const shows = (rate: number) => Math.round(rate * 1000) > 0;
     const candidates = [
-      shows(finalRate) ? `最終${fmtSignedPct(finalRate, { max: 1 })}` : null,
-      shows(critRate) ? `クリ${fmtSignedPct(critRate, { max: 1 })}` : null,
-      weapon > 1 ? `武器${fmtRate(weapon, 1)}` : null,
-      v.thrust > 0 ? `突${fmtSigned(v.thrust)}` : null,
-      v.slash > 0 ? `斬${fmtSigned(v.slash)}` : null,
-      v.magic_attack > 0 ? `魔攻${fmtSigned(v.magic_attack)}` : null,
-      v.magic_defense > 0 ? `魔防${fmtSigned(v.magic_defense)}` : null,
+      shows(finalRate) ? t("最終{v}", { v: fmtSignedPct(finalRate, { max: 1 }) }) : null,
+      shows(critRate) ? t("クリ{v}", { v: fmtSignedPct(critRate, { max: 1 }) }) : null,
+      weapon > 1 ? t("武器{v}", { v: fmtRate(weapon, 1) }) : null,
+      v.thrust > 0 ? t("突{v}", { v: fmtSigned(v.thrust) }) : null,
+      v.slash > 0 ? t("斬{v}", { v: fmtSigned(v.slash) }) : null,
+      v.magic_attack > 0 ? t("魔攻{v}", { v: fmtSigned(v.magic_attack) }) : null,
+      v.magic_defense > 0 ? t("魔防{v}", { v: fmtSigned(v.magic_defense) }) : null,
     ].filter((x): x is string => x !== null);
     return candidates.length > 0 ? candidates.slice(0, 2).join(" ・ ") : NEUTRAL;
   });
@@ -460,7 +461,7 @@
       : equipmentAttackKindsFor(summonSkill?.dependency ?? null),
   );
   /** 召喚欄チップの短いラベル(熊 / 精霊)。未選択時は使われない(showSummonView が false) */
-  const summonLabel = $derived(summonSkill?.attacker === "destruction_spirit" ? "精霊" : "熊");
+  const summonLabel = $derived(summonSkill?.attacker === "destruction_spirit" ? t("精霊") : t("熊"));
   const showSummonView = $derived(draft.summonSkillId !== "" && summonView === "bear");
   /** 装備値の見せ方は「合計 (+エンチャント)」で全画面そろえる(equipment.ts の totalWithEnchant)。
    *  「装備」の行は装備ペインの見出しと同じ数(ゲーム内の装備欄の合計 = ソウルリンクを除く)を言う */
@@ -487,7 +488,7 @@
   /** ランダムOP のうち記録するだけの枠数。行サブタイトルと RandomOptionPane の両方が使うので
    *  summaries.ts の共有関数(計算は Rust 側 preview) */
   const roRecordOnly = $derived(randomOptionRecordOnlyCount(preview));
-  const NEUTRAL = "未設定(中立値で計算)";
+  const NEUTRAL = t("未設定(中立値で計算)");
 
   // 中ディレイ減少(wiki: ステータス「中ディレイ倍率B」)。ここはキャラスキルのぶんだけ。
   // 共通の供給源(フルスロットル / カフスの RO / シエナのオーラ)はそれぞれの補正源で設定する。
@@ -496,8 +497,8 @@
     if (ids.length === 0) return NEUTRAL;
     // 供給源別の内訳(preview.character_skill_actual_delay)は Rust 側で解決済み。ここは合計するだけ
     const rate = (preview?.character_skill_actual_delay ?? []).reduce((sum, c) => sum + c.rate, 0);
-    if (rate === 0) return `${ids.length} 件`;
-    return `${ids.length} 件 ・ 合計 ${fmtSignedPct(-rate, { max: 2 })}`;
+    if (rate === 0) return t("{n} 件", { n: ids.length });
+    return t("{n} 件 ・ 合計 {v}", { n: ids.length, v: fmtSignedPct(-rate, { max: 2 }) });
   });
 
   // 共通スキルの効き先(結果側の表示用)。入力は補正源、計算は Rust 側(preview / limits)を参照する。
@@ -510,18 +511,18 @@
   const commonSkillSummary = $derived.by(() => {
     const c = draft.commonSkills;
     const parts: string[] = [];
-    if (enhanceRatePercent > 0) parts.push(`装備攻撃力 ${fmtSigned(enhanceRatePercent, { max: 2 }, "%")}`);
-    if (defenseRatePercent.physical > 0) parts.push(`装備防御力 物${fmtSigned(defenseRatePercent.physical, { max: 2 }, "%")}`);
+    if (enhanceRatePercent > 0) parts.push(t("装備攻撃力 {v}", { v: fmtSigned(enhanceRatePercent, { max: 2 }, "%") }));
+    if (defenseRatePercent.physical > 0) parts.push(t("装備防御力 物{v}", { v: fmtSigned(defenseRatePercent.physical, { max: 2 }, "%") }));
     if (c.sharpness_vision_level > 0) {
-      parts.push(`追加ダメージ ${fmtSigned(sharpnessRatePercent, { max: 2 }, "%")}`);
+      parts.push(t("追加ダメージ {v}", { v: fmtSigned(sharpnessRatePercent, { max: 2 }, "%") }));
     }
     const ultimate = c.ultimate.slots.filter((u) => u !== null);
     if (ultimate.length > 0) {
-      parts.push(`極限 ${ultimate.map((u) => ULTIMATE_SKILL_LABELS[u]).join(" / ")}`);
+      parts.push(t("極限 {v}", { v: ultimate.map((u) => ULTIMATE_SKILL_LABELS[u]).join(" / ") }));
     }
     // アンリーシュ(能力解放)。効き先は能力値倍率B
-    if (unleashSummary !== "未使用") {
-      parts.push(`解放 ${unleashSummary}`);
+    if (unleashSummary !== t("未使用")) {
+      parts.push(t("解放 {v}", { v: unleashSummary }));
     }
     // 行の補足は 1 行に収まる分だけ。全部詰めると必ず切れる(実測: 4 項目は言うまでもなく、
     // 2 項目でも「装備攻撃力 +20% ・ 装備防御力 物+144%」で列幅 157px を超えて切れる)ので、
@@ -534,14 +535,14 @@
   // 一番効いている 1 値(ダメ増加があればそれ、無ければ装備基本能力値の合計)だけを添える
   // (詳しい内訳は開いた先の TitlePane.svelte で見える)
   const titleSummary = $derived.by(() => {
-    const t = app.titles.find((x) => x.id === draft.equipment.title);
-    if (!t) return NEUTRAL;
-    const headline = t.attack_damage_percent > 0
-      ? `ダメ ${fmtSigned(t.attack_damage_percent, { max: 2 }, "%")}`
-      : t.added_damage_percent > 0
-        ? `追加ダメ ${fmtSigned(t.added_damage_percent, { max: 2 }, "%")}`
-        : `合計 ${fmtSigned(t.equipment_value_total)}`;
-    return `${t.name}(${headline})`;
+    const title = app.titles.find((x) => x.id === draft.equipment.title);
+    if (!title) return NEUTRAL;
+    const headline = title.attack_damage_percent > 0
+      ? t("ダメ {v}", { v: fmtSigned(title.attack_damage_percent, { max: 2 }, "%") })
+      : title.added_damage_percent > 0
+        ? t("追加ダメ {v}", { v: fmtSigned(title.added_damage_percent, { max: 2 }, "%") })
+        : t("合計 {v}", { v: fmtSigned(title.equipment_value_total) });
+    return `${t(title.name)}(${headline})`;
   });
 
   // クリティカル率(wiki: 計算式まとめ #CriticalChance)。ここはペット会心と増加だけ。
@@ -549,9 +550,9 @@
   const criticalRateSummary = $derived.by(() => {
     const c = draft.statSources.critical_rate;
     const parts: string[] = [];
-    if (c.pet) parts.push(`ペット会心 ×${limits.pet_critical_rate}`);
+    if (c.pet) parts.push(t("ペット会心 ×{v}", { v: limits.pet_critical_rate }));
     const bonus = preview?.critical_rate_bonus.value ?? 0;
-    if (bonus > 0) parts.push(`増加 ${fmtSigned(bonus, 0, "%")}`);
+    if (bonus > 0) parts.push(t("増加 {v}", { v: fmtSigned(bonus, 0, "%") }));
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
 
@@ -577,98 +578,98 @@
   const luminaSummary = $derived.by(() => {
     const c = draft.statSources.lumina_corridor;
     const parts: string[] = [];
-    if (c.final_damage_level > 0) parts.push(`最終ダメ ${fmtSignedPct(c.final_damage_level / 100)}`);
-    if (c.all_element_level > 0) parts.push(`全属性 ${fmtSigned(c.all_element_level)}`);
-    if (c.damage_reduction_level > 0) parts.push(`ダメ減少 ${fmtSignedPct(c.damage_reduction_level / 100)}`);
-    if (c.hp_mp_sp_level > 0) parts.push(`HP MP SP ${fmtSignedPct(c.hp_mp_sp_level * 0.005)}`);
+    if (c.final_damage_level > 0) parts.push(t("最終ダメ {v}", { v: fmtSignedPct(c.final_damage_level / 100) }));
+    if (c.all_element_level > 0) parts.push(t("全属性 {v}", { v: fmtSigned(c.all_element_level) }));
+    if (c.damage_reduction_level > 0) parts.push(t("ダメ減少 {v}", { v: fmtSignedPct(c.damage_reduction_level / 100) }));
+    if (c.hp_mp_sp_level > 0) parts.push(t("HP MP SP {v}", { v: fmtSignedPct(c.hp_mp_sp_level * 0.005) }));
     return parts.length === 0 ? NEUTRAL : parts.join(" ・ ");
   });
 
   const sources = $derived<{ id: SourceId; name: string; sub: string }[]>([
     {
       id: "status",
-      name: "キャラステータス",
+      name: t("キャラステータス"),
       // 一番効いている 2 項目(覚醒段階とエタの意志 Lv は能力値上限を決める)だけ。属性はここでは
       // 出さない(開いた先のペインに出る。全部詰めると必ず切れる)
-      sub: `覚醒 ${draft.stage} 段階 ・ エタの意志 Lv${draft.eternalLevel}`,
+      sub: t("覚醒 {stage} 段階 ・ エタの意志 Lv{lv}", { stage: draft.stage, lv: draft.eternalLevel }),
     },
     {
       id: "element",
-      name: "属性",
+      name: t("属性"),
       sub: elementSummary,
     },
     {
       id: "lumina",
-      name: "ルミナの回廊",
+      name: t("ルミナの回廊"),
       sub: luminaSummary,
     },
     {
       id: "commonSkill",
-      name: "共通スキル",
+      name: t("共通スキル"),
       sub: commonSkillSummary,
     },
     {
       id: "equipment",
-      name: "装備",
+      name: t("装備"),
       sub: equipmentSummary,
     },
     {
       id: "soulLink",
-      name: "ソウルリンク",
+      name: t("ソウルリンク"),
       sub: soulLinkSummary,
     },
     {
       id: "title",
-      name: "称号",
+      name: t("称号"),
       sub: titleSummary,
     },
     {
       id: "randomOption",
-      name: "ランダムOP",
+      name: t("ランダムOP"),
       sub:
         roCount > 0
-          ? `${roCount} 枠${roRecordOnly > 0 ? ` ・ うち ${roRecordOnly} 枠は記録のみ` : ""}`
+          ? t("{n} 枠{extra}", { n: roCount, extra: roRecordOnly > 0 ? t(" ・ うち {n} 枠は記録のみ", { n: roRecordOnly }) : "" })
           : NEUTRAL,
     },
     {
       id: "siena",
-      name: "シエナのオーラ",
+      name: t("シエナのオーラ"),
       sub:
         sienaParts > 0
           ? [
-              `${sienaParts} 部位`,
-              ...(sienaRate > 0 ? [`攻撃力 ${fmtSigned(sienaRate, { max: 2 }, "%")}`] : []),
-              ...(sienaStats > 0 ? [`ステ ${fmtSigned(sienaStats)}`] : []),
+              t("{n} 部位", { n: sienaParts }),
+              ...(sienaRate > 0 ? [t("攻撃力 {v}", { v: fmtSigned(sienaRate, { max: 2 }, "%") })] : []),
+              ...(sienaStats > 0 ? [t("ステ {v}", { v: fmtSigned(sienaStats) })] : []),
             ].join(" ・ ")
           : NEUTRAL,
     },
     {
       id: "thesis",
-      name: "テシスコア",
-      sub: coreBestTotal > 0 ? `最大 合計 ${fmtInt(coreBestTotal)}` : NEUTRAL,
+      name: t("テシスコア"),
+      sub: coreBestTotal > 0 ? t("最大 合計 {v}", { v: fmtInt(coreBestTotal) }) : NEUTRAL,
     },
     {
       id: "avatar",
-      name: "アバター",
-      sub: avatarSummary === "未使用" ? NEUTRAL : avatarSummary,
+      name: t("アバター"),
+      sub: avatarSummary === t("未使用") ? NEUTRAL : avatarSummary,
     },
     {
       id: "polish",
-      name: "研磨",
-      sub: polishSummaryText === "未使用" ? NEUTRAL : polishSummaryText,
+      name: t("研磨"),
+      sub: polishSummaryText === t("未使用") ? NEUTRAL : polishSummaryText,
     },
-    { id: "relic", name: "神鳥の聖物", sub: relicTotal > 0 ? `合計 ${fmtSigned(relicTotal)}` : NEUTRAL },
-    { id: "crown", name: "クラウン", sub: crownTotal > 0 ? `合計 ${fmtSigned(crownTotal)}` : NEUTRAL },
+    { id: "relic", name: t("神鳥の聖物"), sub: relicTotal > 0 ? t("合計 {v}", { v: fmtSigned(relicTotal) }) : NEUTRAL },
+    { id: "crown", name: t("クラウン"), sub: crownTotal > 0 ? t("合計 {v}", { v: fmtSigned(crownTotal) }) : NEUTRAL },
     {
       id: "monsterCard",
-      name: "モンスターカード",
-      sub: monsterCardTotal > 0 ? `合計 ${fmtSigned(monsterCardTotal)}` : NEUTRAL,
+      name: t("モンスターカード"),
+      sub: monsterCardTotal > 0 ? t("合計 {v}", { v: fmtSigned(monsterCardTotal) }) : NEUTRAL,
     },
-    { id: "skills", name: "キャラスキル", sub: skillCount > 0 ? `${skillCount} 件選択` : NEUTRAL },
-    { id: "actualDelay", name: "中ディレイ減少", sub: delaySummary },
-    { id: "criticalRate", name: "クリティカル率", sub: criticalRateSummary },
-    { id: "pet", name: "ペット S スキル", sub: petCount > 0 ? `${petCount} 種` : NEUTRAL },
-    { id: "rune", name: "ルーンスキル", sub: runeTotal > 0 ? `合計 ${fmtSigned(runeTotal)}` : NEUTRAL },
+    { id: "skills", name: t("キャラスキル"), sub: skillCount > 0 ? t("{n} 件選択", { n: skillCount }) : NEUTRAL },
+    { id: "actualDelay", name: t("中ディレイ減少"), sub: delaySummary },
+    { id: "criticalRate", name: t("クリティカル率"), sub: criticalRateSummary },
+    { id: "pet", name: t("ペット S スキル"), sub: petCount > 0 ? t("{n} 種", { n: petCount }) : NEUTRAL },
+    { id: "rune", name: t("ルーンスキル"), sub: runeTotal > 0 ? t("合計 {v}", { v: fmtSigned(runeTotal) }) : NEUTRAL },
   ]);
   // 補正源の並びはプレイヤーが決める(design-system §14 決定 3)。
   //
@@ -820,15 +821,15 @@
 
 <div class="workspace">
   <div class="toolbar">
-    <span class="char-name">{draft.name || "(名前未設定)"}</span>
+    <span class="char-name">{draft.name || t("(名前未設定)")}</span>
     <span class="spacer"></span>
     <div class="buff-default">
-      <span>いつものバフ</span>
+      <span>{t("いつものバフ")}</span>
       <!-- バフセットは順序が無いので Picker(§07「1 つ選ぶ」)。件数が少ないうちはチップだけ、
            増えたら候補面に送られる。段階選択にしないのは、セットが増えるたびに段が横に溢れるから -->
       <Picker
-        label="いつものバフ"
-        options={buffSetOptions(app.buffSets, "バフを使わない")}
+        label={t("いつものバフ")}
+        options={buffSetOptions(app.buffSets, t("バフを使わない"))}
         bind:value={
           () => (draft.defaultBuffSetId === null ? "" : String(draft.defaultBuffSetId)),
           (v) => (draft.defaultBuffSetId = v === "" ? null : Number(v))
@@ -840,26 +841,26 @@
          ただし保存できない状態(名前未入力・キャラ種未選択)のときは「保存中…」ではなく理由を
          警告として出す(独立レビュー指摘: 理由の無い「保存中…」のまま編集が消えていた) -->
     <span class="save-status dim" class:warn={!canAutoSave && dirty}>
-      {!canAutoSave && dirty ? `未保存 — ${unsavedReason}` : saving || dirty ? "保存中…" : "保存済み"}
+      {!canAutoSave && dirty ? t("未保存 — {reason}", { reason: unsavedReason ?? "" }) : saving || dirty ? t("保存中…") : t("保存済み")}
     </span>
     <button type="button" class="btn danger delete" class:confirm={confirmDelete} onclick={removeThis}>
-      {confirmDelete ? "もう一度押すと削除します" : "このキャラを削除"}
+      {confirmDelete ? t("もう一度押すと削除します") : t("このキャラを削除")}
     </button>
   </div>
 
   <div class="cols" style="grid-template-columns: {gridTemplateColumns};">
     <section class="sources">
       <div class="src-head">
-        <span class="src-title">補正源</span>
+        <span class="src-title">{t("補正源")}</span>
         {#if neutralCount > 0}
-          <button type="button" class="src-unset" title="次の未設定を開く" onclick={jumpToNeutral}>
-            未設定 {neutralCount} 件 ›
+          <button type="button" class="src-unset" title={t("次の未設定を開く")} onclick={jumpToNeutral}>
+            {t("未設定 {n} 件 ›", { n: neutralCount })}
           </button>
         {/if}
       </div>
       <div class="src-list">
         <!-- お気に入りと そのほか の 2 段。重さの差はプレイヤーが ★ で決める(§14 決定 3) -->
-        {#each [{ key: "fav" as const, title: "お気に入り", ids: ordered.fav }, { key: "rest" as const, title: "そのほか", ids: ordered.rest }] as list (list.key)}
+        {#each [{ key: "fav" as const, title: t("お気に入り"), ids: ordered.fav }, { key: "rest" as const, title: t("そのほか"), ids: ordered.rest }] as list (list.key)}
           <div
             class="src-group"
             role="list"
@@ -868,10 +869,10 @@
           >
             <div class="group-head">
               <span class="group-title">{list.title}</span>
-              <span class="group-note dim">{list.ids.length} 件</span>
+              <span class="group-note dim">{t("{n} 件", { n: list.ids.length })}</span>
             </div>
             {#if list.ids.length === 0}
-              <p class="group-empty dim">★ を押すか、行をここへ運ぶと上がります。</p>
+              <p class="group-empty dim">{t("★ を押すか、行をここへ運ぶと上がります。")}</p>
             {/if}
             {#each itemsOf(list.ids) as s, i (s.id)}
               <!-- 行そのものが面。★ はその中のボタンで、面を 2 枚に割らない(§01)。
@@ -903,13 +904,13 @@
                 ondragover={(e) => onDragOverRow(e, list.key, i)}
                 ondrop={onDrop}
               >
-                <span class="grip" aria-hidden="true" title="つかんで並べ替え">⠿</span>
+                <span class="grip" aria-hidden="true" title={t("つかんで並べ替え")}>⠿</span>
                 <button
                   type="button"
                   class="fav"
                   class:on={list.key === "fav"}
-                  aria-label="{s.name} を{list.key === 'fav' ? 'お気に入りから外す' : 'お気に入りに入れる'}"
-                  title={list.key === "fav" ? "お気に入りから外す" : "お気に入りに入れる"}
+                  aria-label={t("{name} を{action}", { name: s.name, action: list.key === "fav" ? t("お気に入りから外す") : t("お気に入りに入れる") })}
+                  title={list.key === "fav" ? t("お気に入りから外す") : t("お気に入りに入れる")}
                   onclick={(e) => { e.stopPropagation(); toggleFavorite(s.id); }}
                 >★</button>
                 <Icon kind="source" id={s.id} size={28} label={s.name} />
@@ -921,7 +922,7 @@
                   class="src-changed"
                   class:show={changedSources.has(s.id)}
                   use:changed={() => (changedSources.has(s.id) ? "on" : "off")}
-                  title={changedSources.has(s.id) ? "この編集で変更(保存済み)" : undefined}
+                  title={changedSources.has(s.id) ? t("この編集で変更(保存済み)") : undefined}
                   aria-hidden="true"
                 ></span>
                 <span class="chev dim">›</span>
@@ -933,12 +934,12 @@
           <div class="src planned">
             <span class="src-main">
               <span class="src-name">{name}</span>
-              <span class="src-sub">これから</span>
+              <span class="src-sub">{t("これから")}</span>
             </span>
           </div>
         {/each}
       </div>
-      <p class="src-note dim">常用バフは<b>ダメージ計算</b>タブの「計算の材料」で選べます。グレーの補正源はこれから。</p>
+      <p class="src-note dim">{t("常用バフは")}<b>{t("ダメージ計算")}</b>{t("タブの「計算の材料」で選べます。グレーの補正源はこれから。")}</p>
     </section>
 
     <Splitter
@@ -946,7 +947,7 @@
       min={220}
       defaultValue={DEFAULT_LIST_WIDTH}
       controls="prev"
-      label="補正源リストと編集ペインの境界"
+      label={t("補正源リストと編集ペインの境界")}
     />
 
     <section class="detail">
@@ -964,17 +965,17 @@
   </div>
 
   <div class="sheet">
-    <span class="sheet-title">いまの実力</span>
+    <span class="sheet-title">{t("いまの実力")}</span>
     {#if draft.summonSkillId !== ""}
       <!-- 召喚獣(熊・破壊精霊)が撃つスキルがあるキャラだけ出る 2 択(§07 段階選択)。保存しない
            ローカル state — キャラタブでは「見る側」を切り替えるだけで、モデルは変えない -->
-      <div class="summon-toggle" role="group" aria-label="いまの実力を{summonLabel} / 本体のどちらで見るか">
+      <div class="summon-toggle" role="group" aria-label={t("いまの実力を{label} / 本体のどちらで見るか", { label: summonLabel })}>
         <Chip class="quiet" name="summon-view" value="bear" on={summonView === "bear"} onToggle={() => (summonView = "bear")}>{summonLabel}</Chip>
-        <Chip class="quiet" name="summon-view" value="body" on={summonView === "body"} onToggle={() => (summonView = "body")}>本体</Chip>
+        <Chip class="quiet" name="summon-view" value="body" on={summonView === "body"} onToggle={() => (summonView = "body")}>{t("本体")}</Chip>
       </div>
     {/if}
     <span class="sheet-equipment num dim">
-      装備
+      {t("装備")}
       {#each (showSummonView ? summonEquipmentAttackKinds : equipmentAttackKinds) as k, i (k)}
         {#if i > 0}<span class="sep"> ・ </span>{/if}{EQUIPMENT_STAT_SHORT[k]}
         <!-- 合計を出し、その横に括弧でエンチャント分(equipment.ts の withEnchant と同じ形。
@@ -985,22 +986,22 @@
     </span>
     {#if showSummonView}
       <span class="sheet-attack">
-        <span class="attack-label">攻撃力(A)</span>
+        <span class="attack-label">{t("攻撃力(A)")}</span>
         <Value class="strong" motion={() => summonPreview?.attack?.breakdown.value ?? null} value={summonPreview?.attack ? fmtInt(summonPreview.attack.breakdown.value) : "—"} />
-        <span class="dim">{summonSkill?.name ?? ""}</span>
+        <span class="dim">{t(summonSkill?.name ?? "")}</span>
       </span>
     {:else if mainSkill}
       <span class="sheet-attack">
-        <span class="attack-label">攻撃力(A)</span>
+        <span class="attack-label">{t("攻撃力(A)")}</span>
         <Value class="strong" motion={() => preview?.attack?.breakdown.value ?? null} value={preview?.attack ? fmtInt(preview.attack.breakdown.value) : "—"} />
-        <span class="dim">{mainSkill.name}</span>
+        <span class="dim">{t(mainSkill.name)}</span>
       </span>
     {:else}
-      <span class="sheet-attack dim">主軸スキルを選ぶと攻撃力が出ます</span>
+      <span class="sheet-attack dim">{t("主軸スキルを選ぶと攻撃力が出ます")}</span>
     {/if}
     <span class="spacer"></span>
     <button type="button" class="btn ghost sheet-goto" onclick={() => (app.tab = "calc")}>
-      ダメージを見る ›
+      {t("ダメージを見る ›")}
     </button>
   </div>
 </div>

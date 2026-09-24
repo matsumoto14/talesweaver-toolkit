@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../../../i18n";
   // 「thesis」補正源のペイン。テシスコア(地域ごとに 6 枠)。
   import type { CoreRegion, CoreType, StatPreview } from "../../../api/types";
   import type { Draft } from "../../../draft";
@@ -27,7 +28,7 @@
     const parts: string[] = [];
     if (rate > 0) parts.push(fmtSignedPct(rate));
     if (fixed > 0) parts.push(fmtSigned(fixed));
-    return parts.length === 0 ? "未発動" : parts.join(" と ");
+    return parts.length === 0 ? t("未発動") : parts.join(t(" と "));
   });
 
   // --- テシスコア(地域ごとに 6 枠) ---------------------------------------
@@ -118,10 +119,10 @@
   const coreSupport = $derived(coreRegionPreview(coreRegion)?.values ?? zeroValues());
   const coreSupportSummary = $derived(
     [
-      ["物防", coreSupport.physical_defense],
-      ["回避", coreSupport.evasion],
-      ["敏捷", coreSupport.agility],
-      ["命中", coreSupport.accuracy],
+      [t("物防"), coreSupport.physical_defense],
+      [t("回避"), coreSupport.evasion],
+      [t("敏捷"), coreSupport.agility],
+      [t("命中"), coreSupport.accuracy],
     ]
       .filter(([, v]) => (v as number) > 0)
       .map(([label, v]) => `${label} ${fmtSigned(v as number)}`)
@@ -133,7 +134,7 @@
   <!-- 効いている量(結果)。ゲーム内の言葉に合わせる(Tecith Core System:「コア効果」「コアセット効果」)。
        ペイン自体が既に「テシスコア」の名前を出しているので見出しは持たない -->
   <div class="result-value num">
-    <span class="dim tiny">コアセット効果(全地域) 最終ダメージ</span>
+    <span class="dim tiny">{t("コアセット効果(全地域) 最終ダメージ")}</span>
     <Value class="strong" value={coreSetTotalLabel} />
   </div>
   <div class="eq-summary num inset">
@@ -145,15 +146,15 @@
           class="badge"
           style={badgeStyle({ label: "", state: r.set_groups.length === 0 ? "unknown" : "met" })}
         >{r.set_groups.length === 0
-            ? `あと ${3 - r.ready}`
-            : r.set_groups.map((g) => `進化${g.evolution}×${g.count}`).join(" + ")}</span>
+            ? t("あと {n}", { n: 3 - r.ready })
+            : r.set_groups.map((g) => t("進化{ev}×{n}", { ev: g.evolution, n: g.count })).join(" + ")}</span>
       </span>
     {/each}
   </div>
-  <p class="dim tiny">コア効果(能力値)は対象地域内でのみ有効。コアセット効果は<b>同じ進化段階の強化 4 コア 3 個ごと</b>に成立し、段階ごと・地域ごとの分が足されます(同じ段階が 6 個なら 6 セット効果になり、3 セット分は重ねません)。</p>
+  <p class="dim tiny">{t("コア効果(能力値)は対象地域内でのみ有効。コアセット効果は")}<b>{t("同じ進化段階の強化 4 コア 3 個ごと")}</b>{t("に成立し、段階ごと・地域ごとの分が足されます(同じ段階が 6 個なら 6 セット効果になり、3 セット分は重ねません)。")}</p>
 {/if}
 <div class="card">
-  <div class="card-title">地域</div>
+  <div class="card-title">{t("地域")}</div>
   <!-- 地域は「同じ形の 6 枠を切り替える」ので §08 のタブ。選んだ地域の下と地続きになる -->
   <div class="tabs">
     {#each CORE_REGIONS as region (region)}
@@ -168,7 +169,7 @@
         {#if (coreSetOf(region)?.set_groups.length ?? 0) > 0}
           <Value class="tab-set" value={coreSetLabelOf(region)} />
         {:else if coreRegionTotal(region) > 0}
-          <span class="tab-set off num">あと {3 - (coreSetOf(region)?.ready ?? 0)}</span>
+          <span class="tab-set off num">{t("あと {n}", { n: 3 - (coreSetOf(region)?.ready ?? 0) })}</span>
         {/if}
       </button>
     {/each}
@@ -176,24 +177,22 @@
   <div class="tab-rule"></div>
   <!-- 説明は毎回読むものではない。畳んで、入力の場所を押し下げないようにする(§00 02) -->
   <Disclosure class="fold">
-    {#snippet summary()}この画面の読み方(wiki テシスコア){/snippet}
+    {#snippet summary()}{t("この画面の読み方(wiki テシスコア)")}{/snippet}
     <div class="fold-body">
       <p class="hint dim">
-        コアの能力値増加は対象ダンジョン内でのみ有効なので、計算対象のコンテンツに
-        対応する地域のコアだけが装備攻撃力に入ります。コアセット効果(最終ダメージ)は全地域で発動し、
-        地域ごとの発動分が足されます。
+        {t("コアの能力値増加は対象ダンジョン内でのみ有効なので、計算対象のコンテンツに 対応する地域のコアだけが装備攻撃力に入ります。コアセット効果(最終ダメージ)は全地域で発動し、 地域ごとの発動分が足されます。")}
       </p>
       <p class="hint dim">
-        補助タイプ(物防/回避/敏捷/命中)も装着状態として記録できます。与ダメージ式の装備係数が 0 なので
-        装備攻撃力には入らず、入場条件「コア N」の合計と防御タブ(防御力・カット率・回避P)に効きます。
-        経験値タイプのみのシオカンヘイムコアは火力にもセット効果にも効かないため地域を持ちません。
+        {t("補助タイプ(物防/回避/敏捷/命中)も装着状態として記録できます。与ダメージ式の装備係数が 0 なので 装備攻撃力には入らず、入場条件「コア N」の合計と防御タブ(防御力・カット率・回避P)に効きます。 経験値タイプのみのシオカンヘイムコアは火力にもセット効果にも効かないため地域を持ちません。")}
       </p>
       <p class="hint dim">
-        入場条件の「コア N」はこの {limits.core_slot_count} 枠の合計と同じ値です(火力の進化1強化{limits.core_enhancement_max}
-        ×{limits.core_slot_count} = {powerEvo1En4}、進化{limits.core_evolution_max}強化{limits.core_enhancement_max}
-        ×{limits.core_slot_count} = {powerEvo4En4}。補助タイプは進化{limits.core_evolution_max}強化{limits.core_enhancement_max}
-        でも {supportEvo4En4} なので {limits.core_slot_count} 枠でも {supportEvo4En4Total} 止まり)。
-        コアセット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。
+        {t(
+          "入場条件の「コア N」はこの {slot} 枠の合計と同じ値です(火力の進化1強化{enMax}×{slot} = {evo1en4}、進化{evoMax}強化{enMax}×{slot} = {evo4en4}。補助タイプは進化{evoMax}強化{enMax}でも {support} なので {slot} 枠でも {supportTotal} 止まり)。コアセット効果は強化 4 段階のコアが 3 個以上そろうと発動します(タイプは問いません)。",
+          {
+            slot: limits.core_slot_count, enMax: limits.core_enhancement_max, evoMax: limits.core_evolution_max,
+            evo1en4: powerEvo1En4, evo4en4: powerEvo4En4, support: supportEvo4En4, supportTotal: supportEvo4En4Total,
+          },
+        )}
       </p>
     </div>
 
@@ -202,25 +201,25 @@
 {#key coreRegion}
 <div class="card swap-in">
   <div class="card-title inline">
-    {CORE_REGION_LABELS[coreRegion]} の 6 枠
+    {t("{region} の 6 枠", { region: CORE_REGION_LABELS[coreRegion] })}
     <!-- 「補助も出す」は段の見え方を変える操作なので、段より先に目に入る位置に置く。
          控えめなチップ 1 つ(§07 形態 3)。下に置くと、段を見たあとで見え方が変わって読み直しになる -->
     <Chip
       class="quiet"
       on={coreShowSupport || coreSupportInUse}
       onToggle={toggleCoreSupport}
-    >{coreShowSupport || coreSupportInUse ? "補助タイプを閉じる" : "補助タイプも出す"}</Chip>
+    >{coreShowSupport || coreSupportInUse ? t("補助タイプを閉じる") : t("補助タイプも出す")}</Chip>
   </div>
   <!-- この画面で知りたいのは「いくつになったか」と「セット効果が出ているか」の 2 つ。
        小さな注記ではなく、段より先に読める場所に出す -->
   {#if coreSupportSummary}
     <p class="hint dim">
-      このうち補助タイプ({coreSupportSummary})は装備攻撃力には入らず、防御タブの防御力・カット率・回避Pに効きます。
+      {t("このうち補助タイプ({summary})は装備攻撃力には入らず、防御タブの防御力・カット率・回避Pに効きます。", { summary: coreSupportSummary })}
     </p>
   {/if}
   <!-- 列の名前は 1 回だけ。行ごとにラベルを置くと、6 回同じ言葉を読ませることになる -->
   <div class="core-head">
-    <span></span><span>タイプ</span><span></span><span class="lead">進化 - 強化</span><span class="r">コア効果</span>
+    <span></span><span>{t("タイプ")}</span><span></span><span class="lead">{t("進化 - 強化")}</span><span class="r">{t("コア効果")}</span>
   </div>
   <div class="core-list">
     {#each coreSlotIndexes as index (index)}
@@ -231,18 +230,17 @@
              補助タイプは別の段にする — 1 つの段に 9 個入れると列が余って空きセルが出る -->
         <span class="core-types">
           <Choose
-            label="コア枠 {index + 1} のタイプ"
+            label={t("コア枠{name}のタイプ", { name: index + 1 })}
             options={corePowerOptions}
             cols={4}
             bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
           />
           {#if coreShowSupport || coreSupportInUse}
-            <!-- ここはトリガ 1 つが 6 行ぶんの段を同時に出す場所なので <details>(ui/Disclosure)には
-                 載らない — <details> は 1 トリガ 1 面。段が増えるのは「開いた」なので下に伸ばす
+            <!-- ここはトリガ 1 つが 6 行ぶんの段を同時に出す場所なので <details>{t("(ui/Disclosure)には 載らない —")} <details> は 1 トリガ 1 面。段が増えるのは「開いた」なので下に伸ばす
                  (§10 型 6 の .open-in)。閉じるときは {#if} で即座に消える(従来どおり) -->
             <div class="open-in">
               <Choose
-                label="コア枠 {index + 1} の補助タイプ"
+                label={t("コア枠{name}の補助タイプ", { name: index + 1 })}
                 options={coreSupportOptions}
                 cols={4}
                 bind:value={() => core?.core_type ?? "", (v) => setCoreType(index, v)}
@@ -256,13 +254,13 @@
           class="core-clear"
           disabled={core === null}
           onclick={() => setCoreType(index, "")}
-        >外す</button>
+        >{t("外す")}</button>
         <span class="core-stage">
           <button
             type="button"
             class="stage-trigger num"
             disabled={core === null}
-            aria-label="進化と強化"
+            aria-label={t("進化と強化")}
             onclick={() => (openCoreStage = openCoreStage === index ? null : index)}
           >
             <Value value={core ? `${core.evolution}-${core.enhancement}` : "-"}
@@ -270,10 +268,10 @@
             >
           </button>
           {#if openCoreStage === index && core}
-            <button type="button" class="stage-overlay" aria-label="閉じる" onclick={() => (openCoreStage = null)}></button>
+            <button type="button" class="stage-overlay" aria-label={t("閉じる")} onclick={() => (openCoreStage = null)}></button>
             <!-- 下の枠は上に開く。下に開くとペインの外へ出て、選ぶのにスクロールが要る -->
             <div class="stage-pop pop-in" class:up={index >= 3}>
-              <div class="stage-pop-h">進化 - 強化</div>
+              <div class="stage-pop-h">{t("進化 - 強化")}</div>
               <div class="stage-grid">
                 {#each coreStagePairs as row (row[0].ev)}
                   {#each row as p (p.en)}

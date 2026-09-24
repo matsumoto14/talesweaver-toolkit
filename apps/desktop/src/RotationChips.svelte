@@ -11,6 +11,7 @@
   import type { Snippet } from "svelte";
   import type { RotationInsertChoice } from "./api/types";
   import { fmtCooldown, fmtShareOf, fmtSigned } from "./format";
+  import { t } from "./i18n";
   import Choose from "./ui/Choose.svelte";
   import Disclosure from "./ui/Disclosure.svelte";
   import Icon from "./ui/Icon.svelte";
@@ -35,7 +36,7 @@
   const drops = $derived(candidates.filter((c) => c.effect === "reduces"));
   const dropsOn = $derived(drops.filter((c) => onIds.includes(c.skill_id)));
   const optionsOf = (list: RotationInsertChoice[]) =>
-    list.map((c) => ({ value: c.skill_id, label: c.skill_name }));
+    list.map((c) => ({ value: c.skill_id, label: t(c.skill_name) }));
   const find = (id: string) => candidates.find((c) => c.skill_id === id);
   /** 回し全体に対する割合。絶対値だけだと桁が大きく、実際より深刻に見える(実機 2026-09-21) */
   const share = (gain: number) => fmtShareOf(gain, expectedDps);
@@ -46,18 +47,18 @@
   };
   /** 陣は CT ではなく持続(切れたら置き直す)。数字の意味が違うので言い方を変える */
   const cdLabel = (c: { cooldown_seconds: number; is_field: boolean }) =>
-    `${c.is_field ? "持続" : "CT"} ${fmtCooldown(c.cooldown_seconds)}`;
+    `${c.is_field ? t("持続") : t("CT")} ${fmtCooldown(c.cooldown_seconds)}`;
   const chipTitle = (id: string) => {
     const c = find(id);
     if (!c) return undefined;
     const cd = cdLabel(c);
     if (c.expected_dps_gain === null) {
-      return `${cd} ・ 差し込んだときの損得は出せません(1 回の所要時間が未収録)`;
+      return t("{cd} ・ 差し込んだときの損得は出せません(1 回の所要時間が未収録)", { cd });
     }
     const gain = Math.round(c.expected_dps_gain);
     const pct = share(gain);
     const amount = `${pct === null ? "" : `${pct}(`}${fmtSigned(gain)}${pct === null ? "" : ")"}`;
-    const effect = c.effect === "improves" ? "差し込むと DPS が上がる" : "差し込むと DPS が下がる";
+    const effect = c.effect === "improves" ? t("差し込むと DPS が上がる") : t("差し込むと DPS が下がる");
     return `${cd} ・ ${effect} ${amount}`;
   };
   // 見た目は主軸スキルのチップ(`ui/Picker.svelte`)と同じ段: アイコン + 技名 + 補足のピル。
@@ -67,7 +68,7 @@
 
 {#if ups.length > 0}
   <Choose
-    label={temporary ? "ここで試す差し込み CT 技" : "差し込む CT 技"}
+    label={temporary ? t("ここで試す差し込み CT 技") : t("差し込む CT 技")}
     class="chiprow picker-chips"
     options={optionsOf(ups)}
     values={onIds}
@@ -88,13 +89,13 @@
   <!-- 下がる技は畳んだ先。ON にしているものは summary で分かる(§00 ②④) -->
   <Disclosure class="drop-pick" summaryClass="chip quiet">
     {#snippet summary()}
-      DPS が下がる技 <Value class="dim normal" motion={() => drops.length} value={`${drops.length} 件`} />
+      {t("DPS が下がる技")} <Value class="dim normal" motion={() => drops.length} value={t("{n} 件", { n: drops.length })} />
       {#if dropsOn.length > 0}
-        <Value class="badge drop-badge" motion={() => dropsOn.length} value={`${dropsOn.length} 件 ON`} />
+        <Value class="badge drop-badge" motion={() => dropsOn.length} value={t("{n} 件 ON", { n: dropsOn.length })} />
       {/if}
     {/snippet}
     <Choose
-      label="DPS が下がる差し込み CT 技"
+      label={t("DPS が下がる差し込み CT 技")}
       class="chiprow picker-chips"
       options={optionsOf(drops)}
       values={onIds}

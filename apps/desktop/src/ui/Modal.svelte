@@ -15,6 +15,7 @@
    * 背景を押しても閉じない(`<dialog>` の既定の挙動)。閉じる操作は見出しの閉じるボタンと Escape だけ。
    */
   import type { Snippet } from "svelte";
+  import { t } from "../i18n";
 
   let {
     label,
@@ -52,7 +53,7 @@
     <div class="modal-head">
       <b>{label}</b>
       <button type="button" class="btn modal-close" disabled={closeDisabled} onclick={() => el?.close()}
-        >閉じる <span aria-hidden="true">×</span></button>
+        >{t("閉じる")} <span aria-hidden="true">×</span></button>
     </div>
     <div class="modal-body">{@render children()}</div>
   </div>

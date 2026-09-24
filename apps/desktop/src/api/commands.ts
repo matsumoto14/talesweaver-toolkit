@@ -1,5 +1,6 @@
 // Tauri コマンドの呼び出し。引数・戻り値の形は api/types.ts に従う。
 import { invoke } from "./invoke";
+import { t } from "../i18n";
 import type {
   BlockedBuff,
   PotentialEffects,
@@ -208,17 +209,17 @@ export const getAppInfo = () => invoke<AppInfo>("get_app_info");
 /** 起動時に復元などが起きたときだけ返る。通常起動は null */
 export const getStartupNotice = () => invoke<StartupNotice | null>("get_startup_notice");
 
-/** invoke の reject(String)を表示用文字列にする */
 /** Tauri コマンドが返すエラー(src-tauri の CommandError)。`location` 付きなら帯からそこへ飛べる。 */
 type CommandError = { message: string; location: ValidationLocation | null };
 
 const asCommandError = (e: unknown): CommandError | null =>
   typeof e === "object" && e !== null && "message" in e && "location" in e ? (e as CommandError) : null;
 
+/** invoke の reject を表示用の文にする。Rust の文は日本語なので表示言語へ訳す(i18n.ts) */
 export function errorMessage(e: unknown): string {
   const command = asCommandError(e);
-  if (command) return command.message;
-  return typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+  if (command) return t(command.message);
+  return t(typeof e === "string" ? e : e instanceof Error ? e.message : String(e));
 }
 
 /** エラーが指している装備の場所。無ければ null(帯に「ここを開く」は出さない)。 */

@@ -2,22 +2,23 @@
 // キャラのパッシブ・自己バフ・味方バフは characterSkills(api/types の CharacterSkillDef)。
 // 旧 CharacterSettings.svelte のヘルパーを純関数として切り出したもの。
 import type { BuffChoice, BuffDefinition, BuffPurpose, BuffSet, BuffTarget, BuffValue, StatKind, StatLayer } from "./api/types";
+import { t } from "./i18n";
 import { STAT_KINDS } from "./labels";
 import type { PickerOption } from "./ui/Picker.svelte";
 
 /** バフセットを 1 つ選ぶ候補(§07「1 つ選ぶ」)。「なし」も候補の 1 行(value = "")。
  *  選ぶのに要る値は ON にしているバフの数。件数が少なければ Picker がチップだけで出す */
 export const buffSetOptions = (sets: BuffSet[], noneMeta: string): PickerOption[] => [
-  { value: "", name: "なし", meta: noneMeta },
-  ...sets.map((set) => ({ value: String(set.id), name: set.name, meta: `${set.choices.choices.length} 件` })),
+  { value: "", name: t("なし"), meta: noneMeta },
+  ...sets.map((set) => ({ value: String(set.id), name: set.name, meta: t("{n} 件", { n: set.choices.choices.length }) })),
 ];
 
 /** バフを分ける「目的」。バフタブの目的タブと計算タブのグループで同じ切り口を使う */
 export const BUFF_PURPOSES: { id: BuffPurpose; label: string; description: string }[] = [
-  { id: "stats", label: "ステータスを上げたい", description: "能力値が伸びる効果" },
-  { id: "damage", label: "火力を上げたい", description: "攻撃ダメージ効果を持つバフ" },
-  { id: "durability", label: "耐久を上げたい", description: "受けるダメージや生存力に関わる効果" },
-  { id: "accuracy", label: "命中を上げたい", description: "命中Pが伸びる効果" },
+  { id: "stats", label: t("ステータスを上げたい"), description: t("能力値が伸びる効果") },
+  { id: "damage", label: t("火力を上げたい"), description: t("攻撃ダメージ効果を持つバフ") },
+  { id: "durability", label: t("耐久を上げたい"), description: t("受けるダメージや生存力に関わる効果") },
+  { id: "accuracy", label: t("命中を上げたい"), description: t("命中Pが伸びる効果") },
 ];
 
 /** 「火力」だけは purposes ではなく**攻撃ダメージ効果を持つか**で拾う(カタログの

@@ -10,6 +10,7 @@ import {
   avatarCorrectionAmount, avatarCorrectionCount, avatarEnhanceTotals, zeroValues,
 } from "../../equipment";
 import { fmtSigned, fmtSignedPct } from "../../format";
+import { t } from "../../i18n";
 
 /** wiki の装備攻撃力係数が 0 でない補正だけを、主軸スキルの依存種別から絞る。 */
 export function equipmentAttackKindsFor(dependency: SkillDependency | null): EquipmentStatKind[] {
@@ -72,7 +73,7 @@ export function unleashSummary(draft: Draft): string {
     (draft.commonSkills.unleash ?? [])
       .filter((u) => u.stat !== null && u.level > 0)
       .map((u) => `${STAT_LABELS[u.stat!]} ${fmtSignedPct(tables.unleash_rates[u.level - 1])}`)
-      .join(" / ") || "未使用"
+      .join(" / ") || t("未使用")
   );
 }
 
@@ -90,7 +91,7 @@ export function polishSummary(draft: Draft): string {
   return (
     draft.equipment.polish.entries
       .map((entry) => `${PART_SLOT_LABELS[entry.slot]} ${POLISH_KIND_LABELS[entry.kind]} ${EQUIPMENT_STAT_SHORT[entry.stat]}`)
-      .join(" ・ ") || "未使用"
+      .join(" ・ ") || t("未使用")
   );
 }
 
@@ -107,7 +108,7 @@ export function avatarEnhanceSummary(draft: Draft): string {
   const count = avatarCorrectionCount(draft.equipment.avatar_corrections);
   if (count > 0) {
     const amount = avatarCorrectionAmount(draft.equipment.avatar_corrections);
-    parts.unshift(`補正付き${count}点 全9値 ${fmtSigned(amount)}`);
+    parts.unshift(t("補正付き{count}点 全9値 {amount}", { count, amount: fmtSigned(amount) }));
   }
-  return parts.join(" ・ ") || "未使用";
+  return parts.join(" ・ ") || t("未使用");
 }

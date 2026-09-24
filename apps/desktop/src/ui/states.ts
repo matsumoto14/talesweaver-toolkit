@@ -1,4 +1,5 @@
 import type { ReachTier } from "../api/types";
+import { t } from "../i18n";
 // 状態の 6 系統(design-system §03)。到達判定のバッジ・量バーはここから選ぶ。
 // 色の実値は app.css の --state-* が持つ。ここは CSS 変数参照だけを配って、
 // 画面ごとのラベル(「余裕」「通る」「入場OK」…)は各画面が付ける。
@@ -54,12 +55,12 @@ export const triadStyle = ([bg, bd, fg]: [string, string, string]): string =>
  * HomePage / CalcPage の BADGE 配列の先頭 6 件が完全一致していたので、ここへ集約する。
  * 画面ごとに追加の行(未収録・条件のみ等)が要るときは、この配列の後ろへ足す。 */
 export const REACH_BADGES: Badge[] = [
-  { label: "余裕", state: "goal" },
-  { label: "通る", state: "met" },
-  { label: "ぎりぎり", state: "edge" },
-  { label: "届かない", state: "short" },
-  { label: "条件・火力とも未達", state: "unknown" },
-  { label: "条件だけ未達", state: "temp" },
+  { label: t("余裕"), state: "goal" },
+  { label: t("通る"), state: "met" },
+  { label: t("ぎりぎり"), state: "edge" },
+  { label: t("届かない"), state: "short" },
+  { label: t("条件・火力とも未達"), state: "unknown" },
+  { label: t("条件だけ未達"), state: "temp" },
 ];
 /** 到達段(Rust の ReachTier)→ REACH_BADGES の添字。段の境目は Rust 側 */
 export const REACH_STATE: Record<ReachTier, number> = { comfortable: 0, reached: 1, close: 2, short: 3 };

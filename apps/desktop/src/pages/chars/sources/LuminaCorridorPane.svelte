@@ -14,6 +14,7 @@
   import { limits } from "../../../limits.svelte";
   import Choose from "../../../ui/Choose.svelte";
   import Value from "../../../ui/Value.svelte";
+  import { t } from "../../../i18n";
 
   interface Props {
     draft: Draft;
@@ -40,32 +41,32 @@
   const rows = $derived<Row[]>([
     {
       key: "final_damage_level",
-      name: "最終ダメージ",
+      name: t("最終ダメージ"),
       max: limits.corridor_final_damage_level_max,
       effect: (level) => fmtSignedPct(level / 100),
-      note: "与ダメージのカテゴリL(最終ダメージ)に乗ります",
+      note: t("与ダメージのカテゴリL(最終ダメージ)に乗ります"),
     },
     {
       key: "all_element_level",
-      name: "全属性増加",
+      name: t("全属性増加"),
       max: limits.corridor_element_level_max,
       effect: (level) => fmtSigned(level),
-      note: "8 属性それぞれに Lv ぶん乗ります",
+      note: t("8 属性それぞれに Lv ぶん乗ります"),
     },
     {
       key: "damage_reduction_level",
-      name: "ダメージ減少",
+      name: t("ダメージ減少"),
       max: limits.corridor_damage_reduction_level_max,
       effect: (level) => fmtSignedPct(level / 100),
-      note: "被ダメージ側はまだ計算に入れていません",
+      note: t("被ダメージ側はまだ計算に入れていません"),
       recordOnly: true,
     },
     {
       key: "hp_mp_sp_level",
-      name: "HP MP SP 増加",
+      name: t("HP MP SP 増加"),
       max: limits.corridor_hp_mp_sp_level_max,
       effect: (level) => fmtSignedPct(level * 0.005),
-      note: "HP / MP / SP はこのツールの能力値 7 種に無いので記録だけです",
+      note: t("HP / MP / SP はこのツールの能力値 7 種に無いので記録だけです"),
       recordOnly: true,
     },
   ]);
@@ -75,16 +76,16 @@
 </script>
 
 <div class="card">
-  <div class="card-title">回廊効果</div>
+  <div class="card-title">{t("回廊効果")}</div>
   <!-- 名前の列を全行で同じ幅にして、Lv0 の位置(押し始め)を縦に揃える(§00 01 視線を動かさない) -->
   <div class="corridor-rows">
     {#each rows as row (row.key)}
       <span class="corridor-name">
         {row.name}
-        {#if row.recordOnly}<span class="badge">記録のみ</span>{/if}
+        {#if row.recordOnly}<span class="badge">{t("記録のみ")}</span>{/if}
       </span>
       <Choose
-        label="{row.name}のレベル"
+        label={t("{name}のレベル", { name: row.name })}
         options={levelOptions(row.max)}
         cols={row.max + 1}
         cell={34}
@@ -104,13 +105,12 @@
 </div>
 
 <p class="hint dim">
-  回廊効果は<b>テイルズID 内の全キャラ</b>に効く恒常バフで、2 週間のリセットでも消えません。
-  ほかのキャラにも同じ Lv を入れてください。
+  {t("回廊効果は")}<b>{t("テイルズID 内の全キャラ")}</b>{t("に効く恒常バフで、2 週間のリセットでも消えません。 ほかのキャラにも同じ Lv を入れてください。")}
   {#if elementBonus > 0}
-    いまは全属性に <b><Value motion={() => elementBonus} value={fmtSigned(elementBonus)} /></b> 乗っています(属性の補正源で内訳を見られます)。
+    {t("いまは全属性に")} <b><Value motion={() => elementBonus} value={fmtSigned(elementBonus)} /></b> {t("乗っています(属性の補正源で内訳を見られます)。")}
   {/if}
   <br />
-  週間 SEED / ELSO の上限・獲得量・回廊ポイント獲得量は、火力にも能力値にも効かないのでここでは扱いません。
+  {t("週間 SEED / ELSO の上限・獲得量・回廊ポイント獲得量は、火力にも能力値にも効かないのでここでは扱いません。")}
 </p>
 
 <style>
