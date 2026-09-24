@@ -37,6 +37,12 @@ export interface AnswerCorrection {
   source: { kind: string; title: string; url: string | null };
 }
 
+/**
+ * 端末が描く打ち手の型。サーバーは印だけ返し、中身(登録キャラの数値)は端末が出す。
+ * cant_win = 困りごと「勝てない」、damage_calc = ダメージ・DPS の質問(wiki では出せないので計算タブへ)。
+ */
+export type Playbook = "cant_win" | "damage_calc";
+
 /** 次の一手。選ばれたユニットの [[リンク]] 先から、実在するページを最大 3 件(§Worker 3)。 */
 export interface NextItem {
   question: string;
@@ -54,7 +60,7 @@ export interface AnswerResponse {
   synced_at: string | null;
   model: string;
   route: "cheap" | "loop" | "cheap_then_loop" | "cached";
-  playbook: "cant_win" | null;
+  playbook: Playbook | null;
   answer_id: string;
   corrections: AnswerCorrection[];
   /** 候補に答えが無かった観点。端末が「〜は wiki に見当たらなかったッピ」を出す */
@@ -192,7 +198,7 @@ export interface BuildAnswerInput {
   syncedAt: string | null;
   model: string;
   route: AnswerResponse["route"];
-  playbook: "cant_win" | null;
+  playbook: Playbook | null;
   missing: Aspect[];
   verdict: AnswerResponse["verdict"];
   basis: string[];

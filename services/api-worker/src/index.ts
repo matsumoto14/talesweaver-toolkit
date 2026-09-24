@@ -25,7 +25,7 @@ import { wikiUrl } from "./wiki-url";
 import { verify } from "./verify";
 import type { Ctx, Dropped } from "./verify";
 import { buildAnswer } from "./answer";
-import type { AnswerResponse } from "./answer";
+import type { AnswerResponse, Playbook } from "./answer";
 import {
   consumeRateLimit,
   issueChallenge,
@@ -313,12 +313,12 @@ function normalizePrev(prev: AskPayload["prev"]): PrevTurn | null {
 
 export interface NoneAnswer {
   kind: "none";
-  reason: "llm_none" | "verification_failed" | "smalltalk" | "other" | "no_terms";
+  reason: "llm_none" | "verification_failed" | "smalltalk" | "other" | "no_terms" | "damage_calc";
   search: { id: string; page: string; section: string; snippet: string; url: string }[];
   synced_at: string | null;
   dropped: { what: string; id?: string; why: string }[];
-  /** 困りごとが「勝てない」の型なら cant_win。wiki に答えが無くても打ち手は出る(端末が描く)。 */
-  playbook: "cant_win" | null;
+  /** 端末が描く打ち手の印(cant_win / damage_calc)。wiki に答えが無くても打ち手は出る(端末が描く)。 */
+  playbook: Playbook | null;
 }
 
 async function noneAnswer(
@@ -327,7 +327,7 @@ async function noneAnswer(
   query: string | null,
   syncedAt: string | null,
   dropped: NoneAnswer["dropped"],
-  playbook: "cant_win" | null = null,
+  playbook: Playbook | null = null,
 ): Promise<NoneAnswer> {
   if (!query) return { kind: "none", reason, search: [], synced_at: syncedAt, dropped, playbook };
   const hits = await searchUnits(env.WIKI, query);
@@ -542,7 +542,7 @@ async function tryLoop(
   columnNotes: Record<string, ColumnNote>,
   dict: readonly string[],
   syncedAt: string | null,
-  playbook: "cant_win" | null,
+  playbook: Playbook | null,
   pageNames: string[],
   columnDict: Record<string, string>,
   route: "loop" | "cheap_then_loop",
@@ -648,7 +648,8 @@ async function runAsk(
   // 雑談と判定した実例 2026-09-23)。どちらかなら wiki として進める(挨拶は語が索引に無いので変わらない)
   let kind = understanding.kind;
   const kindDropped: Dropped[] = [];
-  if (kind !== "wiki") {
+  // damage_calc はゲームの語が必ず索引に当たる(「ティチエル」「DPS が高い技」)ので、この歯止めからは外す
+  if (kind !== "wiki" && kind !== "damage_calc") {
     const rescued =
       (await aliasExactMatch(env.WIKI, question)) ||
       (await questionHitsIndex(env.WIKI, questionTokens));
@@ -658,10 +659,17 @@ async function runAsk(
     }
   }
   // 困りごとの型「勝てない」。wiki の答えの有無に関わらず載せる(端末が打ち手をローカルで描く)。
-  const playbook: "cant_win" | null = understanding.trouble === "cant_win" ? "cant_win" : null;
+  const playbook: Playbook | null = understanding.trouble === "cant_win" ? "cant_win" : null;
 
   if (kind === "smalltalk" || kind === "other") {
     return outcome({ status: 200, body: await noneAnswer(env, kind, null, syncedAt, [], playbook) });
+  }
+
+  // ダメージ・DPS は wiki の候補では出せない(計算式・装備・バフはアプリ側にある。ADR-020 段階 4)。
+  // 検索も選択もせず、端末の計算タブへ渡す印だけ返す —— 近い断片を並べると「答えたのに答えていない」になる
+  // (実例: 「ティチエルの最も DPS が高い攻撃コンビネーション」に属性変換の段落を 4 本返した。2026-09-24)
+  if (kind === "damage_calc") {
+    return outcome({ status: 200, body: await noneAnswer(env, "damage_calc", null, syncedAt, kindDropped, "damage_calc") });
   }
 
   // hops は記録だけ残す(評価が「回す道なら解けたかもしれない率」を数える材料)。hops:multi は下で

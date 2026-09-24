@@ -90,6 +90,11 @@
     { "id": "a02", "kind": "absent", "question": "マーキュリアルコアの強化成功率", "expect": [] },
     { "id": "a03", "kind": "absent", "question": "2026年の夏イベントの内容", "expect": [] },
     { "id": "a04", "kind": "absent", "question": "ゼリッピの好物", "expect": [] },
-    { "id": "a05", "kind": "absent", "question": "テネブリス装備の能力値", "expect": [] }
+    { "id": "a05", "kind": "absent", "question": "テネブリス装備の能力値", "expect": [] },
+
+    { "id": "d01", "kind": "damage_calc", "question": "ティチエルの最もDPSが高い攻撃コンビネーションを教えて", "expect": [] },
+    { "id": "d02", "kind": "damage_calc", "question": "武器をこれに変えたらダメージはどれくらい増える?", "expect": [] },
+    { "id": "d03", "kind": "damage_calc", "question": "一番火力が出る技はどれ?", "expect": [] },
+    { "id": "d04", "kind": "wiki", "question": "ティチエルのスキルの倍率は?", "expect": [{ "page": "Skill/ティチエル" }] }
   ]
 }

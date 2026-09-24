@@ -6,6 +6,7 @@
   import { errorMessage } from "../../api/commands";
   import type { AskAnswer, AskNone, NextQuestion, PrevTurn, Unit } from "../../ask";
   import { reportError } from "../../toast.svelte";
+  import DamageCalcHandoff from "./DamageCalcHandoff.svelte";
   import { collectUnits } from "./leadLine";
   import LeadLine from "./LeadLine.svelte";
   import { followupLine, missingLine, NEXT_LABEL, noLeadLine } from "./lines";
@@ -99,6 +100,8 @@
 
     {#if response.playbook === "cant_win"}
       <Playbook />
+    {:else if response.playbook === "damage_calc"}
+      <DamageCalcHandoff {question} />
     {/if}
 
     <Reaction answerId={response.answer_id} unitIds={allUnitIds} {question} />
@@ -124,6 +127,8 @@
 
     {#if response.playbook === "cant_win"}
       <Playbook />
+    {:else if response.playbook === "damage_calc"}
+      <DamageCalcHandoff {question} />
     {/if}
   </div>
 {/if}

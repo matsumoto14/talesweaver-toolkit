@@ -53,6 +53,26 @@ describe("verify", () => {
     expect(result.dropped).toEqual([{ what: "all", why: "llm_none" }]);
   });
 
+  it("結論文が落ちて根拠も残らなければ答えなしに倒す(無関係な断片だけ出さない)", () => {
+    // 実例(2026-09-24): 「ティチエルの最も DPS が高い攻撃コンビネーション」に、verdict: no・
+    // basis が全部選択集合の外、という選択が返り、無関係な段落 4 本だけが残っていた
+    const sel = selectionOf({
+      verdict: "no", basis: ["p9"], lead: "答えッピ。",
+      steps: [{ units: ["p1"], columns: [], key_check: [] }],
+    });
+    const result = verify(sel, ctxOf([paragraph("p1")]));
+    expect(result.steps).toEqual([]);
+    expect(result.lead).toBeNull();
+    expect(result.dropped).toContainEqual({ what: "all", why: "no_basis" });
+  });
+
+  it("verdict が none(はい/いいえの質問でない)なら、結論文が落ちても手順は残す", () => {
+    const sel = selectionOf({ verdict: "none", basis: [], lead: "", steps: [{ units: ["p1"], columns: [], key_check: [] }] });
+    const result = verify(sel, ctxOf([paragraph("p1")]));
+    expect(result.steps).toHaveLength(1);
+    expect(result.lead).toBeNull();
+  });
+
   it("未使用スロット(候補に無い ID)は落とす。手順が空になれば手順ごと落とす", () => {
     const sel = selectionOf({ steps: [{ units: ["p1"], columns: [], key_check: [] }] });
     const result = verify(sel, ctxOf([]));
@@ -178,19 +198,19 @@ describe("verify", () => {
     expect(result.lead).not.toBeNull();
   });
 
-  it("verdict が yes/no/depends なのに basis が空なら lead を捨てる", () => {
+  it("verdict が yes/no/depends なのに basis が空なら lead を捨て、答えなしに倒す", () => {
     const p1 = paragraph("p1");
     const sel = selectionOf({
       verdict: "yes", basis: [], lead: "そうだッピ。",
       steps: [{ units: ["p1"], columns: [], key_check: [] }],
     });
     const result = verify(sel, ctxOf([p1]));
-    expect(result.steps).toHaveLength(1);
+    expect(result.steps).toEqual([]);
     expect(result.lead).toBeNull();
     expect(result.dropped).toContainEqual({ what: "lead", why: "basis_empty" });
   });
 
-  it("basis が選択集合の外なら lead を捨てる", () => {
+  it("basis が選択集合の外なら lead を捨て、根拠が 1 つも残らないので答えなしに倒す", () => {
     const p1 = paragraph("p1");
     const p2 = paragraph("p2");
     const sel = selectionOf({
@@ -198,9 +218,21 @@ describe("verify", () => {
       steps: [{ units: ["p1"], columns: [], key_check: [] }],
     });
     const result = verify(sel, ctxOf([p1, p2]));
-    expect(result.steps).toHaveLength(1);
+    expect(result.steps).toEqual([]);
     expect(result.lead).toBeNull();
     expect(result.dropped).toContainEqual({ what: "lead", why: "basis_not_selected:p2" });
+  });
+
+  it("basis が 1 つでも選択集合に残っていれば、lead が別の理由で落ちても手順は残す", () => {
+    const p1 = paragraph("p1");
+    const sel = selectionOf({
+      verdict: "yes", basis: ["p1"], lead: "あ".repeat(121),
+      steps: [{ units: ["p1"], columns: [], key_check: [] }],
+    });
+    const result = verify(sel, ctxOf([p1]));
+    expect(result.steps).toHaveLength(1);
+    expect(result.lead).toBeNull();
+    expect(result.dropped).toContainEqual({ what: "lead", why: "too_long" });
   });
 
   it("lead が 120 字を超えたら捨てる", () => {

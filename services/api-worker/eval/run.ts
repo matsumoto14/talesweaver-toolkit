@@ -18,7 +18,7 @@ import { readFileSync } from "node:fs";
 interface Expect { page: string; text_contains?: string }
 interface Question {
   id: string;
-  kind: "wiki" | "smalltalk" | "other" | "followup" | "absent";
+  kind: "wiki" | "smalltalk" | "other" | "followup" | "absent" | "damage_calc";
   question: string;
   paraphrase?: boolean;
   expect: Expect[];
@@ -147,7 +147,7 @@ async function runAsk(): Promise<void> {
   }
 
   const withExpect = results.filter((r) => r.q.expect.length > 0);
-  const withoutExpect = results.filter((r) => r.q.expect.length === 0 && r.q.kind !== "smalltalk" && r.q.kind !== "other");
+  const withoutExpect = results.filter((r) => r.q.expect.length === 0 && r.q.kind !== "smalltalk" && r.q.kind !== "other" && r.q.kind !== "damage_calc");
   const noneRateOf = (rows: typeof results): string => {
     const n = rows.length;
     const noneCount = rows.filter((r) => r.res.kind === "none").length;
@@ -181,9 +181,10 @@ async function runAsk(): Promise<void> {
   const cheapMiss = withExpect.filter((r) => r.res.kind === "none" || (r.res.missing?.length ?? 0) > 0);
   console.log(`  安い道で解けなかった率(none または missing あり): ${cheapMiss.length}/${withExpect.length}`);
 
-  const smalltalkOther = results.filter((r) => r.q.kind === "smalltalk" || r.q.kind === "other");
-  const kindOk = smalltalkOther.filter((r) => r.res.kind === "none" && r.res.reason === r.q.kind);
-  console.log(`  雑談/範囲外の kind 正誤: ${kindOk.length}/${smalltalkOther.length}`);
+  // 雑談・範囲外・ダメージ計算は「reason がその kind そのもの」で返るのが正解(damage_calc は計算タブへ渡す)
+  const classified = results.filter((r) => ["smalltalk", "other", "damage_calc"].includes(r.q.kind));
+  const kindOk = classified.filter((r) => r.res.kind === "none" && r.res.reason === r.q.kind);
+  console.log(`  雑談/範囲外/ダメージ計算の kind 正誤: ${kindOk.length}/${classified.length}`);
 
   // route ごとの件数・行一致・none 率・ツール回数と所要時間の平均(dropped の "route" 行から拾う。段階 2)。
   const routeOf = (r: AskResponse): string => r.route ?? (r.kind === "error" ? "error" : "(none)");

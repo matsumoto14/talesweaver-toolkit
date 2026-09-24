@@ -141,7 +141,9 @@ export interface Dropped {
   why: string;
 }
 
-export type AskPlaybook = "cant_win";
+/** 端末が描く打ち手の型。"cant_win" = 困りごと「勝てない」、
+ *  "damage_calc" = ダメージ・DPS の質問(wiki では出せないので計算タブへ渡す。2026-09-24) */
+export type AskPlaybook = "cant_win" | "damage_calc";
 
 /** 候補に答えが無かった観点(SELECTION_SCHEMA の `missing`)。s12 の応答例には出ないが、
  * stage1-spec.md 決定 11・16 が「missing の定型文を出す」と定めているので受け取れる形にしておく。
@@ -162,7 +164,7 @@ export interface AskAnswer {
   model: string;
   /** cheap / loop / cheap_then_loop。評価・費用の見張り用(画面には出さない) */
   route: string;
-  /** "cant_win" なら端末の domain が打ち手(Playbook)を描く。困りごとが無ければ null */
+  /** 打ち手の印。端末の domain が打ち手を描く。無ければ null */
   playbook: AskPlaybook | null;
   /** リアクション用。乱数。質問文とは結び付けて保存されない */
   answer_id: string;
@@ -178,7 +180,7 @@ export interface AskAnswer {
   followup?: Followup | null;
 }
 
-export type AskNoneReason = "llm_none" | "verification_failed" | "smalltalk" | "other" | "no_terms";
+export type AskNoneReason = "llm_none" | "verification_failed" | "smalltalk" | "other" | "no_terms" | "damage_calc";
 
 export interface AskNone {
   kind: "none";
@@ -186,7 +188,7 @@ export interface AskNone {
   search: SearchHit[];
   synced_at: string;
   dropped: Dropped[];
-  /** "cant_win" なら wiki に答えが無くても端末の domain が打ち手(Playbook)を描く */
+  /** 打ち手の印。wiki に答えが無くても端末の domain が打ち手を描く */
   playbook: AskPlaybook | null;
 }
 

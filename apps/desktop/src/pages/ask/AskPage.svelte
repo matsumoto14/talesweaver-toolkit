@@ -103,7 +103,8 @@
       turn.response = res;
       turn.status = "done";
       if (res.kind === "answer") {
-        turn.expression = "answered";
+        // 結論文が検証で落ちた答えは「言い切れていない」ので笑顔にしない(近い断片を出すだけ。2026-09-24)
+        turn.expression = res.lead && res.lead.length > 0 ? "answered" : "notfound";
         turn.message = "";
         turn.page = res.steps[0]?.source.page ?? null;
       } else {

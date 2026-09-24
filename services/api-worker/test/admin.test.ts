@@ -194,6 +194,7 @@ describe("outcomeOf", () => {
     expect(outcomeOf("none", "verification_failed", null)).toBe("not_found");
     expect(outcomeOf("none", "smalltalk", null)).toBe("off");
     expect(outcomeOf("none", "other", null)).toBe("off");
+    expect(outcomeOf("none", "damage_calc", null)).toBe("off");
     expect(outcomeOf("error", "x", null)).toBe("error");
   });
 });

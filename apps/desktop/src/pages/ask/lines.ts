@@ -65,6 +65,8 @@ const OFFLINE: readonly string[] = ["……wiki に届かないッピ。"];
 const SMALLTALK: readonly string[] = ["wiki のことなら任せるッピ。書いてあることだけ探してくるッピ。"];
 /** wiki の範囲外(ダメージ計算など) */
 const OTHER: readonly string[] = ["それは wiki に書いてないッピ。"];
+/** ダメージ・DPS の質問(wiki には無いが、アプリの計算タブが出せる) */
+const DAMAGE_CALC: readonly string[] = ["ダメージや DPS は wiki に載ってないッピ。でもアプリが出せるッピ。"];
 /** 1 日の上限(429) */
 const RATE_LIMIT: readonly string[] = ["今日はもう聞きすぎッピ。明日また来るッピ。"];
 
@@ -83,6 +85,7 @@ export const emptyLine = (question: string): string => pick(EMPTY, question);
 export const offlineLine = (question: string): string => pick(OFFLINE, question);
 export const smalltalkLine = (question: string): string => pick(SMALLTALK, question);
 export const otherLine = (question: string): string => pick(OTHER, question);
+export const damageCalcLine = (question: string): string => pick(DAMAGE_CALC, question);
 export const rateLimitLine = (question: string): string => pick(RATE_LIMIT, question);
 
 /** `kind:"none"` の reason ごとの文と表情(s6.txt / stage1-spec.md 16) */
@@ -96,14 +99,18 @@ export function noneLine(
       return { message: smalltalkLine(question), expression: "answered" };
     case "other":
       return { message: otherLine(question), expression: "answered" };
+    case "damage_calc":
+      // 「無い」で終わらせない —— 計算タブが出せるので、下の打ち手(DamageCalcHandoff)へ続ける
+      return { message: damageCalcLine(question), expression: "answered" };
     default:
       // llm_none / verification_failed / no_terms は段階 0 の「見つからない」+ 検索結果
       return { message: hasSearch ? notFoundLine(question) : emptyLine(question), expression: "notfound" };
   }
 }
 
-/** 手順は残ったが結論文が検証で落ちたとき(dropped: lead) */
-export const noLeadLine = (): string => "ここに書いてあるッピ。";
+/** 手順は残ったが結論文が検証で落ちたとき(dropped: lead)。
+ *  結論文が無い = 言い切れていないので、「書いてある」と言い切らない(2026-09-24) */
+export const noLeadLine = (): string => "ぴったりの答えは無かったけど、近いのはここッピ。";
 
 /** 候補に答えが無かった観点(missing)ごとの一言 */
 const ASPECT_LABEL: Record<Aspect, string> = {
@@ -143,6 +150,18 @@ export const NEXT_LABEL = "続けて聞く";
 
 const BURST: readonly string[] = ["ちょっと待つッピ。続けて聞きすぎッピ。"];
 export const burstLine = (question: string): string => pick(BURST, question);
+
+// --- ダメージ・DPS の質問の打ち手(DamageCalcHandoff.svelte)。すべてコードの定型文 ---
+
+export const DAMAGE_CALC_TITLE = "火力の高い組み合わせ";
+export const DAMAGE_CALC_FILLER_LABEL = "連打する技(CT なし・継続火力順)";
+export const DAMAGE_CALC_INSERT_LABEL = "差し込む技(CT あり)";
+/** 登録キャラの実データで出したとき */
+export const DAMAGE_CALC_NOTE = "差し込みの増減はあなたの装備・バフ・対象で計算した値。計算タブの「スキル回し」で組み替えられる";
+/** 静的データ(スキルの性能)だけで出したとき */
+export const DAMAGE_CALC_GENERIC_NOTE = "並びは技の性能(段数 ÷ 中ディレイ・1 回ぶんの火力)から。実際の DPS は装備・バフ・対象で変わる";
+export const DAMAGE_CALC_REGISTER_NOTE = "キャラを登録すると、あなたの装備で差し込みの増減まで出るッピ";
+export const DAMAGE_CALC_NO_SKILLS = "どのキャラの話か分からなかったッピ。計算タブでキャラと敵を選ぶと出せるッピ。";
 
 // --- 困りごとの型「勝てない」の打ち手(Playbook.svelte)。すべてコードの定型文(s6.txt「困りごとの型」) ---
 

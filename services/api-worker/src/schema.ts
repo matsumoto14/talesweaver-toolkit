@@ -41,7 +41,9 @@ export type Aspect = (typeof ASPECTS)[number];
  * 理解の欄は段階 3 で 7 つになった(Issue #36「気分・困りごとの型は段階 3」)。観点はまだ足していない。
  */
 export const UnderstandSchema = z.object({
-  kind: z.enum(["wiki", "smalltalk", "other"]),
+  /** damage_calc = ダメージ・DPS が装備やバフでどう変わるかを聞く文。wiki には出せない計算なので
+   *  検索せず、アプリの計算タブへ渡す(playbook: "damage_calc"。2026-09-24、ADR-020)。 */
+  kind: z.enum(["wiki", "smalltalk", "other", "damage_calc"]),
   /** 候補(p01〜p10)から 0〜3 件。 */
   pages: z.array(z.enum(PAGE_SLOTS)),
   /** 最大 6 語・各 20 字。超過はコードが切る。検索にしか使わない。 */

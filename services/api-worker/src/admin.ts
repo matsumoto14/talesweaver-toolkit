@@ -321,7 +321,8 @@ export type Outcome = "answered" | "partial" | "not_found" | "off" | "error";
 export function outcomeOf(kind: string, reason: string | null, missingN: number | null): Outcome {
   if (kind === "error") return "error";
   if (kind === "answer") return (missingN ?? 0) > 0 ? "partial" : "answered";
-  if (reason === "smalltalk" || reason === "other") return "off";
+  // damage_calc は取りこぼしではなく意図した受け渡し(計算タブへ)なので、雑談・範囲外と同じ扱いにする
+  if (reason === "smalltalk" || reason === "other" || reason === "damage_calc") return "off";
   return "not_found";
 }
 

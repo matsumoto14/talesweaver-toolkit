@@ -92,6 +92,12 @@ export function verify(raw: Selection, ctx: Ctx): VerifyResult {
   if (steps.length === 0) return { steps, lead: null, missing, dropped: [...dropped, { what: "all", why: "no_steps" }] };
 
   const lead = renderLead(raw, seen, ctx, dropped);
+  // 結論文が落ち、根拠(basis)も 1 つも残らなかったのに verdict が付いている = LLM 自身が
+  // 「候補は質問に答えていない」と言っている状態。手順だけ出すと無関係な断片を「ここに書いてあるッピ」で
+  // 見せることになるので、答えなしに倒す(呼び元が回す道 → 該当なしへ。2026-09-24、ADR-020)
+  if (lead === null && raw.verdict !== "none" && !raw.basis.some((id) => seen.has(id))) {
+    return { steps: [], lead: null, missing, dropped: [...dropped, { what: "all", why: "no_basis" }] };
+  }
   return { steps, lead, missing, dropped };
 }
 

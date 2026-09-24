@@ -196,6 +196,33 @@ describe("/ask の経路", () => {
     expect(claude.select).not.toHaveBeenCalled();
   });
 
+  it("理解が damage_calc なら検索も選択も呼ばず、計算タブへ渡す印(playbook)を返す", async () => {
+    const env = baseEnv();
+    vi.mocked(claude.understand).mockResolvedValue(understandResult({ ...NONE_UNDERSTAND, kind: "damage_calc" }));
+    const token = await bearerFor(env);
+
+    const res = await worker.fetch(
+      askRequest({ question: "ティチエルの最も DPS が高い攻撃コンビネーションを教えて" }, token), env, ctx,
+    );
+    const body = (await res.json()) as { kind: string; reason: string; playbook: string | null };
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({ kind: "none", reason: "damage_calc", playbook: "damage_calc" });
+    expect(claude.select).not.toHaveBeenCalled();
+  });
+
+  it("理解が damage_calc なら、質問の語が索引に当たっても wiki に戻さない", async () => {
+    const env = baseEnv();
+    vi.mocked(claude.understand).mockResolvedValue(understandResult({ ...NONE_UNDERSTAND, kind: "damage_calc" }));
+    const token = await bearerFor(env);
+
+    const res = await worker.fetch(askRequest({ question: "テシスコアで DPS はどれだけ上がる?" }, token), env, ctx);
+    const body = (await res.json()) as { kind: string; reason: string };
+
+    expect(body).toMatchObject({ kind: "none", reason: "damage_calc" });
+    expect(claude.select).not.toHaveBeenCalled();
+  });
+
   it("理解が落ちたらコード経路(wiki 扱い)で進む", async () => {
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(null);
