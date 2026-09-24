@@ -152,6 +152,9 @@ export interface AskAnswer {
   kind: "answer";
   /** 結論文セグメント。検証で落ちていれば null(手順だけを出す。services/api-worker/src/verify.ts) */
   lead: LeadSeg[] | null;
+  /** lead に LLM が計算した値(参照の言い換えでなく、掛け算・合計などの結果)が含まれるか。
+   *  true なら画面が「AI の計算」の印を出す(段階 4、ADR-020)。旧い応答では省略される */
+  computed?: boolean;
   steps: Step[];
   /** 次の一手(段階 3 まで常に空) */
   next: NextQuestion[];

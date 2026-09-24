@@ -60,7 +60,7 @@ function endTurnNoToolResponse(): unknown {
   return { stop_reason: "end_turn", usage: { input_tokens: 50 }, content: [{ type: "text", text: "…" }] };
 }
 
-const EMPTY_ANSWER: Selection = { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] };
+const EMPTY_ANSWER: Selection = { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] };
 
 /**
  * `messages` は agent.ts がループ中ずっと同じ配列を push で書き換える(参照が同じ)ので、
@@ -176,6 +176,7 @@ describe("runAgentLoop", () => {
       toolUseResponse("answer", {
         none: false, verdict: "yes", basis: ["u01"], missing: [],
         lead: "そうッピ。",
+        computed: false,
         steps: [{ units: ["u01"], columns: [], key_check: [""] }],
       }),
     ]);

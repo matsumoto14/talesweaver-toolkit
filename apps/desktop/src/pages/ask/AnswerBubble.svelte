@@ -57,7 +57,11 @@
     {#if response.lead && response.lead.length > 0}
       <p class="lead pop-in">
         <LeadLine segments={response.lead} {unitsById} corrections={response.corrections} />
-        <span class="tag llm">LLM · 検証済</span>
+        {#if response.computed}
+          <span class="tag computed">AI の計算 · 誤りの可能性あり</span>
+        {:else}
+          <span class="tag llm">LLM · 検証済</span>
+        {/if}
       </p>
     {:else if response.steps.length > 0}
       <p class="lead pop-in">{noLeadLine()}</p>
@@ -129,6 +133,9 @@
   .lead { margin: 0; font-size: 11.5px; font-weight: 700; color: var(--sim-fg); line-height: 1.6; }
   .lead :global(.lead-value) { color: var(--fg); }
   .tag { margin-left: 6px; font-size: 8px; font-weight: 700; color: var(--sim); border: 1px solid var(--sim); border-radius: var(--r-inset); padding: 0 5px; vertical-align: middle; }
+  /* 地の文に LLM が計算した数字を書いたとき(sum の再計算はしない。段階 4、ADR-020)。
+     既存の .tag と同じ段・形のまま、色だけ --danger にして「検証済」と区別する */
+  .tag.computed { color: var(--danger); border-color: var(--danger); }
   .state-chip { display: flex; align-items: baseline; gap: 6px; font-size: 9.5px; align-self: flex-start; background: var(--bg-panel); border: 1px solid var(--border-soft); border-radius: var(--r-inset); padding: 2px 8px; }
   .state-chip .k { color: var(--fg-muted); }
   .state-chip .v { font-weight: 700; color: var(--fg); }

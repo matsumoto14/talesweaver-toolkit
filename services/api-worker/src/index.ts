@@ -586,6 +586,7 @@ async function tryLoop(
   const answer = await buildAnswer(env.WIKI, {
     steps: verified.steps,
     lead: verified.lead,
+    computed: result.selection.computed,
     dropped: [...verified.dropped, ...dropped],
     columnDict,
     state,
@@ -764,6 +765,7 @@ async function runAsk(
   const answer = await buildAnswer(env.WIKI, {
     steps: verified.steps,
     lead: verified.lead,
+    computed: selection.computed,
     dropped: [...verified.dropped, ...hopsDropped],
     columnDict,
     state,

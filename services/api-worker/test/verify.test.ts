@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Candidate } from "../src/retrieve";
 import { NONE_SELECTION } from "../src/schema";
 import type { Selection } from "../src/schema";
-import { verify } from "../src/verify";
+import { leadHasBareNumber, verify } from "../src/verify";
 import type { Ctx } from "../src/verify";
 
 function paragraph(id: string, overrides: Partial<Candidate> = {}): Candidate {
@@ -39,7 +39,7 @@ function ctxOf(candidates: Candidate[], overrides: Partial<Ctx> = {}): Ctx {
 
 function selectionOf(overrides: Partial<Selection> = {}): Selection {
   return {
-    none: false, verdict: "none", basis: [], missing: [], lead: "",
+    none: false, verdict: "none", basis: [], missing: [], lead: "", computed: false,
     steps: [{ units: ["p1"], columns: [], key_check: [] }],
     ...overrides,
   };
@@ -110,26 +110,15 @@ describe("verify", () => {
     expect(result2.steps[0]?.columns).toEqual(["進化", "強化", "成功率"]);
   });
 
-  it("lead に数字があれば結論文を捨てる(手順は残す)", () => {
+  it("地の文に数字があっても結論文は落とさない(計算した値。2026-09-24、ADR-020)", () => {
     const p1 = paragraph("p1");
     const sel = selectionOf({
-      verdict: "yes", basis: ["p1"], lead: "成功率は100%ッピ。",
+      verdict: "yes", basis: ["p1"], lead: "成功率は100%ッピ。", computed: true,
       steps: [{ units: ["p1"], columns: [], key_check: [] }],
     });
     const result = verify(sel, ctxOf([p1]));
     expect(result.steps).toHaveLength(1);
-    expect(result.lead).toBeNull();
-    expect(result.dropped).toContainEqual({ what: "lead", why: "digit" });
-  });
-
-  it("「一番」「一度」「十分」は数字として扱わない", () => {
-    const p1 = paragraph("p1");
-    const sel = selectionOf({
-      verdict: "yes", basis: ["p1"], lead: "これが一番おすすめッピ。",
-      steps: [{ units: ["p1"], columns: [], key_check: [] }],
-    });
-    const result = verify(sel, ctxOf([p1]));
-    expect(result.lead).not.toBeNull();
+    expect(result.lead).toEqual([{ t: "成功率は100%ッピ。" }]);
   });
 
   it("{{スロット.列}} の参照先が選択集合に無ければ結論文を捨てる", () => {
@@ -202,10 +191,10 @@ describe("verify", () => {
     expect(result.dropped).toContainEqual({ what: "lead", why: "basis_not_selected:p2" });
   });
 
-  it("lead が 80 字を超えたら捨てる", () => {
+  it("lead が 120 字を超えたら捨てる", () => {
     const p1 = paragraph("p1");
     const sel = selectionOf({
-      verdict: "none", lead: "あ".repeat(81),
+      verdict: "none", lead: "あ".repeat(121),
       steps: [{ units: ["p1"], columns: [], key_check: [] }],
     });
     const result = verify(sel, ctxOf([p1]));
@@ -220,5 +209,18 @@ describe("verify", () => {
     });
     const result = verify(sel, ctxOf(units));
     expect(result.steps).toHaveLength(4);
+  });
+});
+
+describe("leadHasBareNumber", () => {
+  it("参照の外の数字は LLM が書いた値として拾う(computed の申告漏れでも AI の計算の印を付ける)", () => {
+    expect(leadHasBareNumber([{ t: "合わせて 3,000個ッピ。" }])).toBe(true);
+    expect(leadHasBareNumber([{ t: "成功率は " }, { ref: "r:x", col: "成功率" }, { t: " の二乗で約１８％ッピ。" }])).toBe(true);
+    expect(leadHasBareNumber([{ t: "五個ずつ要るッピ。" }])).toBe(true);
+  });
+
+  it("参照だけ・数字を含まない言い回しは拾わない", () => {
+    expect(leadHasBareNumber([{ t: "必要数は " }, { ref: "r:x", col: "経験の聖水" }, { t: " ッピ。" }])).toBe(false);
+    expect(leadHasBareNumber([{ t: "一番早いのは十分に強化してからッピ。" }])).toBe(false);
   });
 });

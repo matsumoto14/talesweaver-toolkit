@@ -5,7 +5,7 @@
  */
 import { getPageUrls, getTableInfo, getUnitLinks } from "./retrieve";
 import type { Candidate, CandidateCorrection } from "./retrieve";
-import type { Dropped, LeadSeg, Step } from "./verify";
+import { leadHasBareNumber, type Dropped, type LeadSeg, type Step } from "./verify";
 import type { Aspect } from "./schema";
 import { wikiUrl } from "./wiki-url";
 
@@ -46,6 +46,9 @@ export interface NextItem {
 export interface AnswerResponse {
   kind: "answer";
   lead: LeadSeg[] | null;
+  /** lead に LLM が計算した値(参照の言い換えでなく、掛け算・合計などの結果)が含まれるか。
+   *  true なら画面が「AI の計算」の印を出す(段階 4、ADR-020。サーバーは式を再計算しない)。 */
+  computed: boolean;
   steps: AnswerStep[];
   next: NextItem[];
   synced_at: string | null;
@@ -181,6 +184,8 @@ async function computeNext(db: D1Database, allUnits: Candidate[]): Promise<NextI
 export interface BuildAnswerInput {
   steps: Step[];
   lead: LeadSeg[] | null;
+  /** lead に LLM の計算が含まれるか(Selection.computed)。lead が null なら意味を持たない。 */
+  computed: boolean;
   dropped: Dropped[];
   columnDict: Record<string, string>;
   state: Record<string, number>;
@@ -205,6 +210,8 @@ export async function buildAnswer(db: D1Database, input: BuildAnswerInput): Prom
   return {
     kind: "answer",
     lead: input.lead,
+    // 申告が無くても地の文に数字があれば LLM が書いた値なので、同じく「AI の計算」として出す
+    computed: input.lead !== null && (input.computed || leadHasBareNumber(input.lead)),
     steps,
     next,
     synced_at: input.syncedAt,

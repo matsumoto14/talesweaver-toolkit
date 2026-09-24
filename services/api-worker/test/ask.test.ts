@@ -172,7 +172,7 @@ describe("/ask の経路", () => {
   it("理解が smalltalk でも、質問の語で索引に当たりがあれば wiki として進める(聖水の実例 2026-09-23)", async () => {
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult({ ...NONE_UNDERSTAND, kind: "smalltalk" }));
-    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] }, slotToId: new Map(), call: FAKE_CALL });
+    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] }, slotToId: new Map(), call: FAKE_CALL });
     const token = await bearerFor(env);
 
     const res = await worker.fetch(askRequest({ question: "テシスコアはどうやって稼ぐ?" }, token), env, ctx);
@@ -199,7 +199,7 @@ describe("/ask の経路", () => {
   it("理解が落ちたらコード経路(wiki 扱い)で進む", async () => {
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(null);
-    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] }, slotToId: new Map(), call: FAKE_CALL });
+    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] }, slotToId: new Map(), call: FAKE_CALL });
     const token = await bearerFor(env);
 
     const res = await worker.fetch(askRequest({ question: "テシスコアの成功率は?" }, token), env, ctx);
@@ -210,7 +210,7 @@ describe("/ask の経路", () => {
   it("選択が none なら reason llm_none + 検索結果", async () => {
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
-    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] }, slotToId: new Map(), call: FAKE_CALL });
+    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] }, slotToId: new Map(), call: FAKE_CALL });
     const token = await bearerFor(env);
 
     const res = await worker.fetch(askRequest({ question: "テシスコアの成功率は?" }, token), env, ctx);
@@ -226,7 +226,7 @@ describe("/ask の経路", () => {
     vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
     vi.mocked(claude.select).mockResolvedValue({
       selection: {
-        none: false, verdict: "none", basis: [], missing: [], lead: "",
+        none: false, verdict: "none", basis: [], missing: [], lead: "", computed: false,
         steps: [{ units: ["存在しない札"], columns: [], key_check: [] }],
       },
       slotToId: new Map(), call: FAKE_CALL,
@@ -247,6 +247,7 @@ describe("/ask の経路", () => {
       selection: {
         none: false, verdict: "yes", basis: ["r:テシスコア/h2_1/1/進0-強0"], missing: [],
         lead: "進化 {{r:テシスコア/h2_1/1/進0-強0.進化}} のいまは成功率 {{r:テシスコア/h2_1/1/進0-強0.成功率}} から始めるッピ。",
+        computed: false,
         steps: [
           { units: ["p:テシスコア/top/1"], columns: [], key_check: [] },
           { units: ["r:テシスコア/h2_1/1/進0-強0"], columns: ["成功率"], key_check: ["進0-強0"] },
@@ -272,6 +273,28 @@ describe("/ask の経路", () => {
     expect(body.route).toBe("cheap");
   });
 
+  it("lead に LLM の計算が含まれるとき(selection.computed)は answer.computed が true になる", async () => {
+    const env = baseEnv();
+    vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
+    vi.mocked(claude.select).mockResolvedValue({
+      selection: {
+        none: false, verdict: "none", basis: [], missing: [],
+        lead: "{{r:テシスコア/h2_1/1/進0-強0.成功率}} × {{r:テシスコア/h2_1/1/進0-強0.成功率}} ≒ 18%ッピ。",
+        computed: true,
+        steps: [{ units: ["r:テシスコア/h2_1/1/進0-強0"], columns: ["成功率"], key_check: ["進0-強0"] }],
+      },
+      slotToId: new Map(), call: FAKE_CALL,
+    });
+    const token = await bearerFor(env);
+
+    const res = await worker.fetch(askRequest({ question: "成功率を 2 連続で引く確率は?" }, token), env, ctx);
+    const body = (await res.json()) as { kind: string; lead: unknown[]; computed: boolean };
+
+    expect(body.kind).toBe("answer");
+    expect(body.lead).not.toBeNull();
+    expect(body.computed).toBe(true);
+  });
+
   it("trouble: cant_win なら answer に playbook: cant_win が載る", async () => {
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult({ ...NONE_UNDERSTAND, trouble: "cant_win" }));
@@ -279,6 +302,7 @@ describe("/ask の経路", () => {
       selection: {
         none: false, verdict: "yes", basis: ["r:テシスコア/h2_1/1/進0-強0"], missing: [],
         lead: "成功率 {{r:テシスコア/h2_1/1/進0-強0.成功率}} ッピ。",
+        computed: false,
         steps: [{ units: ["r:テシスコア/h2_1/1/進0-強0"], columns: ["成功率"], key_check: ["進0-強0"] }],
       },
       slotToId: new Map(), call: FAKE_CALL,
@@ -296,7 +320,7 @@ describe("/ask の経路", () => {
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult({ ...NONE_UNDERSTAND, trouble: "cant_win" }));
     vi.mocked(claude.select).mockResolvedValue({
-      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] },
+      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] },
       slotToId: new Map(), call: FAKE_CALL,
     });
     const token = await bearerFor(env);
@@ -313,7 +337,7 @@ describe("/ask の経路", () => {
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
     vi.mocked(claude.select).mockResolvedValue({
-      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] },
+      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] },
       slotToId: new Map(), call: FAKE_CALL,
     });
     const token = await bearerFor(env);
@@ -326,7 +350,7 @@ describe("/ask の経路", () => {
 
   it("debug.understand: false なら理解を呼ばない", async () => {
     const env = baseEnv();
-    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] }, slotToId: new Map(), call: FAKE_CALL });
+    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] }, slotToId: new Map(), call: FAKE_CALL });
     const token = await bearerFor(env);
 
     await worker.fetch(askRequest({ question: "テシスコアの成功率は?", debug: { understand: false } }, token), env, ctx);
@@ -341,6 +365,7 @@ describe("/ask の経路", () => {
       selection: {
         none: false, verdict: "yes", basis: ["r:テシスコア/h2_1/1/進0-強0"], missing: [],
         lead: "成功率 {{r:テシスコア/h2_1/1/進0-強0.成功率}} ッピ。",
+        computed: false,
         steps: [{ units: ["r:テシスコア/h2_1/1/進0-強0"], columns: ["成功率"], key_check: ["進0-強0"] }],
       },
       slotToId: new Map(), call: FAKE_CALL,
@@ -363,6 +388,7 @@ describe("/ask の経路", () => {
       selection: {
         none: false, verdict: "yes", basis: ["r:テシスコア/h2_1/1/進0-強0"], missing: [],
         lead: "成功率 {{r:テシスコア/h2_1/1/進0-強0.成功率}} ッピ。",
+        computed: false,
         steps: [{ units: ["r:テシスコア/h2_1/1/進0-強0"], columns: ["成功率"], key_check: ["進0-強0"] }],
       },
       slotToId: new Map(), call: FAKE_CALL,
@@ -383,7 +409,7 @@ describe("/ask の経路", () => {
     vi.mocked(claude.understand).mockResolvedValue(understandResult({ ...NONE_UNDERSTAND, hops: "multi" }));
     vi.mocked(claude.select).mockResolvedValue({
       selection: {
-        none: false, verdict: "none", basis: [], missing: [], lead: "",
+        none: false, verdict: "none", basis: [], missing: [], lead: "", computed: false,
         steps: [{ units: ["p:テシスコア/top/1"], columns: [], key_check: [] }],
       },
       slotToId: new Map(), call: FAKE_CALL,
@@ -413,7 +439,7 @@ describe("/ask の経路", () => {
     vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
     vi.mocked(claude.select).mockResolvedValue({
       selection: {
-        none: false, verdict: "none", basis: [], missing: [], lead: "",
+        none: false, verdict: "none", basis: [], missing: [], lead: "", computed: false,
         steps: [{ units: ["p:テシスコア/top/1"], columns: [], key_check: [] }],
       },
       slotToId: new Map(), call: FAKE_CALL,
@@ -431,7 +457,7 @@ describe("/ask の経路", () => {
     vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
     vi.mocked(claude.select).mockResolvedValue({
       selection: {
-        none: false, verdict: "none", basis: [], missing: [], lead: "",
+        none: false, verdict: "none", basis: [], missing: [], lead: "", computed: false,
         steps: [{ units: ["p:テシスコア/top/1"], columns: [], key_check: [] }],
       },
       slotToId: new Map(), call: FAKE_CALL,
@@ -472,7 +498,7 @@ describe("/ask の SSE(Accept: text/event-stream)", () => {
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
     vi.mocked(claude.select).mockResolvedValue({
-      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] },
+      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] },
       slotToId: new Map(), call: FAKE_CALL,
     });
     const token = await bearerFor(env);
@@ -547,6 +573,7 @@ describe("回す道への振り分け(agent.ts は runAgentLoop をモックし�
       selection: {
         none: false, verdict: "yes", basis: ["r:テシスコア/h2_1/1/進0-強0"], missing: [],
         lead: "成功率 {{r:テシスコア/h2_1/1/進0-強0.成功率}} ッピ。",
+        computed: false,
         steps: [{ units: ["r:テシスコア/h2_1/1/進0-強0"], columns: ["成功率"], key_check: ["進0-強0"] }],
       },
       candidates: new Map([["r:テシスコア/h2_1/1/進0-強0", {
@@ -577,13 +604,14 @@ describe("回す道への振り分け(agent.ts は runAgentLoop をモックし�
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
     vi.mocked(claude.select).mockResolvedValue({
-      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] },
+      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] },
       slotToId: new Map(), call: FAKE_CALL,
     });
     vi.mocked(agent.runAgentLoop).mockResolvedValue({
       selection: {
         none: false, verdict: "yes", basis: ["r:テシスコア/h2_1/1/進0-強0"], missing: [],
         lead: "成功率 {{r:テシスコア/h2_1/1/進0-強0.成功率}} ッピ。",
+        computed: false,
         steps: [{ units: ["r:テシスコア/h2_1/1/進0-強0"], columns: ["成功率"], key_check: ["進0-強0"] }],
       },
       candidates: new Map([["r:テシスコア/h2_1/1/進0-強0", {
@@ -613,12 +641,13 @@ describe("回す道への振り分け(agent.ts は runAgentLoop をモックし�
       selection: {
         none: false, verdict: "yes", basis: ["r:テシスコア/h2_1/1/進0-強0"], missing: ["where"],
         lead: "この段から始めるッピ。",
+        computed: false,
         steps: [{ units: ["r:テシスコア/h2_1/1/進0-強0"], columns: ["成功率"], key_check: ["進0-強0"] }],
       },
       slotToId: new Map(), call: FAKE_CALL,
     });
     vi.mocked(agent.runAgentLoop).mockResolvedValue({
-      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] },
+      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] },
       candidates: new Map(),
       toolCalls: 5,
       calls: [],
@@ -641,7 +670,7 @@ describe("回す道への振り分け(agent.ts は runAgentLoop をモックし�
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult(NONE_UNDERSTAND));
     vi.mocked(claude.select).mockResolvedValue({
-      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] },
+      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] },
       slotToId: new Map(), call: FAKE_CALL,
     });
     vi.mocked(agent.runAgentLoop).mockResolvedValue(null);
@@ -660,7 +689,7 @@ describe("回す道への振り分け(agent.ts は runAgentLoop をモックし�
     const env = baseEnv();
     vi.mocked(claude.understand).mockResolvedValue(understandResult({ ...NONE_UNDERSTAND, hops: "multi" }));
     vi.mocked(claude.select).mockResolvedValue({
-      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] },
+      selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] },
       slotToId: new Map(), call: FAKE_CALL,
     });
     const token = await bearerFor(env);
@@ -764,7 +793,7 @@ describe("答えのキャッシュ(役に立った答えを同じ意味の質問
 
   it("キャラ状態が違っても返す。答えが状態で行を絞っていたときだけ同じ状態に限る", async () => {
     vi.mocked(claude.understand).mockResolvedValue(understandResult({ kind: "wiki", pages: [], terms: [], hops: "single", followup: false, mood: "ask", trouble: "none" }));
-    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] }, slotToId: new Map(), call: FAKE_CALL });
+    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] }, slotToId: new Map(), call: FAKE_CALL });
     const env = baseEnv();
     await seed(env, "テシスコアの成功率は?", CACHED_BODY, { evolution: 3 });
     const token = await bearerFor(env);
@@ -783,7 +812,7 @@ describe("答えのキャッシュ(役に立った答えを同じ意味の質問
 
   it("続きの質問(prev あり)と wiki の版が違うときは引かない", async () => {
     vi.mocked(claude.understand).mockResolvedValue(understandResult({ kind: "wiki", pages: [], terms: [], hops: "single", followup: false, mood: "ask", trouble: "none" }));
-    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] }, slotToId: new Map(), call: FAKE_CALL });
+    vi.mocked(claude.select).mockResolvedValue({ selection: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] }, slotToId: new Map(), call: FAKE_CALL });
     const env = baseEnv();
     await seed(env, "テシスコアの成功率は?");
     const token = await bearerFor(env);

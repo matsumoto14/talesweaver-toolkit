@@ -17,11 +17,23 @@ export interface Step {
 
 const MAX_STEPS = 4;
 const MAX_UNITS_PER_STEP = 4;
-const MAX_LEAD_LENGTH = 80;
+/** 80 → 120(2026-09-24)。計算の式("{{u03.成功率}} × {{u04.成功率}} ≒ 18%")を書けるぶん少し伸ばす
+ *  (地の文の数字は禁止しない方針に変えたため。ADR-020)。参照 `{{…}}` 自体は plain に数えないので、
+ *  ここは演算子・計算結果・言い回しの余地。 */
+const MAX_LEAD_LENGTH = 120;
 
-/** 半角・全角の数字と、単位が続く漢数字。「一番」「一度」「十分」のような語は通す。{{…}} は除外して見る。 */
-const DIGITS = /[0-9０-９]|[〇一二三四五六七八九十百千万億]+(?=[%％個枚段倍割点]|パーセント|レベル)/;
 const PLACEHOLDER = /\{\{([^.}]+)\.([^}]+)\}\}/g;
+
+/** 半角・全角の数字と、単位が続く漢数字。「一番」「一度」「十分」のような語は通す。 */
+const DIGITS = /[0-9０-９]|[〇一二三四五六七八九十百千万億]+(?=[%％個枚段倍割点]|パーセント|レベル)/;
+
+/**
+ * 地の文(参照 `{{…}}` の外)に数字があるか。参照の値は表から出すので確かだが、地の文の数字は
+ * LLM が書いたもので誰も照合していない。`computed` の自己申告が漏れても「AI の計算」の印を付けるために見る。
+ */
+export function leadHasBareNumber(lead: LeadSeg[]): boolean {
+  return DIGITS.test(lead.map((s) => ("t" in s ? s.t : "")).join(""));
+}
 
 export interface Ctx {
   /** 渡した候補(ID → ユニット)。 */
@@ -118,7 +130,9 @@ function pickColumns(requested: string[], units: Candidate[], dropped: Dropped[]
 }
 
 /**
- * 結論文。参照は選択集合の行の実在する列だけ、地の文に数字と候補外の固有名詞があれば文ごと捨てる。
+ * 結論文。参照は選択集合の行の実在する列だけ、候補外の固有名詞があれば文ごと捨てる
+ * (地の文の数字は禁止しない。2026-09-24、ADR-020 —— 計算の種類が開いているため書式・再計算では追えず、
+ * `computed` の自己申告 + 画面の「AI の計算」表示に委ねる)。
  * verdict が yes / no / depends なのに basis が空、または basis が選択集合の外にあれば根拠なしとして捨てる。
  */
 function renderLead(raw: Selection, selected: Set<string>, ctx: Ctx, dropped: Dropped[]): LeadSeg[] | null {
@@ -150,7 +164,6 @@ function renderLead(raw: Selection, selected: Set<string>, ctx: Ctx, dropped: Dr
 
   const plain = segs.map((s) => ("t" in s ? s.t : "")).join("");
   if (plain.length === 0) return fail("empty");
-  if (DIGITS.test(plain)) return fail("digit");
   if (plain.length > MAX_LEAD_LENGTH) return fail("too_long");
   const foreign = ctx.pageNames.find(
     (n) => n.length >= 3 && plain.includes(n) && !ctx.candidateText.includes(n),

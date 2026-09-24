@@ -20,6 +20,7 @@ describe("resolveSlots", () => {
     const sel: Selection = {
       none: false, verdict: "yes", basis: ["u02"], missing: [],
       lead: "進化 {{u02.進化}} の今は成功率 {{u02.成功率}} ッピ。",
+      computed: false,
       steps: [{ units: ["u01", "u02"], columns: ["成功率"], key_check: ["", "進0-強0"] }],
     };
 
@@ -35,7 +36,7 @@ describe("resolveSlots", () => {
   it("未使用スロット(候補外)はそのまま残る(verify が unknown_id で落とす)", () => {
     const slotToId = new Map([["u01", "p:テシスコア/top/1"]]);
     const sel: Selection = {
-      none: false, verdict: "none", basis: [], missing: [], lead: "",
+      none: false, verdict: "none", basis: [], missing: [], lead: "", computed: false,
       steps: [{ units: ["u01", "u13"], columns: [], key_check: [] }],
     };
 
@@ -89,7 +90,7 @@ describe("select() の usage 抽出", () => {
   it("成功時は response.usage から call を組む", async () => {
     mockParse.mockResolvedValue({
       stop_reason: "end_turn",
-      parsed_output: { none: true, verdict: "none", basis: [], missing: [], lead: "", steps: [] },
+      parsed_output: { none: true, verdict: "none", basis: [], missing: [], lead: "", computed: false, steps: [] },
       usage: { input_tokens: 500, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 200 },
     });
 

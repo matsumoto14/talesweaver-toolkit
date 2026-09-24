@@ -89,8 +89,12 @@ export const SelectionSchema = z.object({
   basis: z.array(z.enum(SLOTS)),
   /** 聞かれた観点のうち、候補に答えが無かったもの。 */
   missing: z.array(z.enum(ASPECTS)),
-  /** 答え全体で 1 つ。ゼリッピの口調。数字禁止、値は {{スロット.列}} で参照。 */
+  /** 答え全体で 1 つ。ゼリッピの口調。表の値は {{スロット.列}} で参照。計算した値は式と結果を地の文に書いてよい
+   *  (合計・確率の掛け算など。段階 4、ADR-020)。書いたら `computed` を true にする。 */
   lead: z.string(),
+  /** lead に LLM が計算した値(参照の言い換えでない、掛け算・合計などの結果)が含まれるか。
+   *  画面はこれが true のとき「AI の計算」の印を出す(サーバーは式を再計算しない)。 */
+  computed: z.boolean(),
   steps: z.array(SelectionStepSchema),
 });
 export type Selection = z.infer<typeof SelectionSchema>;
@@ -102,5 +106,6 @@ export const NONE_SELECTION: Selection = {
   basis: [],
   missing: [],
   lead: "",
+  computed: false,
   steps: [],
 };
