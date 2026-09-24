@@ -130,6 +130,29 @@ function pickColumns(requested: string[], units: Candidate[], dropped: Dropped[]
 }
 
 /**
+ * 参照の直前・直後に、LLM がその値を地の文でも書いた重複(「{{u03.聖水}} 500個」→「500個 500個」)を落とす。
+ * 地の文の数字を許したので起きるようになった。値は参照が表から出すので、地の文の写しの方を消す。
+ */
+function dropEchoedValues(segs: LeadSeg[], ctx: Ctx): void {
+  segs.forEach((seg, i) => {
+    if (!("ref" in seg)) return;
+    const value = ctx.candidates.get(seg.ref)?.cells?.[seg.col]?.trim();
+    if (!value) return;
+    const next = segs[i + 1];
+    if (next && "t" in next) {
+      const m = next.t.match(/^\s*/);
+      const head = m ? m[0].length : 0;
+      if (next.t.startsWith(value, head)) next.t = next.t.slice(head + value.length);
+    }
+    const prev = segs[i - 1];
+    if (prev && "t" in prev) {
+      const body = prev.t.trimEnd();
+      if (body.endsWith(value)) prev.t = body.slice(0, body.length - value.length);
+    }
+  });
+}
+
+/**
  * 結論文。参照は選択集合の行の実在する列だけ、候補外の固有名詞があれば文ごと捨てる
  * (地の文の数字は禁止しない。2026-09-24、ADR-020 —— 計算の種類が開いているため書式・再計算では追えず、
  * `computed` の自己申告 + 画面の「AI の計算」表示に委ねる)。
@@ -161,6 +184,7 @@ function renderLead(raw: Selection, selected: Set<string>, ctx: Ctx, dropped: Dr
     last = m.index! + whole.length;
   }
   segs.push({ t: text.slice(last) });
+  dropEchoedValues(segs, ctx);
 
   const plain = segs.map((s) => ("t" in s ? s.t : "")).join("");
   if (plain.length === 0) return fail("empty");

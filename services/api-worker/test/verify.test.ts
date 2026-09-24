@@ -121,6 +121,18 @@ describe("verify", () => {
     expect(result.lead).toEqual([{ t: "成功率は100%ッピ。" }]);
   });
 
+  it("参照の直前・直後に同じ値を地の文でも書いた重複は落とす(「100% 100%」にしない)", () => {
+    const r = row("r1");
+    const sel = selectionOf({
+      verdict: "yes", basis: ["r1"], lead: "成功率は{{r1.成功率}} 100%、前も100%{{r1.成功率}}ッピ。",
+      steps: [{ units: ["r1"], columns: ["成功率"], key_check: ["進0-強0"] }],
+    });
+    const result = verify(sel, ctxOf([r]));
+    expect(result.lead).toEqual([
+      { t: "成功率は" }, { ref: "r1", col: "成功率" }, { t: "、前も" }, { ref: "r1", col: "成功率" }, { t: "ッピ。" },
+    ]);
+  });
+
   it("{{スロット.列}} の参照先が選択集合に無ければ結論文を捨てる", () => {
     const r = row("r1");
     const p2 = paragraph("p2");
