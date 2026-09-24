@@ -14,7 +14,8 @@ r"""インクリシミュレータの画面素材(UI 部品・結果演出・効
 
 出力: apps/desktop/src/assets/inkri/
   ui/<name>.png     静的な部品(状態違いは _0,_1,.. の連番)
-  fx/<name>.webp    演出のコマを横に並べたシート
+  fx/<name>.webp    演出のコマを横に並べたシート。2026-09-24 に描き起こしの素材へ差し替えた(コマの矩形は
+                    同じ)ので、このスクリプトは書き出さない。元のシートは git 履歴にある
   fx/<name>.json    {"frames":[{x,y,w,h,ox,oy}], "timeline":[{track,frame,start,hold,dx,dy}],
                      "fades":[{track,start,ticks}]}
                     start/hold/ticks は tick 単位。描画左上 = 基準点 + (ox,oy) + (dx,dy)
@@ -158,7 +159,7 @@ def export_fx(tex: Textures, anim_dump, assets: Path) -> None:
         index = {k: i for i, k in enumerate(unique)}
         timeline = [{"track": s["track"], "frame": index[(s["tex"], s["frame"])], "start": s["start"], "hold": s["hold"],
                      "dx": s["dx"], "dy": s["dy"]} for s in sprs]
-        sheet.save(out / f"{name}.webp", lossless=False, quality=88, method=6)
+        # シート(fx/<name>.webp)は描き起こしの素材に差し替え済み。矩形だけ JSON に書く
         (out / f"{name}.json").write_text(
             json.dumps({"frames": frames, "timeline": timeline, "fades": fades}, ensure_ascii=False, indent=1),
             encoding="utf-8")
