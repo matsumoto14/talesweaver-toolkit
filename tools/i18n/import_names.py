@@ -9,6 +9,13 @@
 2. キャラ名: 韓国公式のキャラ一覧 `https://tales.nexon.com/About/Character` の 19 人と
    crates/gamedata/src/characters.rs の 19 人を id で突き合わせる。
 3. 装備アビリティ名(シートの「어빌리티」タブ): 確実な照合キーが無いため今回は見送り(下記参照)。
+4. 攻撃スキル名: 韓国公式のキャラ別スキル記事(`https://tales.nexon.com/About/Character/<Slug>` の
+   タブ一覧 `<ul id="character_about_list">` から「스킬」を含むタブの記事番号を取り、
+   `https://tales.nexon.com/About/Character/<記事番号>` の JSON `resultValue.content` を解析)を、
+   キャラ + **기본 공격력(基本攻撃力%)・타격횟수(ヒット数)の完全一致**で crates/gamedata の
+   skills.rs(`†極・<name>` 形式)へ照合する。候補が 0 件・複数残るものは入れない。
+   キャラスキル・マスタリーは記事に数値表を持たない説明文だけの節がほとんどで、確実な照合キー
+   (固有の数値)が無いため今回は見送り(下記参照)。
 
 前提: `cargo test -p gamedata --test dump_names -- --ignored dump_names` で
 `tools/i18n/out/*.json`(統合後の日本語名。gitignore)を作ってあること。このスクリプトは
@@ -23,13 +30,18 @@ import json
 import re
 import subprocess
 import sys
+import time
+import unicodedata
 import urllib.request
 from pathlib import Path
+
+from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT / "tools" / "i18n" / "out"
 CACHE_DIR = ROOT / "tools" / "i18n" / "cache"
 NAMES_JSON = ROOT / "apps" / "desktop" / "src" / "i18n" / "ko" / "names.json"
+NOTES_JSON = ROOT / "apps" / "desktop" / "src" / "i18n" / "ko" / "notes.json"
 
 SHEET_ID = "1rT24bRdfsqcX3N4JbRx1dZhqyEAf5OcAPnwPerd18Ds"
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
@@ -315,6 +327,230 @@ def import_characters(jp_characters: list[dict]) -> dict[str, str]:
     return result
 
 
+# ---- スキル名 ----
+
+# tales.nexon.com はブラウザの Referer が無いと 403 を返す(2026-09-24 実データで確認)。
+SKILL_REFERER = "https://tales.nexon.com/"
+
+
+def skill_headers(referer: str) -> dict:
+    return {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+        "Referer": referer,
+    }
+
+
+def fetch_char_page(slug: str) -> str:
+    cache = CACHE_DIR / f"skill_char_{slug}.html"
+    if not cache.exists():
+        print(f"  キャラページ取得: {slug}")
+        req = urllib.request.Request(
+            f"https://tales.nexon.com/About/Character/{slug}", headers=skill_headers(SKILL_REFERER)
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            cache.write_bytes(resp.read())
+        time.sleep(0.5)
+    return cache.read_text(encoding="utf-8")
+
+
+def skill_article_numbers(html: str) -> list[tuple[int, str]]:
+    """タブ一覧から「스킬」を含むものの記事番号とタイトルを返す。"""
+    m = re.search(r'<ul id="character_about_list">(.*?)</ul>', html, re.S)
+    if not m:
+        return []
+    tabs = []
+    for li in re.finditer(r'data-value="(\d+)"[^>]*>.*?class="text">([^<]+)</span>', m.group(1), re.S):
+        no, title = li.groups()
+        if "스킬" in title:
+            tabs.append((int(no), title))
+    return tabs
+
+
+def fetch_article(no: int, referer: str) -> str:
+    cache = CACHE_DIR / f"skill_article_{no}.json"
+    if not cache.exists():
+        req = urllib.request.Request(
+            f"https://tales.nexon.com/About/Character/{no}", headers=skill_headers(referer)
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            cache.write_bytes(resp.read())
+        time.sleep(0.5)
+    data = json.loads(cache.read_text(encoding="utf-8"))
+    return data["resultValue"]["content"]
+
+
+# タイトルの先頭に付く丸囲み記号(共通スキル印 ⓒ・パッシブ印 ⓟ 等)。
+CIRCLED_PREFIX = re.compile(r"^[①-⓿]+\s*")
+
+
+def parse_skill_blocks(html: str) -> list[dict]:
+    """記事本文からスキル単位のブロック(名前 + 数値表の行)を取り出す。
+
+    タイトル段落(15pt の <span> を持ち、同じ <p> 内に <img> がある)ごとに新しいブロックを始め、
+    直後に現れる最初の <table> をその行データとする。表を持たない見出し(説明文だけの技)は
+    行が空のブロックとして残す。
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    blocks: list[dict] = []
+    current: dict | None = None
+    consumed = True
+    for el in soup.find_all(["p", "table"]):
+        if el.name == "p":
+            span = el.find("span", style=lambda s: s and "15pt" in s)
+            if span is not None and el.find("img") is not None:
+                # 公式の本文は互換漢字(連 = U+F99A など)を含むので NFC にそろえる
+                text = unicodedata.normalize("NFC", CIRCLED_PREFIX.sub("", span.get_text(strip=True)).strip())
+                if text:
+                    current = {"name": text, "rows": []}
+                    blocks.append(current)
+                    consumed = False
+            continue
+        # table
+        if current is None or consumed:
+            continue
+        rows = el.find_all("tr")
+        if not rows:
+            continue
+        header = [c.get_text(strip=True) for c in rows[0].find_all("td")]
+        if not header:
+            continue
+        col: dict[str, int] = {}
+        for i, h in enumerate(header):
+            if "기본 공격력" in h:
+                col["atk"] = i
+            elif "타격횟수" in h:
+                col["hits"] = i
+            elif "크리티컬 배율" in h:
+                col["crit"] = i
+        if "atk" not in col or "hits" not in col:
+            consumed = True
+            continue
+        for r in rows[1:]:
+            cells = [c.get_text(strip=True) for c in r.find_all("td")]
+            if len(cells) != len(header):
+                continue
+            atk_raw, hits_raw = cells[col["atk"]], cells[col["hits"]]
+            if not re.fullmatch(r"-?\d+", atk_raw) or not re.fullmatch(r"\d+", hits_raw):
+                continue
+            row = {"atk": int(atk_raw), "hits": int(hits_raw)}
+            if "crit" in col and re.fullmatch(r"\d+", cells[col["crit"]]):
+                row["crit"] = int(cells[col["crit"]])
+            current["rows"].append(row)
+        consumed = True
+    return blocks
+
+
+def load_kr_skill_blocks() -> dict[str, list[dict]]:
+    """キャラ id(gamedata 側)-> スキルブロックのリスト。"""
+    slugs = list(CHARACTER_SLUGS.items()) + [(None, "Common")]
+    by_char: dict[str, list[dict]] = {}
+    for char_id, slug in slugs:
+        page = fetch_char_page(slug)
+        tabs = skill_article_numbers(page)
+        referer = f"https://tales.nexon.com/About/Character/{slug}"
+        blocks: list[dict] = []
+        for no, _title in tabs:
+            content = fetch_article(no, referer)
+            blocks.extend(parse_skill_blocks(content))
+        if char_id is not None:
+            by_char[char_id] = blocks
+        print(f"  {slug}: {len(tabs)} タブ / {len(blocks)} ブロック")
+    return by_char
+
+
+SKILL_PAIRS_JSON = ROOT / "tools" / "i18n" / "skill_pairs.json"
+# 日本語名 = 記号(†)+ 極限(極・)+ 本体 + 形態の接尾。本体だけを公式の韓国語名に置き換える
+SKILL_NAME_RE = re.compile(r"^(†?)(極・)?(.+?)(\(味方\)|\(ペナルティ\))?$")
+SKILL_SUFFIX_KO = {"(味方)": "(아군)", "(ペナルティ)": "(페널티)"}
+
+
+def import_skills(
+    jp_skills: list[dict], jp_character_skills: list[dict], kr_by_char: dict[str, list[dict]]
+) -> dict[str, str]:
+    """攻撃スキル・キャラスキルの名前を、韓国公式のキャラ別スキル記事の名前で訳す。
+
+    日韓で倍率・打撃数が合わないことが多く(公式記事が古い・サーバーごとの調整)、数値の一致では
+    照合できない。そこで「どの日本語スキルが公式のどの名前か」の対応だけを skill_pairs.json
+    (スキル id -> 公式の韓国語名)に持つ。韓国語の文字列はすべて公式由来で、表の名前が
+    そのキャラの公式記事に実在しなければ止める。
+    """
+    pairs: dict[str, str] = json.loads(SKILL_PAIRS_JSON.read_text(encoding="utf-8"))
+    by_id: dict[str, tuple[str, str]] = {}
+    for sk in jp_skills:
+        by_id[sk["id"]] = (sk["name"], sk["id"].split("_")[0])
+    for sk in jp_character_skills:
+        by_id[sk["id"]] = (sk["name"], sk["game_character_id"])
+
+    errors: list[str] = []
+    result: dict[str, str] = {}
+    for skill_id, kr_core in pairs.items():
+        kr_core = unicodedata.normalize("NFC", kr_core)
+        if skill_id not in by_id:
+            errors.append(f"{skill_id}: gamedata に無い id")
+            continue
+        jp_name, char_id = by_id[skill_id]
+        official = {b["name"] for b in kr_by_char.get(char_id, [])}
+        if kr_core not in official:
+            errors.append(f"{skill_id}: {kr_core!r} が {char_id} の公式記事に無い")
+            continue
+        m = SKILL_NAME_RE.match(jp_name)
+        assert m is not None
+        star, kyoku, _core, suffix = m.groups()
+        kr_value = star + ("극·" if kyoku else "") + kr_core + (SKILL_SUFFIX_KO[suffix] if suffix else "")
+        if jp_name in result and result[jp_name] != kr_value:
+            errors.append(f"{jp_name!r}: {result[jp_name]!r} と {kr_value!r} で訳が割れる")
+            continue
+        result[jp_name] = kr_value
+    if errors:
+        for e in errors:
+            print(f"  ✗ {e}")
+        raise SystemExit("skill_pairs.json に問題がある")
+
+    attack_ids = {sk["id"] for sk in jp_skills}
+    n_attack = sum(1 for i in pairs if i in attack_ids)
+    print(
+        f"スキル名: 攻撃スキル {n_attack} / {len(jp_skills)}、"
+        f"キャラスキル {len(pairs) - n_attack} / {len(jp_character_skills)}(公式記事に無いものは日本語のまま)"
+    )
+    return result
+
+
+def replace_names_in_notes(new_skill_names: dict[str, str]) -> int:
+    """notes.json の訳文に残っている日本語のスキル名を、今回入った韓国語名に置き換える。
+
+    鍵(日本語原文)はそのまま。値(韓国語訳)の中に日本語のスキル名がそのまま残っている
+    部分だけを対象にする。長い名前から試す(短い名前が長い名前の中に含まれる誤爆を避ける)。
+    「鍛造」「弱化」のような短い名前は普通の語として文中に出るので、極・付きか 4 字以上の名前に限る。
+    """
+    if not new_skill_names or not NOTES_JSON.exists():
+        return 0
+    notes = json.loads(NOTES_JSON.read_text(encoding="utf-8"))
+    ordered = sorted(
+        ((jp, kr) for jp, kr in new_skill_names.items() if "極・" in jp or len(jp) >= 4),
+        key=lambda kv: len(kv[0]),
+        reverse=True,
+    )
+    replaced = 0
+    for key, kr_val in notes.items():
+        new_val = kr_val
+        for jp_name, kr_name in ordered:
+            if jp_name in new_val:
+                count = new_val.count(jp_name)
+                new_val = new_val.replace(jp_name, kr_name)
+                replaced += count
+        if new_val != kr_val:
+            notes[key] = new_val
+    if replaced:
+        NOTES_JSON.write_text(
+            json.dumps(notes, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+    return replaced
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     ensure_cache()
@@ -322,6 +558,9 @@ def main() -> int:
 
     jp_catalog = json.loads((OUT_DIR / "equipment_catalog.json").read_text(encoding="utf-8"))
     jp_characters = json.loads((OUT_DIR / "characters.json").read_text(encoding="utf-8"))
+    jp_skills = json.loads((OUT_DIR / "skills.json").read_text(encoding="utf-8"))
+    jp_character_skills = json.loads((OUT_DIR / "character_skills.json").read_text(encoding="utf-8"))
+    jp_masteries = json.loads((OUT_DIR / "masteries.json").read_text(encoding="utf-8"))
 
     print("装備整理シートを解析中…")
     kr_by_tab = load_kr_items()
@@ -337,13 +576,23 @@ def main() -> int:
         "確実な照合キー(id・client アイテム ID)が無いため見送り(docs/adr/022-i18n.md 参照)"
     )
 
+    print("韓国公式のキャラ別スキル記事を取得中…")
+    kr_by_char = load_kr_skill_blocks()
+    skill_names = import_skills(jp_skills, jp_character_skills, kr_by_char)
+    names.update(skill_names)
+    print(f"マスタリー名: 公式記事に載っていないため見送り(全 {len(jp_masteries)})")
+
     sorted_names = {k: names[k] for k in sorted(names)}
     NAMES_JSON.parent.mkdir(parents=True, exist_ok=True)
     NAMES_JSON.write_text(
         json.dumps(sorted_names, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     print(f"{NAMES_JSON.relative_to(ROOT)}: {len(sorted_names)} 件")
+
+    replaced = replace_names_in_notes(skill_names)
+    print(f"notes.json: スキル名の置き換え {replaced} 件")
     return 0
 
 
