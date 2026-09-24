@@ -15,6 +15,8 @@ python -m unittest discover -s tools/gamedata/wiki -t tools/gamedata/wiki
 | `talewiki.py` | 取得と解析。EUC-JP + NEC 拡張の復元、`?cmd=source` / `?cmd=list` / RecentChanges |
 | `store.py` | SQLite(`page` / `sync_run`)。最後に成功した版を必ず残す |
 | `sync.py` | 1 コマンド。差分 / 全件 / 状態表示 |
+| `units.py` | `wiki.sqlite` → `out/units.sql`(D1 投入用)。全件・差分(`--state`)の両方 |
+| `d1_state.py` | 本番(または対象の D1)の現状を読み、`units.py --state` の入力(state.json)を書く |
 
 `.claude/skills/talewiki-fetch/scripts/fetch_page.py` は 1 枚だけ見たいとき用の薄い口で、
 中身は `talewiki.py` を呼ぶ。復号の実装をここと二重に持たない。
@@ -70,12 +72,43 @@ mtime が取れなくても必ず取り直す。
 ## unit / correction の書き出し(units.py)
 
 ```
-python tools/gamedata/wiki/units.py [--pages 名前,名前,...] [--limit N]
+python tools/gamedata/wiki/units.py [--pages 名前,名前,...] [--limit N] [--state state.json]
 ```
 
 `wiki.sqlite` の `page` を段落・表の行・訂正のユニットに切り、`out/units.sql` を書き出す
 (D1 への流し込みは `wrangler d1 execute` に渡す)。`--pages` は開発用に対象ページを先頭に寄せる
 だけで、`--limit` を付けないと全ページ(約 3,400)を処理する。
+
+**`--state` を付けない(既定)と全件(DELETE 全件 → INSERT)。** D1 の無料枠(書き込み 1 日 10 万行)を
+必ず超えるので、初回とスキーマ変更時だけ使う。
+
+**`--state <state.json>` を付けると、本番(または対象の D1)の現状と比べた差分だけを書く。**
+`state.json` は `d1_state.py` が本番から読んで書く(下記)。全ページを今どおり再計算し(分かち書き
+辞書と訂正表は全体依存なので、ページ単位の差分計算では足りない)、最終生成物を state と比べて
+消えた行は `DELETE`、変わった行は `INSERT OR REPLACE`、新しい行は `INSERT` だけを出す。`meta` だけは
+毎回書き直す。`unit` の rowid は既存 id をそのまま維持し、新しい id は state の最大 rowid + 1 から
+連番(state は残っている行しか持たないので、末尾の行が消えれば次回は同じ番号がまた振られうる。
+`unit` と `unit_fts` の両方から同時に消えるので実害は無い)。
+
+`--file` の投入が unit_fts と unit の間で止まっても、次回の差分生成で自己修復する: `unit_fts` の
+DELETE/INSERT を必ず `unit` の DELETE/REPLACE より先に出す(`unit` が書けずに止まれば、次回は
+h の不一致として再検知され、`unit_fts` を消して入れ直すだけで済む)。`d1_state.py` は
+`unit_fts` の rowid 一覧も読み、`unit` に無い rowid(孤児。前回 unit_fts だけ書けて unit が
+書けなかった、等)を最初に消し、`unit` にはあるのに `unit_fts` に無い rowid(前回 unit だけ
+書けて unit_fts が書けなかった)を入れ直す。`unit_fts` は `contentless_delete=1` — 1 行だけの
+`DELETE FROM unit_fts WHERE rowid=?` が効く。標準エラーに表ごと・合計の書き込み見積りを出し
+(FTS5 の内部索引の書き込みは含まない)、80,000 行を超えたら警告する(流す前に人が見て
+止められるように)。
+
+```
+cd services/api-worker
+python ../../tools/gamedata/wiki/d1_state.py --out state.json           # 本番(--remote)の現状
+python ../../tools/gamedata/wiki/d1_state.py --out state.json --local   # ローカル D1 で確認するとき
+```
+
+`d1_state.py` は `wrangler.toml` がある `services/api-worker` で実行すること(wrangler の慣習)。
+`unit`(9 万行強)は 1 回で読まず、`LIMIT`/`OFFSET` で分割して読む(既定 2 万行ずつ)。本番
+(`--remote`)への読み取りはあなたの手で流すこと。
 
 **訂正(`correction`)**は `corrections.json`(git 管理、生成物)から読む。値は
 `crates/gamedata` が持つ `CharacterSkillDef` / `BuffDefinition` の効果値から機械で作るので、

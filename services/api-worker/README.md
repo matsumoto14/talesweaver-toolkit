@@ -41,17 +41,48 @@ AI Gateway ではなく Anthropic Console の鍵側に付ける(README「秘密�
 
 ## D1 の作成・投入
 
+無料枠は書き込み 1 日 10 万行。unit(9 万強)+ unit_fts + correction(1 万強)+ wiki_table + alias +
+page の全件を毎回 DELETE → INSERT すると必ず超えるので、**全件投入は初回とスキーマ変更時だけ**。
+以降は本番の現状と比べた差分だけを書く(`units.py --state`)。
+
+### 初回(と migrations/004 のような h 列追加・schema 変更のあと)
+
+無料枠を超える(unit 9 万行 × 2(unit + unit_fts)などで確実に 10 万行を超える)ので、**枠が戻る
+直前の日本時間 9 時前**に流すと、書き込めない時間が短くて済む。
+
 ```
 npx wrangler d1 create tw-wiki       # 出力の database_id を wrangler.toml に書く(作成済み。id はコミット済み)
-python tools/gamedata/wiki/units.py  # リポジトリルートで。tools/gamedata/wiki/out/units.sql(約 100 MB)を作る
-npx wrangler d1 execute tw-wiki --local  --file schema.sql -y     # 初回だけ(表の定義)
-npx wrangler d1 execute tw-wiki --local  --file ../../tools/gamedata/wiki/out/units.sql -y
+npx wrangler d1 execute tw-wiki --local  --file schema.sql -y     # ローカルは毎回これでよい(表の定義)
 npx wrangler d1 execute tw-wiki --remote --file schema.sql -y     # 初回だけ
-npx wrangler d1 execute tw-wiki --remote --file ../../tools/gamedata/wiki/out/units.sql -y
 npx wrangler d1 execute tw-wiki --remote --file migrations/001-ask-log.sql -y   # schema.sql 投入後に足した表(1 回だけ)
 npx wrangler d1 execute tw-wiki --remote --file migrations/002-ask-log-qkey.sql -y  # 001 の後に 1 回だけ(--file が認証エラーなら中の 1 文を --command で)
+npx wrangler d1 execute tw-wiki --remote --file migrations/003-ask-trace.sql -y
+npx wrangler d1 execute tw-wiki --remote --file migrations/004-diff-import.sql -y   # h 列を足す(schema.sql に無い版へ更新するとき)
+python tools/gamedata/wiki/units.py  # リポジトリルートで。tools/gamedata/wiki/out/units.sql(約 100 MB)を全件投入用に作る
+npx wrangler d1 execute tw-wiki --remote --file ../../tools/gamedata/wiki/out/units.sql -y   # services/api-worker で
 curl https://api.tw-context.dev/health
 ```
+
+### 以降(wiki を再同期したあとの更新)
+
+```
+cd services/api-worker
+python ../../tools/gamedata/wiki/d1_state.py --out state.json               # 本番の現状を読む
+python ../../tools/gamedata/wiki/units.py --state state.json
+# 標準エラーに書き込み見積り(表ごと・合計)が出る。80,000 行を超えたら警告。見てから流す
+npx wrangler d1 execute tw-wiki --remote --file ../../tools/gamedata/wiki/out/units.sql -y
+```
+
+`units.py --state` は消えた行を DELETE・変わった行を INSERT OR REPLACE・新しい行を INSERT するだけの
+`units.sql` を書く(meta だけは毎回書き直す)。`unit` の rowid は既存 id が維持し、新しい id は本番の
+現状の最大 rowid + 1 から連番(state は残っている行しか持たないので、末尾の行が消えれば次回は
+同じ番号がまた振られうる。`unit` と `unit_fts` の両方から同時に消えるので実害は無い)。
+
+`--file` の投入が `unit_fts` と `unit` の間で止まっても、次回の差分生成が自己修復する:
+`unit_fts` の DELETE/INSERT を必ず `unit` の DELETE/REPLACE より先に出す(`unit` が書けずに
+止まれば、次回は h の不一致として再検知され `unit_fts` を消して入れ直すだけで済む)。
+`d1_state.py` は `unit_fts` の rowid 一覧も読むので、孤児(前回 unit_fts だけ書けた rowid)と
+欠落(前回 unit だけ書けた rowid)の両方を検知して直せる。
 
 deploy は main への push で `.github/workflows/workers.yml` が行う(型検査 → テスト → `wrangler deploy`)。
 手で出すなら `npx wrangler deploy`。`units.sql` を再投入する前後で deploy し直す必要はない(表の中身だけ変わる)。
@@ -81,8 +112,9 @@ deploy は main への push で `.github/workflows/workers.yml` が行う(型検
   npx wrangler d1 execute tw-wiki --remote --command "SELECT substr(user,1,8) AS who, count(*) AS n FROM ask_log WHERE at >= date('now') GROUP BY user ORDER BY n DESC"
   ```
 
-`units.sql` は先頭で wiki 由来の表を `DELETE` してから入れ直す(利用者から届く `reaction`・`ask_log`・`ask_call` には触らない)ので、wiki を再同期(`sync.py`)したら
-`units.py` → `--remote` の 2 手で更新できる。`unit_fts` も毎回作り直す。
+`units.sql`(差分投入)は利用者から届く `reaction`・`ask_log`・`ask_call` には一切触らない。
+wiki を再同期(`sync.py`)したら「D1 の作成・投入」の「以降」の手順(`d1_state.py` → `units.py --state`
+→ 見積りを見て `--remote`)で更新できる。
 生きている Worker インスタンスは別名の辞書をキャッシュしているので、投入直後は古い辞書で
 動くことがある(次の deploy か isolate の入れ替わりで揃う)。
 

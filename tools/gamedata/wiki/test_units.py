@@ -5,18 +5,23 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from units import (  # noqa: E402
     REBUILT_TABLES, Heading, ListItem, Paragraph, Table, Unit, apparent_equipment_corrections,
     app_data_correction_rows, build_aliases, build_units, choose_key_columns, correction_rows,
-    detect_repeat_group, fragment, is_excluded_page, is_item_catalog_page, make_row_key, numify,
-    parse_blocks, promote_decorated_header, propagate_name_rows, resolve_correction_unit,
-    resolve_merges, strip_decorations, unwind_table,
+    detect_repeat_group, diff_keyed, diff_set, fragment, is_excluded_page, is_item_catalog_page,
+    make_row_key, numify, parse_blocks, plan_unit_diff, promote_decorated_header,
+    propagate_name_rows, resolve_correction_unit, resolve_merges, row_hash, strip_decorations,
+    unwind_table,
 )
+import units as units_mod  # noqa: E402
+from store import Store  # noqa: E402
 
 
 class Decorations(unittest.TestCase):
@@ -528,7 +533,7 @@ class ApparentEquipmentCorrections(unittest.TestCase):
 
 
 class RebuiltTables(unittest.TestCase):
-    """units.sql が空にする表は、schema.sql のうち利用者から届くもの以外すべて。"""
+    """units.sql が触る表は、schema.sql のうち利用者から届くもの以外すべて。全件・差分どちらも同じ。"""
 
     USER_TABLES = {"reaction", "ask_log", "ask_call"}
 
@@ -538,6 +543,275 @@ class RebuiltTables(unittest.TestCase):
         tables = set(re.findall(r"^CREATE TABLE (\w+)", schema, re.MULTILINE))
         self.assertTrue(self.USER_TABLES <= tables)
         self.assertEqual(set(REBUILT_TABLES), tables - self.USER_TABLES)
+
+    @staticmethod
+    def _store_with_one_page() -> Store:
+        store = Store(Path(":memory:"))
+        store.db.execute(
+            "INSERT INTO page(name, source, mtime, fetched_at, checked_at, status) "
+            "VALUES('エタの意志', ?, '2024-01-01T00:00:00+09:00', '2024-01-01T00:00:00Z', "
+            "'2024-01-01T00:00:00Z', 'ok')",
+            ("*概要[#h2_0]\nエタの意志についての説明文です。\n",),
+        )
+        store.db.commit()
+        return store
+
+    def _generate_sql(self, state: dict | None) -> str:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+            units_mod, "run_segment_cli",
+            side_effect=lambda cli, dict_path, texts: [["t"] for _ in texts],
+        ):
+            out_dir = Path(tmp)
+            units_mod.generate(self._store_with_one_page(), out_dir, Path("dummy"), {}, {},
+                                None, None, state=state)
+            return (out_dir / "units.sql").read_text(encoding="utf-8")
+
+    def test_full_sql_never_touches_user_tables(self) -> None:
+        sql = self._generate_sql(state=None)
+        for t in self.USER_TABLES:
+            self.assertNotIn(t, sql)
+
+    def test_diff_sql_never_touches_user_tables(self) -> None:
+        empty_state = {
+            "unit": [], "unit_fts_rowids": [], "page": [], "wiki_table": [], "correction": [],
+            "alias": [], "unit_link": [], "column_note": [],
+        }
+        sql = self._generate_sql(state=empty_state)
+        for t in self.USER_TABLES:
+            self.assertNotIn(t, sql)
+
+
+class RowHash(unittest.TestCase):
+    def test_same_values_same_hash(self):
+        values = ["'a'", "1", "NULL"]
+        self.assertEqual(row_hash(values), row_hash(list(values)))
+
+    def test_different_values_different_hash(self):
+        self.assertNotEqual(row_hash(["'a'"]), row_hash(["'b'"]))
+
+    def test_terms_only_change_changes_the_hash(self):
+        # unit の h は「行の全列 + FTS terms」をまとめたもの。terms だけ変わっても h は変わる
+        # (別名の追加で分かち書きが変わるケース)。
+        body = ["'r:1'", "'row'"]
+        h1 = row_hash(body + ["エタ 意志"])
+        h2 = row_hash(body + ["エタ 意志 追加語"])
+        self.assertNotEqual(h1, h2)
+
+
+class DiffKeyed(unittest.TestCase):
+    def test_classifies_new_changed_removed_unchanged(self):
+        old = {"a": "h1", "b": "h2", "c": "h3"}
+        new = {"a": "h1", "b": "h2-changed", "d": "h4"}  # a: 変化なし, b: 変化, c: 消滅, d: 新規
+        to_delete, to_upsert = diff_keyed(old, new)
+        self.assertEqual(to_delete, ["c"])
+        self.assertEqual(set(to_upsert), {"b", "d"})
+
+    def test_no_changes_means_no_writes(self):
+        old = {"a": "h1", "b": "h2"}
+        to_delete, to_upsert = diff_keyed(old, dict(old))
+        self.assertEqual(to_delete, [])
+        self.assertEqual(to_upsert, [])
+
+    def test_works_with_composite_tuple_keys(self):
+        old = {("p", "a", 0): "h1"}
+        new = {("p", "a", 0): "h1", ("p", "a", 1): "h2"}
+        to_delete, to_upsert = diff_keyed(old, new)
+        self.assertEqual(to_delete, [])
+        self.assertEqual(to_upsert, [("p", "a", 1)])
+
+
+class DiffSet(unittest.TestCase):
+    def test_classifies_removed_and_added_rows(self):
+        old = {("a", "1"), ("b", "2")}
+        new = {("a", "1"), ("c", "3")}
+        removed, added = diff_set(old, new)
+        self.assertEqual(removed, [("b", "2")])
+        self.assertEqual(added, [("c", "3")])
+
+    def test_no_changes_means_no_writes(self):
+        rows = {("a", "1")}
+        removed, added = diff_set(rows, set(rows))
+        self.assertEqual(removed, [])
+        self.assertEqual(added, [])
+
+
+def _plan_unit(id_: str) -> Unit:
+    return Unit(id=id_, kind="row", page="P", section="", anchor="a", ord=1, truncated=0,
+                text="t", table_idx=0, group_key=None, row_key=None, cells=None, nums=None)
+
+
+class PlanUnitDiff(unittest.TestCase):
+    """rowid の割当てと新規/変化/消滅の分類、unit_fts の自己修復(段階 3: 差分投入)。"""
+
+    def test_existing_ids_keep_their_rowid_when_unchanged(self):
+        units_ = [_plan_unit("r:1"), _plan_unit("r:2")]
+        old_unit = {"r:1": (5, "hA"), "r:2": (6, "hB")}
+        plan = plan_unit_diff(units_, ["hA", "hB"], old_unit, old_fts_rowids={5, 6})
+        self.assertEqual(plan["id_to_rowid"], {"r:1": 5, "r:2": 6})
+        self.assertEqual(plan["upsert_idx"], [])
+        self.assertEqual(plan["to_delete_ids"], [])
+        self.assertEqual(plan["unchanged_idx"], [0, 1])
+        self.assertEqual(plan["fts_delete_rowids"], [])
+        self.assertEqual(plan["orphan_fts_rowids"], [])
+
+    def test_changed_content_is_upserted_but_keeps_rowid(self):
+        units_ = [_plan_unit("r:1")]
+        old_unit = {"r:1": (5, "old-hash")}
+        plan = plan_unit_diff(units_, ["new-hash"], old_unit, old_fts_rowids={5})
+        self.assertEqual(plan["id_to_rowid"]["r:1"], 5)
+        self.assertEqual(plan["upsert_idx"], [0])
+        self.assertEqual(plan["fts_delete_rowids"], [5])  # 既存の fts は消してから入れ直す
+
+    def test_new_ids_get_rowid_from_max_plus_one(self):
+        units_ = [_plan_unit("r:1"), _plan_unit("r:new")]
+        old_unit = {"r:1": (5, "hA")}
+        plan = plan_unit_diff(units_, ["hA", "hNew"], old_unit, old_fts_rowids={5})
+        self.assertEqual(plan["id_to_rowid"]["r:new"], 6)
+        self.assertEqual(plan["upsert_idx"], [1])
+        self.assertEqual(plan["fts_delete_rowids"], [])  # 新規は消す物が無い(INSERT のみ)
+
+    def test_rowid_of_a_deleted_tail_row_can_be_reused_later(self):
+        # r:2(rowid=6)が消え、次に生成する state はもう r:2 を持たない → 次回はまた 6 から
+        # 振られうる(unit/unit_fts の両方から同時に消えているので実害は無い)。
+        units_ = [_plan_unit("r:1"), _plan_unit("r:new")]
+        old_unit = {"r:1": (5, "hA"), "r:2": (6, "hB")}
+        plan = plan_unit_diff(units_, ["hA", "hNew"], old_unit, old_fts_rowids={5, 6})
+        self.assertEqual(plan["to_delete_ids"], ["r:2"])
+        self.assertEqual(plan["id_to_rowid"]["r:new"], 7)  # 今回はまだ 6 が old_unit にあるので 7 から
+        # r:2 が state から抜けたあとの次回なら、max(old_unit)=5 になるので次の新規は 6 から
+        next_old_unit = {"r:1": (5, "hA")}
+        next_plan = plan_unit_diff([_plan_unit("r:1"), _plan_unit("r:new2")], ["hA", "h2"],
+                                    next_old_unit, old_fts_rowids={5})
+        self.assertEqual(next_plan["id_to_rowid"]["r:new2"], 6)
+
+    def test_unit_and_unit_fts_rowid_always_match(self):
+        # id_to_rowid は unit・unit_fts 両方の INSERT が同じ辞書から引くので、常に一致する
+        units_ = [_plan_unit("r:1"), _plan_unit("r:2"), _plan_unit("r:new")]
+        old_unit = {"r:1": (1, "h1"), "r:2": (2, "h2")}
+        plan = plan_unit_diff(units_, ["h1", "h2", "h3"], old_unit, old_fts_rowids={1, 2})
+        rowids = [plan["id_to_rowid"][u.id] for u in units_]
+        self.assertEqual(len(rowids), len(set(rowids)))  # 重複なし
+        self.assertEqual(plan["id_to_rowid"]["r:new"], 3)
+
+    def test_orphan_fts_rowid_is_detected_and_scheduled_for_delete_first(self):
+        # 前回 unit_fts だけ書けて unit が書けなかった(rowid=9 は unit に存在しない)。
+        units_ = [_plan_unit("r:1")]
+        old_unit = {"r:1": (1, "h1")}
+        plan = plan_unit_diff(units_, ["h1"], old_unit, old_fts_rowids={1, 9})
+        self.assertEqual(plan["orphan_fts_rowids"], [9])
+        self.assertEqual(plan["upsert_idx"], [])  # r:1 自体は変化なし
+
+    def test_unit_present_but_fts_missing_is_treated_as_changed(self):
+        # 前回 unit だけ書けて unit_fts が書けなかった(rowid=1 が fts に無い)。中身(h)は同じ。
+        units_ = [_plan_unit("r:1")]
+        old_unit = {"r:1": (1, "h1")}
+        plan = plan_unit_diff(units_, ["h1"], old_unit, old_fts_rowids=set())
+        self.assertEqual(plan["upsert_idx"], [0])  # unit_fts を補充するため upsert 対象になる
+        self.assertEqual(plan["fts_delete_rowids"], [])  # 消す物は無い(無いから INSERT のみ)
+        self.assertEqual(plan["orphan_fts_rowids"], [])
+
+
+class GenerateDiffWriteOrder(unittest.TestCase):
+    """unit_fts の操作が必ず unit より先に出ることを固定する(途中で止まっても自己修復できるように)。"""
+
+    def _run(self, state: dict, unit_body, h, terms) -> tuple[list[str], dict]:
+        from units import _generate_diff
+        return _generate_diff(
+            state,
+            page_bodies={}, page_h={},
+            all_units=[_plan_unit("r:1")], unit_bodies=[unit_body], unit_h=[h],
+            unit_terms_str=[terms],
+            table_bodies={}, table_h={},
+            note_set=set(), alias_set=set(), link_set=set(),
+            correction_bodies={}, correction_h={},
+            meta_rows=[["'synced_at'", "'2024-01-01T00:00:00Z'"]],
+        )
+
+    def test_no_changes_means_zero_writes_except_meta(self):
+        unit_body = [
+            "'r:1'", "'row'", "'P'", "''", "'a'", "1", "0", "'t'", "0", "NULL", "NULL", "NULL", "NULL",
+        ]
+        terms = "エタ 意志"
+        h = row_hash(unit_body + [terms])
+        state = {
+            "unit": [{"id": "r:1", "rowid": 1, "h": h}],
+            "unit_fts_rowids": [{"rowid": 1}],
+            "page": [], "wiki_table": [], "correction": [], "alias": [], "unit_link": [],
+            "column_note": [],
+        }
+        lines, writes = self._run(state, unit_body, h, terms)
+        for table in ("unit", "unit_fts", "page", "wiki_table", "correction", "alias",
+                      "unit_link", "column_note"):
+            self.assertEqual(writes[table], 0, table)
+        self.assertGreater(writes["meta"], 0)  # meta だけは毎回書き直す
+        # 変化なしなら出る文は meta の置き換えだけ(消してから入れない。途中で止まっても meta が空にならない)
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("INSERT OR REPLACE INTO meta"))
+
+    def test_unit_fts_statements_come_before_unit_statements_when_changed(self):
+        old_body = [
+            "'r:1'", "'row'", "'P'", "''", "'a'", "1", "0", "'old'", "0", "NULL", "NULL", "NULL", "NULL",
+        ]
+        old_h = row_hash(old_body + ["エタ"])
+        new_body = [
+            "'r:1'", "'row'", "'P'", "''", "'a'", "1", "0", "'new'", "0", "NULL", "NULL", "NULL", "NULL",
+        ]
+        new_h = row_hash(new_body + ["エタ"])
+        state = {
+            "unit": [{"id": "r:1", "rowid": 1, "h": old_h}],
+            "unit_fts_rowids": [{"rowid": 1}],
+            "page": [], "wiki_table": [], "correction": [], "alias": [], "unit_link": [],
+            "column_note": [],
+        }
+        lines, writes = self._run(state, new_body, new_h, "エタ")
+        fts_stmt_idx = [i for i, s in enumerate(lines) if "unit_fts" in s]
+        unit_stmt_idx = [i for i, s in enumerate(lines)
+                          if ("FROM unit " in s or "INTO unit(" in s) and "unit_fts" not in s]
+        # 少なくとも 1 本ずつはある。unit_fts の文は全て unit の文より前に出る。
+        self.assertTrue(fts_stmt_idx)
+        self.assertTrue(unit_stmt_idx)
+        self.assertLess(max(fts_stmt_idx), min(unit_stmt_idx))
+        self.assertEqual(writes["unit"], 1)
+        self.assertEqual(writes["unit_fts"], 2)  # DELETE 1 + INSERT 1
+
+    def test_orphan_fts_row_is_deleted_and_missing_fts_row_is_filled_in(self):
+        unit_body = [
+            "'r:1'", "'row'", "'P'", "''", "'a'", "1", "0", "'t'", "0", "NULL", "NULL", "NULL", "NULL",
+        ]
+        h = row_hash(unit_body + ["エタ"])
+        state = {
+            # unit は変わらない(h 一致)が、unit_fts は rowid=1 が欠けていて rowid=9 が孤児。
+            "unit": [{"id": "r:1", "rowid": 1, "h": h}],
+            "unit_fts_rowids": [{"rowid": 9}],
+            "page": [], "wiki_table": [], "correction": [], "alias": [], "unit_link": [],
+            "column_note": [],
+        }
+        lines, writes = self._run(state, unit_body, h, "エタ")
+        sql = "\n".join(lines)
+        self.assertIn("DELETE FROM unit_fts WHERE rowid IN (9)", sql)
+        self.assertIn("INSERT INTO unit_fts(rowid, terms) VALUES\n(1,", sql)
+        # unit 表自体には(中身が同じなので)書き込みが要らないはずだが、fts 補充と同じ upsert_idx
+        # に乗るため REPLACE は出る(中身は変わらない、実害の無い余剰書き込み)。
+        self.assertEqual(writes["unit"], 1)
+        self.assertEqual(writes["unit_fts"], 2)  # 孤児 DELETE 1 + 補充 INSERT 1
+
+
+class DeleteStatementSize(unittest.TestCase):
+    def test_delete_is_split_below_the_d1_statement_limit(self):
+        # 長い id が並んでも 1 文が上限(D1 は 100 KB)を超えず、全件がどれかの文に入る
+        ids = [units_mod.sql_str("p:" + "あ" * 200 + f"/{i}") for i in range(2000)]
+        stmts = units_mod.delete_in("unit", "id", ids)
+        self.assertGreater(len(stmts), 1)
+        for stmt in stmts:
+            self.assertLess(len(stmt.encode("utf-8")), units_mod._MAX_STMT_BYTES)
+        self.assertEqual(sum(stmt.count("'p:") for stmt in stmts), len(ids))
+
+    def test_composite_delete_is_split_too(self):
+        rows = [[units_mod.sql_str("い" * 300), units_mod.sql_str("ページ"), str(i)] for i in range(1000)]
+        stmts = units_mod.delete_composite_in("unit_link", ["unit_id", "page", "ord"], rows)
+        self.assertGreater(len(stmts), 1)
+        for stmt in stmts:
+            self.assertLess(len(stmt.encode("utf-8")), units_mod._MAX_STMT_BYTES)
 
 
 if __name__ == "__main__":

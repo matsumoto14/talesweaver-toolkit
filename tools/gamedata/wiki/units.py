@@ -20,6 +20,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -852,12 +853,16 @@ def sql_json(value: object) -> str:
     return sql_str(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
 
 
-def batched_insert(table: str, columns: list[str], rows: list[list[str]]) -> list[str]:
-    """1 文が 100 KB を超えないよう、複数行 INSERT に割る。"""
+def batched_insert(table: str, columns: list[str], rows: list[list[str]],
+                    verb: str = "INSERT") -> list[str]:
+    """1 文が 100 KB を超えないよう、複数行 INSERT に割る。
+
+    `verb="INSERT OR REPLACE"` で差分投入の upsert に使う(主キー一致なら置き換え)。
+    """
     if not rows:
         return []
     head = f"{table}({', '.join(columns)})" if columns else table
-    prefix = f"INSERT INTO {head} VALUES\n"
+    prefix = f"{verb} INTO {head} VALUES\n"
     stmts: list[str] = []
     chunk: list[str] = []
     size = len(prefix.encode("utf-8"))
@@ -1062,19 +1067,147 @@ def unit_search_text(unit: Unit, page_aliases: dict[str, list[str]]) -> str:
 REBUILT_TABLES = ("correction", "unit_link", "alias", "column_note", "wiki_table", "unit", "page", "meta")
 
 
+# --- 差分投入 ---------------------------------------------------------------------------------
+#
+# 全件投入(state=None)は REBUILT_TABLES を DELETE してから INSERT し直す(今まで通り)。
+# 差分投入(state あり)は本番の現状(d1_state.py が書いた state.json)と比べ、消えた行は DELETE・
+# 変わった行は INSERT OR REPLACE・新しい行は INSERT だけを出す。meta だけは毎回書き直す。
+
+def load_state(path: Path) -> dict:
+    """本番(または対象の D1)の現状。`d1_state.py` が書いた state.json。"""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def row_hash(values: list[str]) -> str:
+    """SQL 値文字列(sql_str/sql_int/sql_json 済み)の列を 1 つのハッシュにする(sha256 先頭 16 hex)。"""
+    return hashlib.sha256("\x1f".join(values).encode("utf-8")).hexdigest()[:16]
+
+
+def diff_keyed(old: dict, new: dict) -> tuple[list, list]:
+    """key→h の現状(old)と新しい内容(new)を比べる。戻り値は (消えた key のリスト, upsert する key のリスト)。
+
+    key は文字列でもタプル(複合キー)でもよい。値が変わらない key はどちらにも出ない。
+    """
+    to_delete = [k for k in old if k not in new]
+    to_upsert = [k for k in new if old.get(k) != new[k]]
+    return to_delete, to_upsert
+
+
+def diff_set(old: set, new: set) -> tuple[list, list]:
+    """行全体で比べる小さな表(alias・unit_link・column_note)用。戻り値は (消えた行, 増えた行)。"""
+    return sorted(old - new), sorted(new - old)
+
+
+def split_by_bytes(parts: list[str], overhead: int) -> list[list[str]]:
+    """文 1 つが `_MAX_STMT_BYTES` を超えないよう、`, ` で繋ぐ部品を割る(D1 の 1 文上限は 100 KB)。
+    `overhead` は部品以外(`DELETE FROM … IN (` など)のバイト数。"""
+    out: list[list[str]] = []
+    chunk: list[str] = []
+    size = overhead
+    for part in parts:
+        part_bytes = len(part.encode("utf-8")) + 2
+        if chunk and size + part_bytes > _MAX_STMT_BYTES:
+            out.append(chunk)
+            chunk = []
+            size = overhead
+        chunk.append(part)
+        size += part_bytes
+    if chunk:
+        out.append(chunk)
+    return out
+
+
+def delete_in(table: str, column: str, values: list[str]) -> list[str]:
+    """`DELETE FROM t WHERE col IN (...)`。values は sql_str/sql_int 済み。"""
+    head = f"DELETE FROM {table} WHERE {column} IN ("
+    return [f"{head}{', '.join(chunk)});" for chunk in split_by_bytes(values, len(head.encode("utf-8")) + 2)]
+
+
+def delete_composite_in(table: str, columns: list[str], tuples: list[list[str]]) -> list[str]:
+    """複合キーの `DELETE FROM t WHERE (a, b) IN (VALUES (x,y), ...)`。tuples の要素は sql_str/sql_int 済み。"""
+    head = f"DELETE FROM {table} WHERE ({', '.join(columns)}) IN (VALUES "
+    parts = ["(" + ", ".join(t) + ")" for t in tuples]
+    return [f"{head}{', '.join(chunk)});" for chunk in split_by_bytes(parts, len(head.encode("utf-8")) + 2)]
+
+
+def plan_unit_diff(all_units: list[Unit], unit_h: list[str],
+                    old_unit: dict[str, tuple[int, str]],
+                    old_fts_rowids: set[int]) -> dict:
+    """unit の新規/変化/消滅の分類と rowid の割当て(ネットワーク・SQL に触らない純粋関数)。
+
+    `old_unit` は本番の現状 {id: (rowid, h)}、`old_fts_rowids` は本番の unit_fts に実在する
+    rowid の集合(contentless でも rowid だけは読める。d1_state.py が読む)。rowid は既存 id は
+    そのまま維持し、新しい id は本番の現状にある最大 rowid + 1 から連番で割り当てる。
+    **消えた rowid が永久に封印されるわけではない**(state は残っている行しか持たないので、
+    末尾の行が消えれば次の実行では最大値が下がり、同じ番号がまた振られうる。unit と unit_fts の
+    両方から同時に消えるので実害は無い)。`unit_h[i]` は `all_units[i]` に対応する h(row_hash 済み)。
+
+    `unit` の INSERT/REPLACE が途中で失敗しても、unit_fts だけ古い/無いままにならないよう、
+    「unit にはあるのに unit_fts に無い rowid」も upsert 対象にする(fts だけ入れ直す。h が
+    同じでも構わない — 次回また同じ判定になるだけで、実害は無い)。「unit_fts にはあるのに
+    unit に無い rowid」(孤児。前回 unit_fts だけ書けて unit が書けなかった、等)は
+    `orphan_fts_rowids` として別に返す(呼び出し側は他の何より先に消す)。
+    """
+    new_id_set = {u.id for u in all_units}
+    to_delete_ids = [uid for uid in old_unit if uid not in new_id_set]
+
+    next_rowid = max((rowid for rowid, _ in old_unit.values()), default=0) + 1
+    id_to_rowid: dict[str, int] = {}
+    for u in all_units:
+        if u.id in old_unit:
+            id_to_rowid[u.id] = old_unit[u.id][0]
+        else:
+            id_to_rowid[u.id] = next_rowid
+            next_rowid += 1
+
+    old_unit_rowids = {rowid for rowid, _ in old_unit.values()}
+    orphan_fts_rowids = sorted(old_fts_rowids - old_unit_rowids)
+
+    upsert_idx: list[int] = []
+    fts_delete_rowids: list[int] = []  # 既存 unit の fts を消してから入れ直す分(孤児は含まない)
+    for i, u in enumerate(all_units):
+        if u.id not in old_unit:
+            upsert_idx.append(i)  # 新規: fts は INSERT のみ(消す物が無い)
+            continue
+        rowid = id_to_rowid[u.id]
+        content_changed = old_unit[u.id][1] != unit_h[i]
+        fts_missing = rowid not in old_fts_rowids
+        if content_changed or fts_missing:
+            upsert_idx.append(i)
+            if not fts_missing:
+                fts_delete_rowids.append(rowid)
+    for uid in to_delete_ids:
+        rowid = old_unit[uid][0]
+        if rowid in old_fts_rowids:
+            fts_delete_rowids.append(rowid)
+
+    upsert_set = set(upsert_idx)
+    unchanged_idx = [i for i in range(len(all_units)) if i not in upsert_set]
+
+    return {
+        "to_delete_ids": to_delete_ids,
+        "id_to_rowid": id_to_rowid,
+        "upsert_idx": upsert_idx,
+        "fts_delete_rowids": fts_delete_rowids,
+        "orphan_fts_rowids": orphan_fts_rowids,
+        "unchanged_idx": unchanged_idx,
+    }
+
+
 def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dict[str, str],
             column_notes: dict[str, dict], limit: int | None, only_pages: list[str] | None,
             corrections: list[dict] | None = None, app_data: list[dict] | None = None,
-            ) -> dict[str, int]:
+            state: dict | None = None,
+            ) -> dict[str, Any]:
+    """`out_dir/units.sql` を書く。`state` が None なら全件(DELETE 全件 → INSERT)、
+    あれば本番の現状と比べた差分だけを書く(d1_state.py が書いた state.json の中身)。
+    """
     all_pages = list(store.db.execute("SELECT * FROM page"))
     page_names_all = [r["name"] for r in all_pages]
 
     ok_rows = [r for r in all_pages if r["status"] == "ok" and not is_excluded_page(r["name"])]
     if only_pages:
         wanted = set(only_pages)
-        ok_rows = [r for r in ok_rows if r["name"] in wanted] + [
-            r for r in ok_rows if r["name"] not in wanted
-        ]
         # --pages は必ず含め、残りは limit で埋める(開発用の的当てを楽にする)
         head = [r for r in ok_rows if r["name"] in wanted]
         tail = [r for r in ok_rows if r["name"] not in wanted]
@@ -1110,78 +1243,64 @@ def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dic
     texts = [unit_search_text(u, page_aliases) for u in all_units]
     terms_per_unit = run_segment_cli(segment_cli, dict_path, texts)
 
-    lines: list[str] = [*(f"DELETE FROM {t};" for t in REBUILT_TABLES), "DROP TABLE IF EXISTS unit_fts;"]
+    # --- 各表の本体(h を除く値)を先に組み立てる。全件・差分どちらのモードでも同じ ---------------
 
-    page_rows = [
-        [
-            sql_str(r["name"]), sql_str(f"{BASE_URL}{quote_page(r['name'])}"),
-            sql_str(r["mtime"]), sql_str(r["fetched_at"]), sql_str(r["checked_at"]),
-            sql_str(r["status"]), sql_str(r["error"]),
-        ]
-        for r in all_pages
-    ]
-    lines.extend(batched_insert(
-        "page", ["name", "url", "mtime", "fetched_at", "checked_at", "status", "error"], page_rows,
-    ))
-
-    # rowid を明示して unit_fts の rowid と揃える(1 始まりの連番)。
-    unit_rows = []
-    for i, u in enumerate(all_units, start=1):
-        unit_rows.append([
-            str(i), sql_str(u.id), sql_str(u.kind), sql_str(u.page), sql_str(u.section),
+    # unit: rowid・h を除いた列の値と、その unit の検索語(重複を落として空白区切り)。
+    unit_bodies: list[list[str]] = []
+    unit_terms_str: list[str] = []
+    for u, terms in zip(all_units, terms_per_unit):
+        unit_bodies.append([
+            sql_str(u.id), sql_str(u.kind), sql_str(u.page), sql_str(u.section),
             sql_str(u.anchor), sql_int(u.ord), sql_int(u.truncated), sql_str(u.text),
             sql_int(u.table_idx), sql_str(u.group_key), sql_str(u.row_key),
             sql_json(u.cells) if u.cells is not None else "NULL",
             sql_json(u.nums) if u.nums is not None else "NULL",
         ])
-    lines.extend(batched_insert(
-        "unit",
-        ["rowid", "id", "kind", "page", "section", "anchor", "ord", "truncated", "text",
-         "table_idx", "group_key", "row_key", "cells", "nums"],
-        unit_rows,
-    ))
+        unit_terms_str.append(" ".join(sorted(set(terms))))
+    unit_h = [row_hash(body + [t]) for body, t in zip(unit_bodies, unit_terms_str)]
 
-    table_rows = [
-        [
+    page_bodies: dict[str, list[str]] = {
+        r["name"]: [
+            sql_str(r["name"]), sql_str(f"{BASE_URL}{quote_page(r['name'])}"),
+            sql_str(r["mtime"]), sql_str(r["fetched_at"]), sql_str(r["checked_at"]),
+            sql_str(r["status"]), sql_str(r["error"]),
+        ]
+        for r in all_pages
+    }
+    page_h = {name: row_hash(body) for name, body in page_bodies.items()}
+
+    table_bodies: dict[tuple, list[str]] = {
+        (t.page, t.anchor, t.table_idx): [
             sql_str(t.page), sql_str(t.anchor), sql_int(t.table_idx), "NULL",
             sql_json(t.columns), sql_json(t.key_columns), sql_json(t.default_columns),
             sql_int(t.row_count),
         ]
         for t in all_tables
-    ]
-    lines.extend(batched_insert(
-        "wiki_table",
-        ["page", "anchor", "table_idx", "caption", "columns", "key_columns", "default_columns",
-         "row_count"],
-        table_rows,
-    ))
+    }
+    table_h = {k: row_hash(body) for k, body in table_bodies.items()}
 
-    note_rows = [
+    note_bodies: list[list[str]] = [
         [sql_str(name), sql_str(note["note"]), sql_str(note.get("state_key"))]
         for name, note in column_notes.items()
     ]
-    lines.extend(batched_insert("column_note", ["name", "note", "state_key"], note_rows))
+    note_set = {(name, note["note"], note.get("state_key")) for name, note in column_notes.items()}
 
-    alias_rows = [
-        [sql_str(name), sql_str(page)]
-        for name, pages in sorted(alias_map.items()) for page in pages
-    ]
-    lines.extend(batched_insert("alias", ["name", "page"], alias_rows))
-
-    link_rows = [
-        [sql_str(uid), sql_str(page), sql_int(ord_)] for uid, page, ord_ in all_links
-    ]
-    lines.extend(batched_insert("unit_link", ["unit_id", "page", "ord"], link_rows))
+    alias_set = {(name, page) for name, pages in alias_map.items() for page in pages}
+    link_set = {(uid, page, ord_) for uid, page, ord_ in all_links}
 
     correction_rows_ = correction_rows(corrections or [], all_units)
     app_data_rows_ = app_data_correction_rows(app_data or [])
     apparent_rows_ = apparent_equipment_corrections(app_data or [], all_units)
-    lines.extend(batched_insert(
-        "correction",
-        ["id", "subject", "unit_id", "col", "value", "grade", "source_kind", "source_title",
-         "source_url", "section"],
-        correction_rows_ + app_data_rows_ + apparent_rows_,
-    ))
+    all_correction_rows = correction_rows_ + app_data_rows_ + apparent_rows_
+    # key は id 列(row[0]、sql_str 済みの '...' そのもの)。生の id に戻さない — state 側も
+    # 同じ sql_str(id) で揃えるので、変換の往復を要らなくする。
+    correction_bodies: dict[str, list[str]] = {r[0]: r for r in all_correction_rows}
+    # 全件投入は同じ id の 2 行で PRIMARY KEY 違反になって止まる。差分でも黙って片方を捨てず、同じく止める
+    if len(correction_bodies) != len(all_correction_rows):
+        seen: set[str] = set()
+        dup = sorted({r[0] for r in all_correction_rows if r[0] in seen or seen.add(r[0])})
+        raise ValueError(f"correction の id が重複しています: {dup[:5]}")
+    correction_h = {k: row_hash(body) for k, body in correction_bodies.items()}
 
     from datetime import datetime, timezone
     imported_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -1192,18 +1311,20 @@ def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dic
         [sql_str("schema_version"), sql_str("1")],
         [sql_str("imported_at"), sql_str(imported_at)],
     ]
-    lines.extend(batched_insert("meta", ["key", "value"], meta_rows))
 
-    lines.append(
-        "CREATE VIRTUAL TABLE unit_fts USING fts5(terms, content='', tokenize='unicode61', "
-        "detail='full');"
-    )
-    # rowid を unit と揃える(1 始まりの連番)。terms は重複を落として順不同(ソート)で入れる。
-    fts_rows = [
-        [str(i), sql_str(" ".join(sorted(set(terms))))]
-        for i, terms in enumerate(terms_per_unit, start=1)
-    ]
-    lines.extend(batched_insert("unit_fts(rowid, terms)", [], fts_rows))
+    writes: dict[str, int] | None = None
+    if state is None:
+        lines = _generate_full(
+            page_bodies, page_h, unit_bodies, unit_h, unit_terms_str,
+            table_bodies, table_h, note_bodies, alias_set, link_set,
+            all_correction_rows, meta_rows,
+        )
+    else:
+        lines, writes = _generate_diff(
+            state, page_bodies, page_h, all_units, unit_bodies, unit_h, unit_terms_str,
+            table_bodies, table_h, note_set, alias_set, link_set,
+            correction_bodies, correction_h, meta_rows,
+        )
 
     out_dir.joinpath("units.sql").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -1212,12 +1333,213 @@ def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dic
         "units": len(all_units),
         "aliases": sum(len(v) for v in alias_map.values()),
         "tables": len(all_tables),
-        "corrections": len(correction_rows_) + len(app_data_rows_) + len(apparent_rows_),
+        "corrections": len(all_correction_rows),
         "corrections_matched": sum(1 for r in correction_rows_ if r[2] != "NULL"),
         "corrections_confirmed_notice": len(correction_rows_),
         "app_data_corrections": len(app_data_rows_),
         "apparent_corrections": len(apparent_rows_),
+        "writes": writes,
     }
+
+
+def _generate_full(page_bodies, page_h, unit_bodies, unit_h, unit_terms_str,
+                    table_bodies, table_h, note_bodies, alias_set, link_set,
+                    all_correction_rows, meta_rows) -> list[str]:
+    """今まで通りの全件投入(DELETE 全件 → INSERT)。初回の migrations/004 直後や、
+    スキーマ・分かち書き辞書を丸ごと作り直すときに使う。"""
+    lines: list[str] = [*(f"DELETE FROM {t};" for t in REBUILT_TABLES), "DROP TABLE IF EXISTS unit_fts;"]
+
+    page_rows = [body + [sql_str(page_h[name])] for name, body in page_bodies.items()]
+    lines.extend(batched_insert(
+        "page", ["name", "url", "mtime", "fetched_at", "checked_at", "status", "error", "h"],
+        page_rows,
+    ))
+
+    # rowid を明示して unit_fts の rowid と揃える(1 始まりの連番)。
+    unit_rows = [
+        [str(i)] + body + [sql_str(h)]
+        for i, (body, h) in enumerate(zip(unit_bodies, unit_h), start=1)
+    ]
+    lines.extend(batched_insert(
+        "unit",
+        ["rowid", "id", "kind", "page", "section", "anchor", "ord", "truncated", "text",
+         "table_idx", "group_key", "row_key", "cells", "nums", "h"],
+        unit_rows,
+    ))
+
+    table_rows = [body + [sql_str(table_h[key])] for key, body in table_bodies.items()]
+    lines.extend(batched_insert(
+        "wiki_table",
+        ["page", "anchor", "table_idx", "caption", "columns", "key_columns", "default_columns",
+         "row_count", "h"],
+        table_rows,
+    ))
+
+    lines.extend(batched_insert("column_note", ["name", "note", "state_key"], note_bodies))
+
+    alias_rows = [[sql_str(name), sql_str(page)] for name, page in sorted(alias_set)]
+    lines.extend(batched_insert("alias", ["name", "page"], alias_rows))
+
+    link_rows = [[sql_str(uid), sql_str(page), sql_int(ord_)] for uid, page, ord_ in sorted(link_set)]
+    lines.extend(batched_insert("unit_link", ["unit_id", "page", "ord"], link_rows))
+
+    correction_rows_with_h = [
+        row + [sql_str(row_hash(row))] for row in all_correction_rows
+    ]
+    lines.extend(batched_insert(
+        "correction",
+        ["id", "subject", "unit_id", "col", "value", "grade", "source_kind", "source_title",
+         "source_url", "section", "h"],
+        correction_rows_with_h,
+    ))
+
+    lines.extend(batched_insert("meta", ["key", "value"], meta_rows))
+
+    lines.append(
+        "CREATE VIRTUAL TABLE unit_fts USING fts5(terms, content='', tokenize='unicode61', "
+        "detail='full', contentless_delete=1);"
+    )
+    # rowid を unit と揃える(1 始まりの連番)。terms は重複を落として順不同(ソート)で入れる。
+    fts_rows = [[str(i), sql_str(t)] for i, t in enumerate(unit_terms_str, start=1)]
+    lines.extend(batched_insert("unit_fts(rowid, terms)", [], fts_rows))
+
+    return lines
+
+
+def _generate_diff(state, page_bodies, page_h, all_units, unit_bodies, unit_h, unit_terms_str,
+                    table_bodies, table_h, note_set, alias_set, link_set,
+                    correction_bodies, correction_h, meta_rows) -> tuple[list[str], dict[str, int]]:
+    """本番の現状(state)と比べた差分だけを書く。REPLACE できる主キー表は INSERT OR REPLACE、
+    alias/unit_link/column_note は行全体の集合差で比べる。meta は毎回書き直す。
+
+    unit/unit_fts は書き込み順が壊れても自己修復できるよう、**unit_fts の操作(孤児の削除・
+    消す・入れ直す)を先に全部出し、unit(削除・REPLACE)を後に出す**。`--file` の投入が
+    unit_fts の後・unit の前で止まっても、次回は「unit にあるのに unit_fts に無い」として
+    plan_unit_diff が再検知して入れ直す(plan_unit_diff の docstring 参照)。
+    """
+    lines: list[str] = []
+    writes: dict[str, int] = {}
+
+    # --- unit + unit_fts(rowid の保持・自己修復が要るので専用ロジック plan_unit_diff を使う) ----
+    old_unit = {r["id"]: (r["rowid"], r["h"]) for r in state["unit"]}
+    old_fts_rowids = {r["rowid"] for r in state["unit_fts_rowids"]}
+    plan = plan_unit_diff(all_units, unit_h, old_unit, old_fts_rowids)
+    to_delete_ids = plan["to_delete_ids"]
+    id_to_rowid = plan["id_to_rowid"]
+    upsert_idx = plan["upsert_idx"]
+    fts_delete_rowids = plan["fts_delete_rowids"]
+    orphan_fts_rowids = plan["orphan_fts_rowids"]
+
+    # 1) unit_fts の DELETE(孤児 → 消える unit の分 → 変わる/補充する既存 unit の分)。
+    #    孤児の削除は、rowid が使い回されうる新規 INSERT より必ず先に出す。
+    to_delete_fts_rowids = [old_unit[x][0] for x in to_delete_ids if old_unit[x][0] in old_fts_rowids]
+    all_fts_delete_rowids = orphan_fts_rowids + to_delete_fts_rowids + fts_delete_rowids
+    if all_fts_delete_rowids:
+        lines.extend(delete_in("unit_fts", "rowid", [sql_int(r) for r in all_fts_delete_rowids]))
+
+    # 2) unit_fts の INSERT(新規 + 変わった/補充する既存)。unit 側の書き込みより必ず先。
+    fts_upsert_rows = [
+        [sql_int(id_to_rowid[all_units[i].id]), sql_str(unit_terms_str[i])] for i in upsert_idx
+    ]
+    lines.extend(batched_insert("unit_fts(rowid, terms)", [], fts_upsert_rows))
+
+    # 3) unit の DELETE → INSERT OR REPLACE(unit_fts が先に揃った後)。
+    if to_delete_ids:
+        lines.extend(delete_in("unit", "id", [sql_str(x) for x in to_delete_ids]))
+    unit_upsert_rows = [
+        [sql_int(id_to_rowid[all_units[i].id])] + unit_bodies[i] + [sql_str(unit_h[i])]
+        for i in upsert_idx
+    ]
+    lines.extend(batched_insert(
+        "unit",
+        ["rowid", "id", "kind", "page", "section", "anchor", "ord", "truncated", "text",
+         "table_idx", "group_key", "row_key", "cells", "nums", "h"],
+        unit_upsert_rows, verb="INSERT OR REPLACE",
+    ))
+
+    writes["unit"] = len(to_delete_ids) + len(upsert_idx)
+    writes["unit_fts"] = len(all_fts_delete_rowids) + len(fts_upsert_rows)
+
+    # --- page ---------------------------------------------------------------------------------
+    old_page = {r["name"]: r["h"] for r in state["page"]}
+    to_delete_page, to_upsert_page = diff_keyed(old_page, page_h)
+    if to_delete_page:
+        lines.extend(delete_in("page", "name", [sql_str(n) for n in to_delete_page]))
+    page_rows = [page_bodies[n] + [sql_str(page_h[n])] for n in to_upsert_page]
+    lines.extend(batched_insert(
+        "page", ["name", "url", "mtime", "fetched_at", "checked_at", "status", "error", "h"],
+        page_rows, verb="INSERT OR REPLACE",
+    ))
+    writes["page"] = len(to_delete_page) + len(to_upsert_page)
+
+    # --- wiki_table(複合キー) -------------------------------------------------------------------
+    old_table = {(r["page"], r["anchor"], r["table_idx"]): r["h"] for r in state["wiki_table"]}
+    to_delete_table, to_upsert_table = diff_keyed(old_table, table_h)
+    if to_delete_table:
+        lines.extend(delete_composite_in(
+            "wiki_table", ["page", "anchor", "table_idx"],
+            [[sql_str(p), sql_str(a), sql_int(i)] for p, a, i in to_delete_table],
+        ))
+    table_rows = [table_bodies[k] + [sql_str(table_h[k])] for k in to_upsert_table]
+    lines.extend(batched_insert(
+        "wiki_table",
+        ["page", "anchor", "table_idx", "caption", "columns", "key_columns", "default_columns",
+         "row_count", "h"],
+        table_rows, verb="INSERT OR REPLACE",
+    ))
+    writes["wiki_table"] = len(to_delete_table) + len(to_upsert_table)
+
+    # --- correction -----------------------------------------------------------------------------
+    # key は correction_bodies と同じく sql_str(id) そのもの(state 側もここで揃える)。
+    old_corr = {sql_str(r["id"]): r["h"] for r in state["correction"]}
+    to_delete_corr, to_upsert_corr = diff_keyed(old_corr, correction_h)
+    if to_delete_corr:
+        lines.extend(delete_in("correction", "id", to_delete_corr))
+    corr_rows = [correction_bodies[k] + [sql_str(correction_h[k])] for k in to_upsert_corr]
+    lines.extend(batched_insert(
+        "correction",
+        ["id", "subject", "unit_id", "col", "value", "grade", "source_kind", "source_title",
+         "source_url", "section", "h"],
+        corr_rows, verb="INSERT OR REPLACE",
+    ))
+    writes["correction"] = len(to_delete_corr) + len(to_upsert_corr)
+
+    # --- alias / unit_link / column_note(小さいので行全体の集合差) --------------------------------
+    old_alias = {(r["name"], r["page"]) for r in state["alias"]}
+    del_alias, add_alias = diff_set(old_alias, alias_set)
+    if del_alias:
+        lines.extend(delete_composite_in("alias", ["name", "page"],
+                                          [[sql_str(n), sql_str(p)] for n, p in del_alias]))
+    lines.extend(batched_insert("alias", ["name", "page"],
+                                 [[sql_str(n), sql_str(p)] for n, p in add_alias],
+                                 verb="INSERT OR REPLACE"))
+    writes["alias"] = len(del_alias) + len(add_alias)
+
+    old_link = {(r["unit_id"], r["page"], r["ord"]) for r in state["unit_link"]}
+    del_link, add_link = diff_set(old_link, link_set)
+    if del_link:
+        lines.extend(delete_composite_in(
+            "unit_link", ["unit_id", "page", "ord"],
+            [[sql_str(u), sql_str(p), sql_int(o)] for u, p, o in del_link],
+        ))
+    lines.extend(batched_insert("unit_link", ["unit_id", "page", "ord"],
+                                 [[sql_str(u), sql_str(p), sql_int(o)] for u, p, o in add_link]))
+    writes["unit_link"] = len(del_link) + len(add_link)
+
+    old_note = {(r["name"], r["note"], r.get("state_key")) for r in state["column_note"]}
+    del_note, add_note = diff_set(old_note, note_set)
+    if del_note:
+        lines.extend(delete_in("column_note", "name", [sql_str(n) for n, _, _ in del_note]))
+    lines.extend(batched_insert("column_note", ["name", "note", "state_key"],
+                                 [[sql_str(n), sql_str(note), sql_str(sk)] for n, note, sk in add_note],
+                                 verb="INSERT OR REPLACE"))
+    writes["column_note"] = len(del_note) + len(add_note)
+
+    # --- meta(毎回書き直す。消してから入れると、その間に止まったとき /health が索引なしを返すので置き換える)
+    lines.extend(batched_insert("meta", ["key", "value"], meta_rows, verb="INSERT OR REPLACE"))
+    writes["meta"] = len(meta_rows)
+
+    return lines, writes
 
 
 def main() -> int:
@@ -1230,6 +1552,8 @@ def main() -> int:
                    help="segment-cli.ts の場所")
     p.add_argument("--limit", type=int, help="ページ数を絞る(開発用)")
     p.add_argument("--pages", type=str, help="カンマ区切りのページ名。必ず含める(開発用)")
+    p.add_argument("--state", type=Path,
+                   help="d1_state.py が書いた state.json。指定すると本番の現状と比べた差分だけを書く")
     a = p.parse_args()
 
     store = Store(a.cache)
@@ -1240,9 +1564,10 @@ def main() -> int:
     corrections = load_corrections(HERE / "corrections.json")
     app_data = load_app_data(HERE / "app_data.json")
     only_pages = [s.strip() for s in a.pages.split(",")] if a.pages else None
+    state = load_state(a.state) if a.state else None
 
     stats = generate(store, a.out, a.segment_cli, aliases_manual, column_notes, a.limit, only_pages,
-                     corrections, app_data)
+                     corrections, app_data, state)
     store.close()
 
     print(f"pages: {stats['pages']}")
@@ -1256,6 +1581,22 @@ def main() -> int:
         f"apparent={stats['apparent_corrections']})"
     )
     print(f"out: {a.out / 'units.sql'}")
+
+    writes = stats["writes"]
+    if writes is not None:
+        total = sum(writes.values())
+        # FTS5 の内部索引(unicode61 のトークン単位の書き込み)はここに入らない。ここでの「行」は
+        # unit/unit_fts などの表に対して書く SQL 文の行数(見積り)で、D1 の実際の課金行数の近似。
+        print("write rows (見積り。FTS5 の内部索引の書き込みは含まない):", file=sys.stderr)
+        for name, n in writes.items():
+            print(f"  {name}: {n}", file=sys.stderr)
+        print(f"  合計: {total}", file=sys.stderr)
+        if total > 80_000:
+            print(
+                f"警告: 合計 {total} 行は無料枠(1 日 10 万行)に近い/超えます。"
+                "--file で流す前に確認してください。",
+                file=sys.stderr,
+            )
     return 0
 
 

@@ -1,5 +1,6 @@
 -- Tale Wiki 取込の D1 スキーマ(段階 0)。source_kind の docs/adr/013-wiki-import.md「本文は持たない」を担保する。
--- 取込のたびに units.py が丸ごと再生成する(DELETE 全件 → INSERT)。正本は手元の wiki.sqlite。
+-- 正本は手元の wiki.sqlite。初回(と schema 変更時)は units.py が丸ごと再生成する(DELETE 全件 → INSERT)。
+-- 以降は units.py --state が本番の現状(h 列)と比べて差分だけ書く(無料枠 1 日 10 万行に収めるため)。
 
 -- 取込キャッシュの page(tools/gamedata/wiki/store.py)から source(本文)を除いたもの。
 -- url は出典リンクの組み立て用(page 名の EUC-JP percent-encoding は units.py 側で作る。Worker は
@@ -11,7 +12,8 @@ CREATE TABLE page (
   fetched_at TEXT,
   checked_at TEXT,
   status     TEXT NOT NULL,
-  error      TEXT
+  error      TEXT,
+  h          TEXT                            -- 差分投入用。行の全列をまとめたハッシュ(units.py row_hash)
 );
 
 CREATE TABLE unit (
@@ -27,7 +29,8 @@ CREATE TABLE unit (
   group_key TEXT,                         -- 塊のキー。表の行は page/anchor/table_idx、箇条書きの項目は page/anchor/list_idx。単独の段落は NULL
   row_key   TEXT,                         -- row のみ。主要列の値の組(進0-強1)か内容ハッシュ
   cells     TEXT,                         -- row のみ。JSON {"進化":"0","成功率":"100%",…} セル文字列そのまま
-  nums      TEXT                          -- row のみ。JSON {"進化":0,"Lv":[60,69]} 数値か [下限, 上限]。数値化できた列だけ
+  nums      TEXT,                         -- row のみ。JSON {"進化":0,"Lv":[60,69]} 数値か [下限, 上限]。数値化できた列だけ
+  h         TEXT                          -- 差分投入用。行の全列 + その unit の FTS terms をまとめたハッシュ
 );
 CREATE INDEX unit_page_ord ON unit(page, ord);
 CREATE INDEX unit_table    ON unit(page, anchor, table_idx, ord);
@@ -39,6 +42,7 @@ CREATE TABLE wiki_table (                 -- 表 1 つ = 1 行
   key_columns TEXT NOT NULL,              -- JSON ["進化","強化"]。row_key と「行は選ばれた列 + キー列」に使う
   default_columns TEXT NOT NULL,          -- JSON。先頭から最大 4 列
   row_count INTEGER NOT NULL,
+  h TEXT,                                 -- 差分投入用。行の全列をまとめたハッシュ
   PRIMARY KEY (page, anchor, table_idx)
 );
 
@@ -63,6 +67,7 @@ CREATE TABLE correction (                 -- wiki の外から来る訂正。段
   source_title TEXT NOT NULL,
   source_url  TEXT,                       -- 公式お知らせは必須。静的データは NULL でよい
   section     TEXT,                       -- unit_id を持たない行(app_data)の疑似候補用の節名。他は NULL(unit.section を引ける)
+  h           TEXT,                       -- 差分投入用。行の全列をまとめたハッシュ
   CHECK (source_kind <> 'notice' OR source_url IS NOT NULL)
 );
 CREATE INDEX correction_unit ON correction(unit_id);
@@ -116,9 +121,12 @@ CREATE INDEX ask_call_ask_log_id ON ask_call(ask_log_id);
 
 -- 検索用の索引。contentless(本文を保持しない。ADR-013)、detail='full'。terms は取込時に重複を落としてソートした語の集合なので、位置情報があっても本文(語順)は復元できない。detail='none' / 'column' では bm25 が常に 0 で順位が付かない(実測 2026-09-22)。
 -- terms は「ページ名 › 節名」+ 本文を正規化・分かち書きした語を、重複を落として空白区切りにしたもの。
+-- contentless_delete=1: 差分投入で unit 1 行だけ消す/差し替えるときに `DELETE FROM unit_fts WHERE rowid=?` が効く
+-- ようにする(ローカル D1 で確認済み。消した行は MATCH に出ない)。unit.rowid と常に一致させる(retrieve.ts の JOIN)。
 CREATE VIRTUAL TABLE unit_fts USING fts5(
   terms,
   content='',
   tokenize='unicode61',
-  detail='full'
+  detail='full',
+  contentless_delete=1
 );
