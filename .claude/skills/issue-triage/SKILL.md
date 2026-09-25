@@ -62,7 +62,7 @@ gh issue view <n> --json title,body,comments -q '.title, .body, .comments[].body
 - 報告が切り分けに効いたなら、どこが効いたかを具体的に書いて礼を言う
 - 値を直したときは直した後の値を表で出す
 - 追加で欲しい情報は「何を・なぜ」まで書く(例: 攻撃力の違う装備でもう 1 点 → 防御力とカット率を分けられる)
-- ロック中の機能(対人タブ・テネブリス)の名前を出さない
+- ロック中の機能(対人タブ)の名前を出さない
 
 閉じる: `gh issue close <n> --reason completed`(重複は `--reason "not planned"` + 束ねた先の番号をコメント)。
 

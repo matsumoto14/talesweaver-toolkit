@@ -112,8 +112,7 @@ ADR-013 の段階 0〜5 とは別。
     「次にできること」は無いので、段階 3 では定型文まで。クリティカル率そのものは計算タブの対象があるときだけ
 33. **静的データだけの項目(称号・装備)は `correction` 表に `unit_id NULL` の行として載せる**(1 セル 1 行、
     `c:app/<名前>/<列>`、`section` 列を追加)。別表・新しい候補の種類は作らない。書き出しは
-    `crates/gamedata/src/bin/export_app_data.rs` → `tools/gamedata/wiki/app_data.json`(称号 364 + 装備 1,308 件、
-    R2 のテネブリスは含めない)。候補に載るのは**質問の語が名前に完全一致したときだけ**(最大 3 件)。
+    `crates/gamedata/src/bin/export_app_data.rs` → `tools/gamedata/wiki/app_data.json`(称号 364 + 装備 1,308 件)。候補に載るのは**質問の語が名前に完全一致したときだけ**(最大 3 件)。
     そのために名前を分かち書きの辞書に入れる(取込の dict.txt と Worker の `loadAliasIndex` の両方。alias 表には入れない =
     ページ候補を汚さない)。出典は「アプリのデータ」で URL は null
 34. **自動検出の訂正(`apparent`)は装備の 9 値だけ**。wiki の装備表(`Item/武器/*` `Item/防具/*` `Item/アクセサリ/*`)は

@@ -25,7 +25,7 @@
   import { checkForUpdate, updater } from "./update.svelte";
   import { t } from "./i18n";
   import { persisted } from "./ui/persistedState.svelte";
-  import { isLockedTab, refreshDownloadedEquipmentIds } from "./unlock.svelte";
+  import { isLockedTab } from "./unlock.svelte";
   import Choose from "./ui/Choose.svelte";
   import Splitter from "./ui/Splitter.svelte";
 
@@ -71,8 +71,6 @@
 
   onMount(() => {
     void loadAll();
-    // 「追加機能の解除」で合流している追加装備の id(ロック中に候補から外す判定。unlock.svelte.ts)。
-    void refreshDownloadedEquipmentIds();
     // 新しい版があるかだけ見に行く。当てるのはお知らせタブで押されたときだけ。
     void checkForUpdate();
     // バックアップからの復元など、読み飛ばされては困る事実は自動で消さない帯に出す。

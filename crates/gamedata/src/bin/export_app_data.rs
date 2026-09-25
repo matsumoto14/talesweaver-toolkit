@@ -3,8 +3,7 @@
 //!
 //! ADR-021(出典の格付け: 公式お知らせ > アプリの静的データ > wiki)・
 //! scratchpad/design/stage3-spec.md の B(5〜8)を実装する。値は gamedata の構造体から機械で作り、
-//! 手では書かない。R2 の downloaded(テネブリス)は `install_downloaded_equipment` を呼ばないので
-//! 含まれない。
+//! 手では書かない。
 //!
 //!     cargo run -p gamedata --bin export_app_data > tools/gamedata/wiki/app_data.json
 
@@ -159,20 +158,5 @@ mod tests {
     fn equipment_item_without_any_values_is_skipped() {
         let empty = EquipmentValues::default();
         assert!(equipment_values_cells(&empty).is_empty());
-    }
-
-    #[test]
-    fn downloaded_equipment_is_not_included() {
-        // install_downloaded_equipment を一度も呼ばないので、R2 の downloaded は
-        // equipment_catalog() に合流しない(2026-09-22 実測)。
-        let ids = gamedata::list_downloaded_equipment_ids();
-        // 呼んでいなければ downloaded 側のカタログも空のはず(合流の有無を確かめる意図)。
-        let out: Vec<AppDataItem> = equipment_catalog().iter().filter_map(equipment_item_row).collect();
-        for id in &ids {
-            assert!(
-                !out.iter().any(|row| row.subject == *id),
-                "downloaded 装備 {id} が app_data に混ざっている"
-            );
-        }
     }
 }

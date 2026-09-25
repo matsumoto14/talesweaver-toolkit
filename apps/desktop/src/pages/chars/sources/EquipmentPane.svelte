@@ -46,7 +46,6 @@
   import TextField from "../../../ui/TextField.svelte";
   import { slide } from "svelte/transition";
   import { tick, untrack } from "svelte";
-  import { isLockedEquipment } from "../../../unlock.svelte";
 
   interface Props {
     draft: Draft;
@@ -210,10 +209,10 @@
   });
   const filteredCatalog = $derived.by(() => {
     const query = itemQuery.trim();
-    const unlocked = equipmentCandidates.items.filter((i) => !isLockedEquipment(i));
+    const items = equipmentCandidates.items;
     const candidates = query === ""
-      ? unlocked
-      : unlocked.filter((i) => i.name.includes(query) || t(i.name).includes(query));
+      ? items
+      : items.filter((i) => i.name.includes(query) || t(i.name).includes(query));
     const matched = candidates.filter((i) => i.fit === "recommended");
     if (matched.length === 0) return candidates;
     return showAllEquipmentCandidates

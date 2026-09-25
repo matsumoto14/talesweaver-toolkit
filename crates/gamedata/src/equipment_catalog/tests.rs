@@ -58,17 +58,11 @@ fn wrist(
     equipment
 }
 
-/// `追加装備は既定で未収録_解除操作で合流する` がカタログを書き換える間は件数を数えない。
-static CATALOG_COUNT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 #[test]
 fn 上位装備カタログは1308件_idは重複しない() {
-    let _guard = CATALOG_COUNT_LOCK.lock().unwrap();
     let catalog = equipment_catalog();
     // 既存の手検証済み行(装着時効果つき)を優先し、次に client DB(9値の生成元)、
     // 最後に client DB に同名が無い wiki 抽出/韓国コミュニティ資料ぶんを名前で重複排除して積む。
-    // 追加装備 38 件は配布物・git に含めず、「追加機能の解除」時に R2 から取得するので
-    // ここには入らない(`追加装備は既定で未収録_解除操作で合流する` 参照)。
     assert_eq!(catalog.len(), 1308);
     let ids: HashSet<&str> = catalog.iter().map(|i| i.id).collect();
     assert_eq!(ids.len(), catalog.len());
@@ -1062,95 +1056,13 @@ fn 同名の手書き行でも9値はクライアントdbの値になる() {
     assert_eq!(trident.enchant_caps.agility, 100 - trident.values_max.agility);
 }
 
-/// dm_00001 パッケージにあるセイクリッド・改はクライアント値で収録する
-/// (追加装備は配布物・git に含めないので、既定カタログには出ない)。
+/// dm_00001 パッケージにあるセイクリッド・改はクライアント値で収録する。
 #[test]
 fn セイクリッドはクライアントdbから収録する() {
     let catalog = equipment_catalog();
     // 韓国資料は改・セイクリッドシミターの斬り下限を 560 としていたが、クライアントは 550
     let scimitar = catalog.iter().find(|item| item.name == "†改・セイクリッドシミター").unwrap();
     assert_eq!(scimitar.values_min.slash, 550);
-}
-
-/// 追加装備は配布物・git に含めない(docs/adr/009-public-release.md)。既定の
-/// `equipment_catalog()` / `find_equipment_item()` には出ない。
-#[test]
-fn 追加装備は既定で未収録_解除操作で合流する() {
-    let _guard = CATALOG_COUNT_LOCK.lock().unwrap();
-    // 取得していない間は「取得由来の id」が空(画面はこの一覧でロック対象を判定する)。
-    assert!(list_downloaded_equipment_ids().is_empty());
-
-    // 実データは書かない(テストは架空の値で検証する)。
-    let json = r#"{
-        "retrieved_on": "2026-09-14",
-        "items": [
-            {
-                "id": "test-downloaded-1",
-                "slot": "weapon",
-                "name": "テスト用ダウンロード装備",
-                "values_min": { "thrust": 10, "slash": 20 },
-                "values_max": { "thrust": 15, "slash": 25 },
-                "enchant_total_caps": { "thrust": 100, "slash": 100 },
-                "weapon_class": "rapier",
-                "wrist_type": null,
-                "usable_by": ["lucian"],
-                "source": { "page": "テスト", "retrieved_on": "2026-09-14", "note": "合成データ" }
-            },
-            {
-                "id": "test-downloaded-2",
-                "slot": "shield",
-                "name": "テスト用ダウンロードサブ武器",
-                "values_min": { "thrust": 10 },
-                "values_max": { "thrust": 15 },
-                "enchant_total_caps": { "thrust": 100 },
-                "weapon_class": null,
-                "wrist_type": "dual_blade_physical",
-                "usable_by": null,
-                "source": { "page": "テスト", "retrieved_on": "2026-09-14", "note": "合成データ" }
-            }
-        ]
-    }"#;
-
-    let installed = install_downloaded_equipment(json).unwrap();
-    assert_eq!(installed, 2);
-    // 合流させたら「取得由来の id」に出る(画面はこれでロック対象を判定する)。
-    assert_eq!(
-        list_downloaded_equipment_ids(),
-        vec!["test-downloaded-1".to_string(), "test-downloaded-2".to_string()]
-    );
-
-    let catalog = equipment_catalog();
-    let item = catalog.iter().find(|i| i.id == "test-downloaded-1").unwrap();
-    assert_eq!(item.name, "テスト用ダウンロード装備");
-    assert_eq!(item.values_min.thrust, 10);
-    assert_eq!(item.values_max.thrust, 15);
-    // エンチャント枠 = 総上限 − レンジ上限
-    assert_eq!(item.enchant_caps.thrust, 100 - 15);
-    assert_eq!(item.weapon_class, Some(WeaponClass::Rapier));
-    assert_eq!(item.usable_by, Some(&["lucian"][..]));
-    assert!(find_equipment_item("test-downloaded-1").is_some());
-    // サブアームの分類は JSON の wrist_type から入る(client_wrist_type と同じ役目)
-    let sub = find_equipment_item("test-downloaded-2").unwrap();
-    assert_eq!(sub.wrist_type, Some(WristType::DualBladePhysical));
-
-    // 再インストールは追記ではなく置き換え(重複しない)。
-    let reinstalled = install_downloaded_equipment(json).unwrap();
-    assert_eq!(reinstalled, 2);
-    let catalog = equipment_catalog();
-    assert_eq!(
-        catalog.iter().filter(|i| i.id == "test-downloaded-1").count(),
-        1
-    );
-
-    // 不正 JSON は Err。
-    assert!(install_downloaded_equipment("not json").is_err());
-
-    // 他のテストと状態を共有しないよう、空で入れ直す。
-    let empty = r#"{ "retrieved_on": "2026-09-14", "items": [] }"#;
-    install_downloaded_equipment(empty).unwrap();
-    let catalog = equipment_catalog();
-    assert!(catalog.iter().all(|i| i.id != "test-downloaded-1"));
-    assert!(list_downloaded_equipment_ids().is_empty());
 }
 
 /// `c11_CharMask` から装備可能キャラを取り込む(`tools/gamedata/import_client_db.py` 参照)。

@@ -14,7 +14,7 @@ tmp/
 # Subagent の worktree
 .claude/worktrees/
 
-# 追加装備の数値(配布物・git から外し、解除時に R2 から取得する。tools/gamedata/import_client_db.py)
+# 取り込みスクリプトの手元出力(tools/gamedata/import_client_db.py)
 tools/gamedata/out/
 
 # wiki 取込の生成物(units.py の出力。tools/gamedata/out/ とは別物)

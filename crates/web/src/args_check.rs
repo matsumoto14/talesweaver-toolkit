@@ -85,7 +85,6 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         | "list_element_sources"
         | "list_contents"
         | "list_equipment_catalog"
-        | "list_downloaded_equipment_ids"
         | "list_inkri_targets"
         | "eta_scroll_price"
         | "list_equipment_abilities"
@@ -131,7 +130,6 @@ fn expected_args(command: &str) -> Option<BTreeSet<String>> {
         "list_rotation_choices" => arg_fields::<RotationChoicesArgs>(),
         "retain_rotation_skills" => arg_fields::<RetainRotationSkillsArgs>(),
         "list_upgrade_candidates" | "list_enchant_gains" => arg_fields::<CandidateArgs>(),
-        "install_downloaded_equipment" => arg_fields::<InstallDownloadedEquipmentArgs>(),
 
         _ => return None,
     };

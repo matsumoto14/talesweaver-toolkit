@@ -1,22 +1,7 @@
 """クライアント展開データ(dm_NNNNN_NNNN.csv)から装備カタログを取り込み、
 `crates/gamedata/src/equipment_catalog/client.rs` を生成する。
 
-追加装備(2026-09-14 決定)は配布物・リポジトリから外す(docs/adr/009-public-release.md)。
-`client.rs` には書かず、代わりに `tools/gamedata/out/extra-equipment.json`(git 管理外。
-.gitignore 参照)へ書き出す。どのアイテムを分けるかは ItemId(`EXTRA_ITEM_IDS`)で決める。
-
-R2 へ上げるのは手元から(CI には乗せない。ENDPOINT の `<ACCOUNT_ID>` は実値に置換):
-
-    aws s3 cp tools/gamedata/out/extra-equipment.json s3://tw-context/data/extra-equipment.json \\
-        --endpoint-url https://<ACCOUNT_ID>.r2.cloudflarestorage.com \\
-        --content-type "application/json; charset=utf-8" \\
-        --only-show-errors
-
-R2 は AWS CLI v2 の既定チェックサムに対応しないので、上げる前に一度だけ環境変数を要求時のみに絞る
-(`.github/workflows/news.yml` と同じ):
-
-    export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
-    export AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+最上位 38 件(`EXCLUDED_ITEM_IDS`)は収録しない(docs/adr/009-public-release.md)。
 
 出典: `tw_assets/README.md`(リポジトリ外置き場)。`db/dm_00000_NNNN.csv` は UTF-8 BOM 付き、
 1 行目=列名(`c<番号>_<名前>_<hash>` / `c<番号>_<hash>`)、2 行目=`#type`、3 行目以降データ。
@@ -117,14 +102,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CATALOG_DIR = ROOT / "crates/gamedata/src/equipment_catalog"
 OUT_PATH = CATALOG_DIR / "client.rs"
-# git 管理外(.gitignore の tools/gamedata/out/)。R2 へ上げる手元置き場。
-EXTRA_OUT_PATH = ROOT / "tools/gamedata/out/extra-equipment.json"
-EXTRA_RETRIEVED_ON = "2026-09-03"
-# 配布物・リポジトリから外す装備の ItemId(client DB の c2_ItemId)。2026-09-03 時点の最上位
-# 38 件で、欠番のない連番。アイテム名では選ばない(名前を置かずに済ませる。ADR-009)。
-# 同じ id のアイコンは同梱しているので(`assets/icons/equipment/client-10604xx.png`)、
-# ここに書いてもリポジトリの情報は増えない。新しい上位装備が来たら範囲を広げる。
-EXTRA_ITEM_IDS = range(1060422, 1060460)
+# 収録しない装備の ItemId(client DB の c2_ItemId)。2026-09-03 時点の最上位 38 件で、
+# 欠番のない連番。アイテム名では選ばない(名前を置かずに済ませる。ADR-009)。
+# 新しい上位装備が来たら範囲を広げる。
+EXCLUDED_ITEM_IDS = range(1060422, 1060460)
 
 STAT_COLUMNS = [
     ("c42_Thrust", "thrust"),
@@ -541,28 +522,23 @@ def main() -> None:
             "reason": reasons[r.item_id],
         })
 
-    def is_extra(entry: dict) -> bool:
-        return int(entry["item_id"]) in EXTRA_ITEM_IDS
+    def is_excluded(entry: dict) -> bool:
+        return int(entry["item_id"]) in EXCLUDED_ITEM_IDS
 
-    extra_entries = [e for e in entries if is_extra(e)]
-    other_entries = [e for e in entries if not is_extra(e)]
+    excluded_entries = [e for e in entries if is_excluded(e)]
+    other_entries = [e for e in entries if not is_excluded(e)]
     # 収録基準に引っかからず 38 件に満たないまま client.rs を書くと、配布物に数値が混ざる。
-    if len(extra_entries) != len(EXTRA_ITEM_IDS):
+    if len(excluded_entries) != len(EXCLUDED_ITEM_IDS):
         sys.exit(
-            f"配布物から外す装備が {len(extra_entries)} 件しか見つかりません"
-            f"(EXTRA_ITEM_IDS は {len(EXTRA_ITEM_IDS)} 件)。client.rs を書かずに中断します"
+            f"収録しない装備が {len(excluded_entries)} 件しか見つかりません"
+            f"(EXCLUDED_ITEM_IDS は {len(EXCLUDED_ITEM_IDS)} 件)。client.rs を書かずに中断します"
             "(docs/adr/009-public-release.md)。"
         )
 
-    # 追加装備の JSON(downloaded.rs の DTO)は効果の欄を持たない。効果つきが混ざったら形を足す合図。
-    if any(e["damage_effects"] or e["survival_effects"] for e in extra_entries):
-        sys.exit("追加装備に装着時効果つきの行があります。extra-equipment.json の形に効果を足してください。")
-
     write_rust(other_entries)
-    write_extra_equipment_json(extra_entries)
 
     print(f"抽出行(対象部位・EquippableItemTemplate): {len(rows)} 件(uniq item_id 抽出は行っていない、部位フィルタ後 {len(candidates)} 件)", file=sys.stderr)
-    print(f"収録件数: {len(entries)} 件(うち追加装備 {len(extra_entries)} 件は client.rs に書かず extra-equipment.json へ)", file=sys.stderr)
+    print(f"収録件数: {len(other_entries)} 件(最上位 {len(excluded_entries)} 件は収録しない)", file=sys.stderr)
     print(f"既存カタログと同名で突き合わせ対象: {match_total} 件 / 完全一致: {match_exact} 件 / 不一致: {len(mismatches)} 件", file=sys.stderr)
     for m in mismatches[:10]:
         print(f"  不一致: {m}", file=sys.stderr)
@@ -645,47 +621,6 @@ def write_rust(entries: list[dict]) -> None:
     lines.append("}")
     lines.append("")
     OUT_PATH.write_text("\n".join(lines), encoding="utf-8")
-
-
-def pascal_to_snake(name: str) -> str:
-    """Rust enum バリアント名(PascalCase)→ serde `rename_all = "snake_case"` と同じ形。"""
-    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-
-
-def write_extra_equipment_json(entries: list[dict]) -> None:
-    """追加装備(client.rs から除外ぶん)を、解除時に R2 から取得する形で書き出す。
-    スキーマは `crates/gamedata/src/equipment_catalog/downloaded.rs` の DTO と対で決めている。
-    """
-    stat_keys = [key for _p, key in STAT_COLUMNS]
-
-    def values(triple_csv: str) -> dict:
-        parts = [int(x) for x in triple_csv.split(", ")]
-        return dict(zip(stat_keys, parts))
-
-    items = []
-    for e in entries:
-        items.append({
-            "id": e["id"],
-            "slot": pascal_to_snake(e["slot"]),
-            "name": e["name"],
-            "values_min": values(e["vmin"]),
-            "values_max": values(e["vmax"]),
-            "enchant_total_caps": values(e["vcap"]),
-            "weapon_class": pascal_to_snake(e["weapon_class"]) if e["weapon_class"] else None,
-            "wrist_type": pascal_to_snake(e["wrist_type"]) if e["wrist_type"] else None,
-            "usable_by": e["usable_by"],
-            "source": {
-                "page": f'client DB {e["source_file"]} ItemId {e["item_id"]}',
-                "retrieved_on": EXTRA_RETRIEVED_ON,
-                "note": f"収録理由: {REASON_LABELS[e['reason']]}。EquipType {e['source_file']}",
-            },
-        })
-
-    EXTRA_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"retrieved_on": EXTRA_RETRIEVED_ON, "items": items}
-    EXTRA_OUT_PATH.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
 
 
 if __name__ == "__main__":

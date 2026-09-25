@@ -140,11 +140,6 @@ export const inkriSuccessRate = (kind: InkriKind, inkriCount: number) =>
 /** インクリの試行をまとめて実行する(成功するか上限回数に届くまで)。シードが同じなら結果も同じ */
 export const runInkriAttempts = (request: InkriAttemptRequest) =>
   invoke<InkriBatchResult>("run_inkri_attempts", { request });
-/** 「追加機能の解除」で R2 から取得した追加装備を合流させる。呼び出しは unlock.svelte.ts */
-export const installDownloadedEquipment = (json: string) =>
-  invoke<number>("install_downloaded_equipment", { json });
-/** 合流済みの追加装備の id 一覧。ロック中に候補から外す判定に使う(unlock.svelte.ts) */
-export const listDownloadedEquipmentIds = () => invoke<string[]>("list_downloaded_equipment_ids");
 export const listEquipmentAbilities = () => invoke<EquipmentAbilityView[]>("list_equipment_abilities");
 /** 部位の装備候補。キャラの装備可能区分と主軸スキルで適合度を付け、値の大きい順に並べて返す */
 export const listEquipmentCandidates = (

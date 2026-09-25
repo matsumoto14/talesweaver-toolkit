@@ -13,9 +13,7 @@
   import FilePick from "./ui/FilePick.svelte";
   import Modal from "./ui/Modal.svelte";
   import { reportError, reportNotice } from "./toast.svelte";
-  import {
-    fetchLockedEquipment, setUnlocked, unlock, UNLOCK_TAP_WINDOW_MS, UNLOCK_TAPS,
-  } from "./unlock.svelte";
+  import { setUnlocked, unlock, UNLOCK_TAP_WINDOW_MS, UNLOCK_TAPS } from "./unlock.svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -37,7 +35,7 @@
   // バージョン表記を続けて押すとロックを切り替える(unlock.svelte.ts)。見た目は変えない
   let taps = 0;
   let lastTapAt = 0;
-  async function tapVersion() {
+  function tapVersion() {
     const now = Date.now();
     taps = now - lastTapAt > UNLOCK_TAP_WINDOW_MS ? 1 : taps + 1;
     lastTapAt = now;
@@ -45,17 +43,7 @@
     taps = 0;
     const turningOn = !unlock.on;
     setUnlocked(turningOn);
-    if (!turningOn) {
-      reportNotice(t("追加機能を無効にしました"));
-      return;
-    }
-    // OFF → ON のときだけ取りに行く(ローカルに残っているぶんは消さない)
-    try {
-      const count = await fetchLockedEquipment();
-      reportNotice(t("追加機能を有効にしました(追加装備 {count} 件を取得)", { count }));
-    } catch (error) {
-      reportError(t("追加装備を取得できませんでした: {error}", { error: errorMessage(error) }));
-    }
+    reportNotice(turningOn ? t("追加機能を有効にしました") : t("追加機能を無効にしました"));
   }
 
   /** 全部を JSON 1 ファイルにして保存する。預け先はユーザーが選ぶ(保存先を勝手に決めない) */

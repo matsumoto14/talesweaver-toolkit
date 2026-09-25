@@ -330,12 +330,6 @@ struct CanSeparateMeasurementArgs {
     attacks: Vec<Option<i64>>,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct InstallDownloadedEquipmentArgs {
-    json: String,
-}
-
 /// Tauri の `invoke` と同じ形。`command` で分岐して `commands` crate を呼ぶ。
 #[wasm_bindgen]
 pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
@@ -347,7 +341,6 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "list_element_sources" => ok(commands::list_element_sources()),
         "list_contents" => ok(commands::list_contents()),
         "list_equipment_catalog" => ok(commands::list_equipment_catalog()),
-        "list_downloaded_equipment_ids" => ok(gamedata::list_downloaded_equipment_ids()),
         "list_inkri_targets" => ok(commands::list_inkri_targets()),
         "eta_scroll_price" => ok(commands::eta_scroll_price()),
         "list_equipment_abilities" => ok(commands::list_equipment_abilities()),
@@ -410,16 +403,6 @@ pub fn invoke(command: &str, args: JsValue) -> Result<JsValue, JsValue> {
         "validate_buff_set" => {
             let a: ValidateBuffSetArgs = args_of(command, args)?;
             done(commands::validate_buff_set(a.name, a.choices))
-        }
-        // 合流はこの WASM インスタンスの中だけ。ブラウザでの保存と起動時の読み直しは
-        // apps/desktop/src/api/invoke.wasm.ts(localStorage)が持つ(デスクトップ版は
-        // commands.rs がローカルファイルに保存する)。
-        "install_downloaded_equipment" => {
-            let a: InstallDownloadedEquipmentArgs = args_of(command, args)?;
-            match gamedata::install_downloaded_equipment(&a.json) {
-                Ok(count) => ok(count),
-                Err(message) => Err(to_error(CommandError { message, location: None })),
-            }
         }
         "resolve_character_skill_effects" => {
             let a: MasteriesArgs = args_of(command, args)?;

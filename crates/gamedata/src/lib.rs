@@ -43,7 +43,7 @@ pub use equipment_catalog::{
     character_wrist_bonus_material, enhance_grade_multiplier,
     enhance_multiplier, enhance_multiplier_range, enhance_rates, enhance_rates_for_type,
     equipment_abilities, equipment_catalog, equipment_enhance_type, find_equipment_item,
-    install_downloaded_equipment, item_damage_contributions, list_downloaded_equipment_ids,
+    item_damage_contributions,
     ArmorClass, ArmorEnhanceRates,
     EquipmentItem, WeaponClass, WeaponSystem, WristType, ENHANCE_SOURCE,
     EQUIPMENT_ABILITY_SOURCE, EQUIPMENT_CATALOG_SOURCE,
