@@ -11,13 +11,15 @@ import {
   getAppDataCandidates,
   getCorrectionsForUnitIds,
   getMeta,
+  getOutline,
+  getPageLeads,
   getPageUrls,
   searchUnits,
   collectCandidates,
 } from "./retrieve";
 import type { Candidate, ColumnNote } from "./retrieve";
 import { buildDict, fold, normalize, segment, toQuery } from "./segment";
-import { ASPECT_VOCAB } from "./prompt";
+import { ASPECT_VOCAB, renderPageDirectory } from "./prompt";
 import type { PrevTurn } from "./prompt";
 import { PAGE_SLOTS } from "./schema";
 import type { Understand } from "./schema";
@@ -51,6 +53,8 @@ export interface Env {
   POW_DIFFICULTY_BITS?: string;
   AI_GATEWAY_URL?: string;
   SELECT_MODEL?: string;
+  /** 選択・回す道の effort。空なら送らない(claude.ts effortConfig)。 */
+  SELECT_EFFORT?: string;
   UNDERSTAND_MODEL?: string;
   RATE_LIMIT_PER_DAY?: string;
   ASK_BURST?: { limit: (opts: { key: string }) => Promise<{ success: boolean }> };
@@ -77,6 +81,8 @@ const QUESTION_LIMIT = 200;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 20;
 const NONE_SEARCH_LIMIT = 10;
+/** 節選びに見せる目次の上限(理解が選んだ最大 3 ページぶんを合わせて)。 */
+const MAX_OUTLINE_ENTRIES = 80;
 
 /** `wrangler secret put` で入れる 2 つ。ルートごとに要る分だけ確認する。 */
 function missingSecrets(env: Env, need: readonly ("ANTHROPIC_API_KEY" | "NONCE_SECRET")[]): string[] {
@@ -127,7 +133,7 @@ async function loadAliasIndex(
   return aliasCache;
 }
 
-/** 全ページ名。結論文の固有名詞照合にだけ使う(起動中のインスタンスで使い回す)。 */
+/** 全ページ名。理解に渡すページ一覧・理解が選んだ名前の実在確認・結論文の固有名詞照合に使う(起動中のインスタンスで使い回す)。 */
 let pageNamesCache: { db: D1Database; names: string[] } | null = null;
 
 async function loadPageNames(db: D1Database): Promise<string[]> {
@@ -135,6 +141,16 @@ async function loadPageNames(db: D1Database): Promise<string[]> {
   const names = await getAllPageNames(db);
   pageNamesCache = { db, names };
   return names;
+}
+
+/** 理解に渡すページ一覧(1 行説明つき)。毎回同じ文字列になるので起動中のインスタンスで使い回す(キャッシュも効く)。 */
+let pageDirectoryCache: { db: D1Database; text: string } | null = null;
+
+async function loadPageDirectory(db: D1Database, pageNames: string[]): Promise<string> {
+  if (pageDirectoryCache && pageDirectoryCache.db === db) return pageDirectoryCache.text;
+  const text = renderPageDirectory(pageNames, await getPageLeads(db));
+  pageDirectoryCache = { db, text };
+  return text;
 }
 
 /** 同じページのユニットが上位を埋め尽くさないよう、1 ページあたりの件数を抑える。 */
@@ -229,7 +245,7 @@ async function search(url: URL, env: Env): Promise<Response> {
   const syncedAt = meta.synced_at ?? null;
 
   const { words: dict, byName } = await loadAliasIndex(env.WIKI);
-  const tokens = segment(rawQ, dict);
+  const tokens = segment(rawQ, dict, { query: true });
   const query = toQuery(tokens);
 
   if (!query) {
@@ -358,7 +374,7 @@ async function aliasExactMatch(db: D1Database, question: string): Promise<boolea
   return row !== null;
 }
 
-type ProgressStep = "understand" | "search" | "select" | "app_data" | "outline" | "rows";
+type ProgressStep = "understand" | "search" | "select" | "app_data" | "outline" | "rows" | "section";
 type ProgressFn = (step: ProgressStep) => void;
 const noopProgress: ProgressFn = () => {};
 
@@ -520,13 +536,9 @@ async function findPagesByTokens(
     seen.add(page);
     out.push({ name, page });
   };
+  // 別名の完全一致だけ。部分一致(LIKE)は「シード」→ キョンシードール、「魔法」→ 魔法銃 のような雑音で
+  // 理解を乱していた(2026-09-26)。一覧に無い言い方は、理解がページ一覧(1 行説明つき)から読み替える
   for (const t of tokens) for (const page of byName.get(t) ?? []) push(t, page);
-  // 語ごとの LIKE は D1 のフルスキャンなので、走査する語は先頭 8 語まで
-  for (const t of tokens.slice(0, 8)) {
-    if (out.length >= PAGE_SLOTS.length) break;
-    if (t.length < 2) continue;
-    for (const hit of await findPages(db, t)) push(hit.name, hit.page);
-  }
   return out.slice(0, PAGE_SLOTS.length);
 }
 
@@ -550,9 +562,10 @@ async function tryLoop(
   followupPage: string | null,
   progress: ProgressFn,
   trace: AskTrace,
+  pages: string[],
 ): Promise<RunAskResult | null> {
   const result = await agent.runAgentLoop(
-    { db: env.WIKI, env, question, state, columnNotes, dict, prev },
+    { db: env.WIKI, env, question, state, columnNotes, dict, prev, pages },
     (step) => progress(step),
   );
   if (!result) return null;
@@ -623,14 +636,16 @@ async function runAsk(
   const { words: dict, byName, subjectByToken } = await loadAliasIndex(env.WIKI);
   // ページ名の候補: 質問の分かち書きの語が別名に完全一致したページを先に、次に語を含む別名のページ。
   // 質問文全体を LIKE に投げない(当たらないうえ、長い文は D1 が「pattern too complex」で拒む)
-  const questionTokens = segment(question, dict);
+  const questionTokens = segment(question, dict, { query: true });
   const pageHits = await findPagesByTokens(env.WIKI, questionTokens, byName);
-  const pageSlots = pageHits.slice(0, PAGE_SLOTS.length).map((h, i) => ({ slot: PAGE_SLOTS[i]!, page: h.page }));
+  const pageNames = await loadPageNames(env.WIKI);
 
   progress("understand");
   let understanding: Understand;
   if (callUnderstand) {
-    const understood = await claude.understand(env, question, prev, pageSlots);
+    const understood = await claude.understand(
+      env, question, prev, pageHits.map((h) => h.page), await loadPageDirectory(env.WIKI, pageNames),
+    );
     if (understood) {
       understanding = understood.understanding;
       trace.calls.push({ ...understood.call, kind: "understand" });
@@ -640,9 +655,10 @@ async function runAsk(
   } else {
     understanding = codeFallbackUnderstand();
   }
-  // 記録は枠(p01…)ではなくページ名で持つ(管理画面で読めるように)
-  const slotPage = new Map(pageSlots.map((p) => [p.slot, p.page]));
-  trace.understanding = { ...understanding, pages: understanding.pages.map((p) => slotPage.get(p) ?? p) };
+  // 実在しないページ名(写し間違い・作り話)は捨てる。上限 3 件
+  const pageNameSet = new Set(pageNames);
+  understanding = { ...understanding, pages: understanding.pages.filter((p) => pageNameSet.has(p)).slice(0, 3) };
+  trace.understanding = understanding;
 
   // 誤分類の歯止め 2 つ: 質問の全文が別名に一致する / 質問の語で索引に当たりがある(「聖水はどうやって稼ぐ?」を
   // 雑談と判定した実例 2026-09-23)。どちらかなら wiki として進める(挨拶は語が索引に無いので変わらない)
@@ -681,9 +697,7 @@ async function runAsk(
   // 1 問につき回す道は 1 回だけ(hops:multi で先に試したら、安い道が駄目でも二度目は試さない)。
   let loopTried = false;
 
-  const pageNames = await loadPageNames(env.WIKI);
-  const slotToPage = new Map(pageSlots.map((p) => [p.slot, p.page]));
-  const understoodPages = understanding.pages.map((p) => slotToPage.get(p)).filter((p): p is string => !!p);
+  const understoodPages = understanding.pages;
   const boostPages = understoodPages.length > 0 ? understoodPages : pageHits.slice(0, 3).map((h) => h.page);
 
   // 続き(followup): 直前のページが実在し、理解が続きと判定したときだけ加点し、応答に載せる。
@@ -707,18 +721,36 @@ async function runAsk(
     loopTried = true;
     const loopResult = await tryLoop(
       env, question, state, prev, columnNoteRows, dict, syncedAt, playbook,
-      pageNames, columnDict, "loop", hopsDropped, followupPage, progress, trace,
+      pageNames, columnDict, "loop", hopsDropped, followupPage, progress, trace, understoodPages,
     );
     if (loopResult) return outcome(loopResult);
   }
 
-  const termTokens = understanding.terms.slice(0, 6).flatMap((t) => segment(t.slice(0, 20), dict));
+  const termTokens = understanding.terms.slice(0, 6).flatMap((t) => segment(t.slice(0, 20), dict, { query: true }));
+  // 理解が選んだページの名前も検索語にする(質問が「エルソ」、wiki が「Elso」のように書き方が違っても当たる)
+  const pageTokens = understoodPages.flatMap((p) => segment(p, dict, { query: true }));
   const aspectTokens: string[] = []; // 観点(aspects)は段階 3 で理解の欄に戻す。それまで語彙の加点は無し
-  const query = toQuery([...questionTokens, ...termTokens, ...aspectTokens]);
+  const query = toQuery([...questionTokens, ...termTokens, ...pageTokens, ...aspectTokens]);
   if (!query) return outcome({ status: 200, body: await noneAnswer(env, "no_terms", null, syncedAt, hopsDropped, playbook) });
 
+  // 節選び: 理解がページを選んだら、その目次から答えのありそうな節を LLM に選ばせる。全文検索は質問の語が
+  // 本文に無いと節に届かない(「毎週稼げる最大」↔「週間獲得量上限」)。落ちたら検索だけで進む
+  let pinnedSections: { page: string; anchor: string }[] = [];
+  if (callUnderstand && understoodPages.length > 0) {
+    const outline = (await Promise.all(understoodPages.map(async (page) =>
+      (await getOutline(env.WIKI, page)).map((o) => ({ page, anchor: o.anchor, section: o.section })),
+    ))).flat().slice(0, MAX_OUTLINE_ENTRIES);
+    const picked = await claude.pickSections(env, question, outline);
+    if (picked) {
+      trace.calls.push({ ...picked.call, kind: "section" });
+      pinnedSections = picked.sections;
+    }
+  }
+
   progress("search");
-  let candidates = await collectCandidates(env.WIKI, { query, boostPages, state, columnNotes: columnNoteRows });
+  let candidates = await collectCandidates(env.WIKI, {
+    query, boostPages, pinnedSections, state, columnNotes: columnNoteRows,
+  });
   // 順序頑健性の測定用(ローカルの .dev.vars にだけ置く)。候補の並びを逆にして同じ評価を回し、選択の揺れを見る
   if ((env as { EVAL_REVERSE_CANDIDATES?: string }).EVAL_REVERSE_CANDIDATES === "1") candidates = [...candidates].reverse();
   // 静的データだけの項目(段階 3 spec B 7): 質問の語 + 理解の terms が完全一致した subject だけ足す
@@ -743,7 +775,7 @@ async function runAsk(
     loopTried = true;
     return tryLoop(
       env, question, state, prev, columnNoteRows, dict, syncedAt, playbook,
-      pageNames, columnDict, "cheap_then_loop", hopsDropped, followupPage, progress, trace,
+      pageNames, columnDict, "cheap_then_loop", hopsDropped, followupPage, progress, trace, understoodPages,
     );
   };
 

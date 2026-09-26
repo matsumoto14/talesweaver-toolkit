@@ -351,7 +351,7 @@ export const ADMIN_HTML = `<!doctype html>
     const body = log.body || {};
     const u = log.understanding;
     const cands = (log.candidates || []).length;
-    const und = sumCalls(calls, ["understand"]);
+    const und = sumCalls(calls, ["understand", "section"]);
     const sel = sumCalls(calls, ["select", "loop"]);
     const loopN = calls.filter((c) => c.kind === "loop").length;
     const dropped = (body.dropped || []).filter((d) => d.what !== "route" && d.what !== "kind");
@@ -488,7 +488,7 @@ export const ADMIN_HTML = `<!doctype html>
 
   function renderCalls(calls) {
     if (!calls || calls.length === 0) return "<p class='muted'>(LLM の呼び出しなし)</p>";
-    const name = { understand: "理解", select: "選択", loop: "回す道" };
+    const name = { understand: "理解", section: "節選び", select: "選択", loop: "回す道" };
     return "<table><thead><tr><th>#</th><th>段</th><th class='num'>入力</th><th class='num'>キャッシュ読</th><th class='num'>出力</th><th class='num'>時間</th><th class='num'>費用</th></tr></thead><tbody>" +
       calls.map((c) => "<tr><td>" + (c.seq + 1) + "</td><td>" + esc(name[c.kind] ?? c.kind) + "</td><td class='num'>" + num(c.input_tokens + c.cache_creation_tokens) +
         "</td><td class='num'>" + num(c.cache_read_tokens) + "</td><td class='num'>" + num(c.output_tokens) + "</td><td class='num'>" + sec(c.ms) +
@@ -526,7 +526,7 @@ export const ADMIN_HTML = `<!doctype html>
       const data = await api("/api/logs/" + id);
       const log = data.log;
       const a = analyze(log, data.calls || [], data.reactions || []);
-      const total = sumCalls(data.calls || [], ["understand", "select", "loop"]);
+      const total = sumCalls(data.calls || [], ["understand", "section", "select", "loop"]);
       detail.innerHTML =
         "<p class='question'>" + esc(log.question) + "</p>" +
         "<div class='muted'>" + esc(log.at.replace("T", " ").slice(0, 16)) + " · " + sec(log.ms) + " · " + usd(total ? total.cost : 0, 5) +

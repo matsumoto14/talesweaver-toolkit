@@ -12,7 +12,7 @@
 // 安い道だけの数字を測る(段階 1 の数字と比べるため)。既定(--no-loop 無し)は回す道あり。
 //
 // 実行: node --experimental-strip-types eval/run.ts [--base http://127.0.0.1:8787] [--limit 20]
-//       [--ask] [--no-understand] [--no-loop] [--verbose]
+//       [--ask] [--no-understand] [--no-loop] [--verbose] [--only q01,v01]
 import { readFileSync } from "node:fs";
 
 interface Expect { page: string; text_contains?: string }
@@ -21,6 +21,10 @@ interface Question {
   kind: "wiki" | "smalltalk" | "other" | "followup" | "absent" | "damage_calc";
   question: string;
   paraphrase?: boolean;
+  /** 質問と wiki の表記が食い違う(英字 ↔ カタカナ・俗称・ゲーム内の表示名) */
+  variant?: boolean;
+  /** "all" なら expect を全部満たして正解(節全体・リンク先まで読まないと答えられない問)。既定はどれか 1 つ */
+  need?: "all";
   expect: Expect[];
   state?: Record<string, number>;
   prev?: { question: string; page: string };
@@ -41,7 +45,10 @@ const noUnderstand = process.argv.includes("--no-understand");
 const noLoop = process.argv.includes("--no-loop");
 
 const file = new URL("./questions.json", import.meta.url);
-const questions = (JSON.parse(readFileSync(file, "utf8")) as { questions: Question[] }).questions;
+// --only v01,v02,s01: 指定した問だけ回す(LLM を呼ぶ評価の費用を絞る)
+const only = arg("--only", "").split(",").map((s) => s.trim()).filter(Boolean);
+const questions = (JSON.parse(readFileSync(file, "utf8")) as { questions: Question[] }).questions
+  .filter((q) => only.length === 0 || only.includes(q.id));
 
 const matches = (hit: Hit, e: Expect): boolean =>
   hit.page === e.page && (e.text_contains === undefined || hit.snippet.includes(e.text_contains));
@@ -112,7 +119,8 @@ async function ask(token: string, q: Question): Promise<AskResponse> {
       question: q.question,
       state: q.state ?? {},
       prev: q.prev ?? null,
-      ...((noUnderstand || noLoop) ? { debug: { understand: !noUnderstand, loop: !noLoop } } : {}),
+      // 答えのキャッシュは通さない(前の版の答えが返ると比較にならない)
+      debug: { understand: !noUnderstand, loop: !noLoop, cache: false },
     }),
   });
   const body = (await res.json()) as AskResponse & { error?: string };
@@ -139,7 +147,8 @@ async function runAsk(): Promise<void> {
     const res = await ask(token, q);
     const steps = res.steps ?? [];
     const units = steps.flatMap((s) => s.units);
-    const unitHit = q.expect.some((e) => units.some((u) => (e.text_contains === undefined ? true : unitMatches(u, e))));
+    const hitOf = (e: Expect): boolean => units.some((u) => unitMatches(u, e));
+    const unitHit = q.need === "all" ? q.expect.every(hitOf) : q.expect.some(hitOf);
     const pageHit = q.expect.length === 0 ? false : q.expect.some((e) =>
       units.some((u) => u.id.includes(`${e.page}/`) || u.id.includes(`:${e.page}/`)),
     );
@@ -229,9 +238,15 @@ async function runSearch(): Promise<void> {
     const res = await fetch(`${base}/search?q=${encodeURIComponent(q.question)}&limit=${limit}`);
     const body = (await res.json()) as SearchResponse;
     let rank: number | null = null;
-    body.search.forEach((hit, i) => {
-      if (rank === null && q.expect.some((e) => matches(hit, e))) rank = i + 1;
-    });
+    if (q.need === "all") {
+      // 全部そろった位置(最後に満たした期待の順位)を rank にする
+      const ranks = q.expect.map((e) => body.search.findIndex((hit) => matches(hit, e)));
+      rank = ranks.every((r) => r >= 0) ? Math.max(...ranks) + 1 : null;
+    } else {
+      body.search.forEach((hit, i) => {
+        if (rank === null && q.expect.some((e) => matches(hit, e))) rank = i + 1;
+      });
+    }
     const top = body.search[0] ? `${body.search[0].page} › ${body.search[0].section}` : "(0 件)";
     const pageOk = body.search.some((hit) => q.expect.some((e) => e.page === hit.page));
     rows.push({ id: q.id, ok: rank !== null, pageOk, rank, query: body.query, top });
@@ -243,7 +258,8 @@ async function runSearch(): Promise<void> {
     return { n: rs.length, hit: rs.filter((r) => r.ok).length, page: rs.filter((r) => r.pageOk).length };
   };
   const groups: [string, (q: Question) => boolean][] = [
-    ["wiki(ページ名あり)", (q) => q.kind === "wiki" && !q.paraphrase],
+    ["wiki(ページ名あり)", (q) => q.kind === "wiki" && !q.paraphrase && !q.variant],
+    ["wiki(表記・俗称)", (q) => q.kind === "wiki" && q.variant === true],
     ["wiki(言い換え)", (q) => q.kind === "wiki" && q.paraphrase === true],
     ["続きの質問", (q) => q.kind === "followup"],
     ["全体", (q) => q.expect.length > 0],

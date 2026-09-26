@@ -1,7 +1,7 @@
 // renderCandidates(): 候補の KV 形式描画(§選択の契約 s4)。
 import { describe, expect, it } from "vitest";
 
-import { renderCandidates, renderUnderstandPrompt } from "../src/prompt";
+import { renderCandidates, renderPageDirectory, renderUnderstandPrompt } from "../src/prompt";
 import type { Candidate } from "../src/retrieve";
 
 describe("renderCandidates", () => {
@@ -51,11 +51,21 @@ describe("renderCandidates", () => {
 
 describe("renderUnderstandPrompt", () => {
   it("直前が無ければ (なし)、あれば質問とページを書く", () => {
-    const withoutPrev = renderUnderstandPrompt("質問", null, [{ slot: "p01", page: "テシスコア" }]);
+    const withoutPrev = renderUnderstandPrompt("質問", null, ["テシスコア"]);
     expect(withoutPrev).toContain("【直前】(なし)");
-    expect(withoutPrev).toContain("- p01: テシスコア");
+    expect(withoutPrev).toContain("【語が一致したページ】テシスコア");
 
     const withPrev = renderUnderstandPrompt("続きの質問", { question: "前の質問", page: "テシスコア" }, []);
     expect(withPrev).toContain('質問「前の質問」/ ページ「テシスコア」');
+  });
+});
+
+describe("renderPageDirectory", () => {
+  it("固有名の系列・運営ページを外し、名前順で並べる(キャッシュが効くよう毎回同じ文字列)", () => {
+    const dir = renderPageDirectory(["テシスコア", "Monster/アーカン", "Elso", "コメント/Elso", "MenuBar"]);
+    expect(dir).toBe(["【ページ一覧】(Tale Wiki のページ名 — 冒頭の一文)", "Elso", "テシスコア"].join("\n"));
+    // 冒頭の断片があれば 1 行説明として添える(名前だけでは中身が引けない)
+    const withLeads = renderPageDirectory(["Elso"], new Map([["Elso", "一部要素でSEEDの代わりに消費することができる"]]));
+    expect(withLeads).toContain("Elso — 一部要素でSEEDの代わりに消費することができる");
   });
 });

@@ -13,7 +13,7 @@ import type { RunAskResult } from "./index";
 
 /** 1 回の LLM 呼び出しの記録。kind で理解・選択・回す道の往復を区別する。 */
 export interface AskCallTrace extends CallInfo {
-  kind: "understand" | "select" | "loop";
+  kind: "understand" | "section" | "select" | "loop";
 }
 
 export interface AskTrace {

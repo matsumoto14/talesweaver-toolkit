@@ -58,6 +58,7 @@ npx wrangler d1 execute tw-wiki --remote --file migrations/001-ask-log.sql -y   
 npx wrangler d1 execute tw-wiki --remote --file migrations/002-ask-log-qkey.sql -y  # 001 の後に 1 回だけ(--file が認証エラーなら中の 1 文を --command で)
 npx wrangler d1 execute tw-wiki --remote --file migrations/003-ask-trace.sql -y
 npx wrangler d1 execute tw-wiki --remote --file migrations/004-diff-import.sql -y   # h 列を足す(schema.sql に無い版へ更新するとき)
+npx wrangler d1 execute tw-wiki --remote --file migrations/005-unit-link-anchor.sql -y   # unit_link にリンク先の節アンカーを足す
 python tools/gamedata/wiki/units.py  # リポジトリルートで。tools/gamedata/wiki/out/units.sql(約 100 MB)を全件投入用に作る
 npx wrangler d1 execute tw-wiki --remote --file ../../tools/gamedata/wiki/out/units.sql -y   # services/api-worker で
 curl https://api.tw-context.dev/health

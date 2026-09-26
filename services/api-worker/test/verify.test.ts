@@ -108,12 +108,17 @@ describe("verify", () => {
     expect(result.dropped).toContainEqual({ what: "unit", id: "r1", why: "state:進化" });
   });
 
-  it("key_check が元行のキー列と一致しなければ落とす", () => {
-    const r = row("r1");
-    const sel = selectionOf({ steps: [{ units: ["r1"], columns: [], key_check: ["進1-強9"] }] });
-    const result = verify(sel, ctxOf([r]));
-    expect(result.steps).toEqual([]);
-    expect(result.dropped).toContainEqual({ what: "unit", id: "r1", why: "key_check" });
+  it("key_check が元行と食い違えば、同じ表にそのキーの行があれば差し替え、無ければ札のまま残す", () => {
+    // 実例(2026-09-26 q51): キーの写し間違い 1 件で唯一の根拠が落ち「答えなし」になっていた
+    const r1 = row("r1");
+    const r2 = row("r2", { row_key: "進1-強9", cells: { "進化": "1", "強化": "9", "成功率": "50%" }, nums: { "進化": 1, "強化": 9 } });
+    const swapped = verify(selectionOf({ steps: [{ units: ["r1"], columns: [], key_check: ["進1-強9"] }] }), ctxOf([r1, r2]));
+    expect(swapped.steps[0]?.units.map((u) => u.id)).toEqual(["r2"]);
+    expect(swapped.dropped).toContainEqual({ what: "unit", id: "r1", why: "key_check:swap:r2" });
+
+    const kept = verify(selectionOf({ steps: [{ units: ["r1"], columns: [], key_check: ["存在しないキー"] }] }), ctxOf([r1]));
+    expect(kept.steps[0]?.units.map((u) => u.id)).toEqual(["r1"]);
+    expect(kept.dropped).toContainEqual({ what: "unit", id: "r1", why: "key_check:kept" });
   });
 
   it("実在しない列は抜き、キー列(先頭列)は常に出し、0 列ならその表の既定列で描く", () => {
@@ -166,6 +171,33 @@ describe("verify", () => {
     expect(result.dropped).toContainEqual({ what: "lead", why: "ref_not_selected:p2" });
   });
 
+  it("ID にピリオドが入る行も参照できる(最後のピリオドで区切る)", () => {
+    // 実例(2026-09-26 q51): 「喪失の耐魔力 (LV.310)」の「.」で区切りを取り違え、結論文ごと落ちていた
+    const r = row("r:P/a/0/喪失 (LV.310)");
+    const sel = selectionOf({
+      verdict: "yes", basis: [r.id], lead: `成功率は{{${r.id}.成功率}}ッピ。`,
+      steps: [{ units: [r.id], columns: [], key_check: ["進0-強0"] }],
+    });
+    expect(verify(sel, ctxOf([r])).lead).toEqual([{ t: "成功率は" }, { ref: r.id, col: "成功率" }, { t: "ッピ。" }]);
+  });
+
+  it("短い段落への参照は本文に置き換え、形の崩れた参照は結論文ごと捨てる", () => {
+    // 実例(2026-09-26 v01): 段落に「{{u02.所持Elso上限}}」と書き、ref_col で結論文が落ちていた
+    const p1 = paragraph("p1", { text: "所持Elso上限: 1000万Elso" });
+    const inline = verify(selectionOf({
+      verdict: "yes", basis: ["p1"], lead: "{{p1.所持Elso上限}}ッピ。",
+      steps: [{ units: ["p1"], columns: [], key_check: [] }],
+    }), ctxOf([p1]));
+    expect(inline.lead?.map((seg) => ("t" in seg ? seg.t : "")).join("")).toBe("所持Elso上限: 1000万Elsoッピ。");
+
+    const broken = verify(selectionOf({
+      verdict: "yes", basis: ["p1"], lead: "合計は{{u32}}ッピ。",
+      steps: [{ units: ["p1"], columns: [], key_check: [] }],
+    }), ctxOf([p1]));
+    expect(broken.lead).toBeNull();
+    expect(broken.dropped).toContainEqual({ what: "lead", why: "ref_malformed" });
+  });
+
   it("参照先の列が実在しなければ結論文を捨てる", () => {
     const r = row("r1");
     const sel = selectionOf({
@@ -210,23 +242,25 @@ describe("verify", () => {
     expect(result.dropped).toContainEqual({ what: "lead", why: "basis_empty" });
   });
 
-  it("basis が選択集合の外なら lead を捨て、根拠が 1 つも残らないので答えなしに倒す", () => {
+  it("basis に挙げて手順に入れていない候補は手順として足す(手順を空にして根拠だけ書いた答えも残す)", () => {
+    // 実例(2026-09-26 v01・s01): 手順が空で「答えなし」、根拠のユニットが答えに出ない、が起きていた
     const p1 = paragraph("p1");
     const p2 = paragraph("p2");
-    const sel = selectionOf({
+    const added = verify(selectionOf({
       verdict: "yes", basis: ["p2"], lead: "そうだッピ。",
       steps: [{ units: ["p1"], columns: [], key_check: [] }],
-    });
-    const result = verify(sel, ctxOf([p1, p2]));
-    expect(result.steps).toEqual([]);
-    expect(result.lead).toBeNull();
-    expect(result.dropped).toContainEqual({ what: "lead", why: "basis_not_selected:p2" });
+    }), ctxOf([p1, p2]));
+    expect(added.steps.flatMap((st) => st.units.map((u) => u.id))).toEqual(["p1", "p2"]);
+    expect(added.lead).not.toBeNull();
+
+    const onlyBasis = verify(selectionOf({ verdict: "yes", basis: ["p1"], lead: "そうだッピ。", steps: [] }), ctxOf([p1]));
+    expect(onlyBasis.steps.flatMap((st) => st.units.map((u) => u.id))).toEqual(["p1"]);
   });
 
   it("basis が 1 つでも選択集合に残っていれば、lead が別の理由で落ちても手順は残す", () => {
     const p1 = paragraph("p1");
     const sel = selectionOf({
-      verdict: "yes", basis: ["p1"], lead: "あ".repeat(121),
+      verdict: "yes", basis: ["p1"], lead: "あ".repeat(241),
       steps: [{ units: ["p1"], columns: [], key_check: [] }],
     });
     const result = verify(sel, ctxOf([p1]));
@@ -235,10 +269,10 @@ describe("verify", () => {
     expect(result.dropped).toContainEqual({ what: "lead", why: "too_long" });
   });
 
-  it("lead が 120 字を超えたら捨てる", () => {
+  it("lead が 240 字を超えたら捨てる", () => {
     const p1 = paragraph("p1");
     const sel = selectionOf({
-      verdict: "none", lead: "あ".repeat(121),
+      verdict: "none", lead: "あ".repeat(241),
       steps: [{ units: ["p1"], columns: [], key_check: [] }],
     });
     const result = verify(sel, ctxOf([p1]));

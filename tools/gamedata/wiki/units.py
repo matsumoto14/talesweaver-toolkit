@@ -86,8 +86,8 @@ _COLOR_BLOCK = re.compile(r"(?:COLOR|SIZE|BGCOLOR)\([^)]*\)\{([^}]*)\}")
 _MEANINGFUL_TEXT = re.compile(r"[一-鿿゠-ヿぁ-ゟa-zA-Z0-9]")
 
 
-def _split_link(inner: str) -> tuple[str, str]:
-    """`[[...]]` の中身を (表示, ページ名) に。`表示>ページ#anchor` / `表示:URL` / `ページ`。
+def _split_link(inner: str) -> tuple[str, str, str | None]:
+    """`[[...]]` の中身を (表示, ページ名, アンカー) に。`表示>ページ#anchor` / `表示:URL` / `ページ`。
 
     表示部分は `[雑貨店]` のように角括弧を含むことがある(`[[[雑貨店]>Shop/…]]`)。
     """
@@ -98,17 +98,21 @@ def _split_link(inner: str) -> tuple[str, str]:
     else:
         display = target = inner
     display = display.strip().strip("[]").strip()
-    target = target.split("#", 1)[0].strip()
-    return display, target
+    target = target.strip()
+    anchor: str | None = None
+    if "#" in target:
+        target, anchor = target.split("#", 1)
+        anchor = anchor.strip() or None
+    return display, target.strip(), anchor
 
 
-def extract_links(text: str) -> list[str]:
-    """`[[名前]]` / `[[表示>名前]]` のページ名部分を出現順で返す(アンカーと URL は落とす)。"""
-    out = []
+def extract_links(text: str) -> list[tuple[str, str | None]]:
+    """`[[名前]]` / `[[表示>名前#anchor]]` を (ページ名, アンカー) の組で出現順に返す(URL は落とす)。"""
+    out: list[tuple[str, str | None]] = []
     for m in _LINK.finditer(text):
-        _, target = _split_link(m.group(1))
+        _, target, anchor = _split_link(m.group(1))
         if target and "://" not in target:
-            out.append(target)
+            out.append((target, anchor))
     return out
 
 
@@ -220,12 +224,16 @@ class Heading:
 @dataclass
 class Paragraph:
     text: str
+    # 装飾を外す前の原文から拾ったリンク((ページ名, アンカー) の組、出現順)。
+    # 等価比較には含めない(既存のテストが `Paragraph(text)` の 1 引数で比べているため)。
+    links: list[tuple[str, str | None]] = field(default_factory=list, compare=False)
 
 
 @dataclass
 class ListItem:
     text: str
     run_id: int  # 連続する箇条書きの塊の通し番号(ページ内)
+    links: list[tuple[str, str | None]] = field(default_factory=list, compare=False)
 
 
 @dataclass
@@ -255,7 +263,7 @@ def parse_blocks(source: str) -> list[Block]:
         if para_buf:
             text = "\n".join(para_buf).strip()
             if text:
-                blocks.append(Paragraph(strip_decorations(text)))
+                blocks.append(Paragraph(strip_decorations(text), links=extract_links(text)))
             para_buf = []
 
     def flush_table() -> None:
@@ -302,7 +310,7 @@ def parse_blocks(source: str) -> list[Block]:
             if not in_list_run:
                 list_run += 1
                 in_list_run = True
-            blocks.append(ListItem(strip_decorations(m.group(2)), list_run))
+            blocks.append(ListItem(strip_decorations(m.group(2)), list_run, links=extract_links(m.group(2))))
             continue
         in_list_run = False
 
@@ -587,6 +595,93 @@ def unwind_table(table: Table, normalize_item_catalog: bool = False) -> UnwoundT
     return UnwoundTable(out_columns, out_rows)
 
 
+# --- 表の行のリンク(装飾を外す前の原文から。段階「節をたどる」) --------------------------------
+#
+# `unwind_table` と同じ変換を、文字列でなく (ページ名, アンカー) の組のリストで並行して行う。
+# 繰り返し列展開・名前行伝播は元の生行のリンクをそのまま流用する(best effort。列単位でリンクを
+# 割り振る必要が出るほどリンク付きの表は多くない)。
+
+def resolve_merge_links(table: Table) -> list[list[tuple[str, str | None]]]:
+    """`resolve_merges` と同じ結合規則(`~` / `>`)で、生行 1 つぶんのリンクを列順に集める。"""
+    out: list[list[tuple[str, str | None]]] = []
+    prev: list[str] | None = None
+    width = len(table.header) if table.header else (len(table.rows[0]) if table.rows else 0)
+    for raw in table.rows:
+        row = list(raw) + [""] * (width - len(raw))
+        for i in range(len(row) - 1, -1, -1):
+            if row[i].strip() == ">" and i + 1 < len(row):
+                row[i] = row[i + 1]
+        for i, cell in enumerate(row):
+            if cell.strip() == "~" and prev is not None and i < len(prev):
+                row[i] = prev[i]
+        links: list[tuple[str, str | None]] = []
+        for cell in row:
+            links.extend(extract_links(cell))
+        out.append(links)
+        prev = row
+    return out
+
+
+def _key_value_row_links(table: Table) -> list[list[tuple[str, str | None]]]:
+    """`unwind_key_value_table` と同じ継続規則で、出力行 1 つぶんのリンクを集める。"""
+    out_keys: list[str] = []
+    out_links: list[list[tuple[str, str | None]]] = []
+    key = ""
+    for raw in table.rows:
+        cells = [c.strip() for c in raw]
+        if not cells:
+            continue
+        head = cells[0]
+        if head.startswith("~"):
+            new_key = " ".join(strip_decorations(head[1:]).split())
+            if new_key:
+                key = new_key
+        values = [" ".join(strip_decorations(c).split()) for c in cells[1:] if c.strip() not in ("", ">", "~")]
+        value = " ".join(v for v in values if v)
+        if not value or not key:
+            continue
+        links = [lk for c in cells for lk in extract_links(c)]
+        if out_keys and out_keys[-1] == key:
+            out_links[-1] = out_links[-1] + links
+        else:
+            out_keys.append(key)
+            out_links.append(links)
+    return out_links
+
+
+def table_row_links(
+    table: Table, normalize_item_catalog: bool = False,
+) -> list[list[tuple[str, str | None]]]:
+    """`unwind_table(table, normalize_item_catalog)` の出力行と同じ並び・同じ本数のリンク一覧。"""
+    working = promote_decorated_header(table) if normalize_item_catalog else table
+    if is_key_value_table(working):
+        return _key_value_row_links(working)
+
+    all_links = resolve_merge_links(working)
+    merged = resolve_merges(working)
+    kept_idx = [i for i, r in enumerate(merged) if any(has_meaningful_text(c) for c in r)]
+    row_links = [all_links[i] for i in kept_idx]
+    resolved = [merged[i] for i in kept_idx]
+
+    width = len(working.header) if working.header else (max((len(r) for r in working.rows), default=0))
+    columns = columns_for(working, width)
+    repeat = detect_repeat_group(columns)
+    if repeat is not None:
+        kept_idx2, group_size, count = repeat
+        out: list[list[tuple[str, str | None]]] = []
+        for i, row in enumerate(resolved):
+            kept_row = [row[j] if j < len(row) else "" for j in kept_idx2]
+            for g in range(count):
+                piece = kept_row[g * group_size:(g + 1) * group_size]
+                if any(v.strip() for v in piece):
+                    out.append(row_links[i])
+        return out
+
+    if normalize_item_catalog and any(_row_dominant_value(r) is not None for r in resolved):
+        return [row_links[i] for i, r in enumerate(resolved) if _row_dominant_value(r) is None]
+    return row_links
+
+
 def choose_key_columns(columns: list[str], rows: list[list[str]]) -> list[str]:
     """先頭列で一意なら先頭列だけ、だめなら先頭 2 列。それでも駄目なら空(呼び出し側がハッシュを使う)。"""
     if not columns or not rows:
@@ -647,7 +742,7 @@ class TableInfo:
 class PageUnits:
     units: list[Unit] = field(default_factory=list)
     tables: list[TableInfo] = field(default_factory=list)
-    links: list[tuple[str, str, int]] = field(default_factory=list)  # (unit_id, page, ord)
+    links: list[tuple[str, str, str, int]] = field(default_factory=list)  # (unit_id, page, anchor, ord)。アンカー無しは ""
 
 
 def build_units(page: str, source: str) -> PageUnits:
@@ -667,10 +762,11 @@ def build_units(page: str, source: str) -> PageUnits:
 
     link_ord = 0
 
-    def add_link_source(unit_id: str, text: str) -> None:
+    def add_link_source(unit_id: str, links: list[tuple[str, str | None]]) -> None:
         nonlocal link_ord
-        for name in extract_links(text):
-            out.links.append((unit_id, name, link_ord))
+        for target, anchor in links:
+            # アンカー無しは "" に正規化する(NULL だと集合の並び替え・突合で None と str が混ざる)。
+            out.links.append((unit_id, target, anchor or "", link_ord))
             link_ord += 1
 
     for block in blocks:
@@ -708,7 +804,7 @@ def build_units(page: str, source: str) -> PageUnits:
                 ord=ord_counter, truncated=1 if truncated else 0, text=text,
                 table_idx=None, group_key=None, row_key=None, cells=None, nums=None,
             ))
-            add_link_source(unit_id, block.text)
+            add_link_source(unit_id, block.links)
             continue
 
         if isinstance(block, ListItem):
@@ -724,13 +820,15 @@ def build_units(page: str, source: str) -> PageUnits:
                 ord=ord_counter, truncated=1 if truncated else 0, text=text,
                 table_idx=None, group_key=group_key, row_key=None, cells=None, nums=None,
             ))
-            add_link_source(unit_id, block.text)
+            add_link_source(unit_id, block.links)
             continue
 
         if isinstance(block, Table):
-            unwound = unwind_table(block, normalize_item_catalog=is_item_catalog_page(page))
+            normalize_item_catalog = is_item_catalog_page(page)
+            unwound = unwind_table(block, normalize_item_catalog=normalize_item_catalog)
             if not unwound.columns or not unwound.rows:
                 continue  # ほどけない・空の表は段落にも表にもせず捨てる(最小)
+            row_links = table_row_links(block, normalize_item_catalog=normalize_item_catalog)
             table_idx = table_idx_in_section
             table_idx_in_section += 1
             key_columns = choose_key_columns(unwound.columns, unwound.rows)
@@ -754,6 +852,7 @@ def build_units(page: str, source: str) -> PageUnits:
                     table_idx=table_idx, group_key=group_key, row_key=row_key,
                     cells=cells, nums=nums if nums else None, is_first_of_name=is_first,
                 ))
+                add_link_source(unit_id, row_links[row_i] if row_i < len(row_links) else [])
             out.tables.append(TableInfo(
                 page=page, anchor=anchor, table_idx=table_idx, columns=unwound.columns,
                 key_columns=key_columns, default_columns=default_columns,
@@ -1217,7 +1316,7 @@ def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dic
 
     all_units: list[Unit] = []
     all_tables: list[TableInfo] = []
-    all_links: list[tuple[str, str, int]] = []
+    all_links: list[tuple[str, str, str, int]] = []
     for row in ok_rows:
         page_units = build_units(row["name"], row["source"] or "")
         all_units.extend(page_units.units)
@@ -1286,7 +1385,7 @@ def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dic
     note_set = {(name, note["note"], note.get("state_key")) for name, note in column_notes.items()}
 
     alias_set = {(name, page) for name, pages in alias_map.items() for page in pages}
-    link_set = {(uid, page, ord_) for uid, page, ord_ in all_links}
+    link_set = {(uid, page, anchor, ord_) for uid, page, anchor, ord_ in all_links}
 
     correction_rows_ = correction_rows(corrections or [], all_units)
     app_data_rows_ = app_data_correction_rows(app_data or [])
@@ -1380,8 +1479,11 @@ def _generate_full(page_bodies, page_h, unit_bodies, unit_h, unit_terms_str,
     alias_rows = [[sql_str(name), sql_str(page)] for name, page in sorted(alias_set)]
     lines.extend(batched_insert("alias", ["name", "page"], alias_rows))
 
-    link_rows = [[sql_str(uid), sql_str(page), sql_int(ord_)] for uid, page, ord_ in sorted(link_set)]
-    lines.extend(batched_insert("unit_link", ["unit_id", "page", "ord"], link_rows))
+    link_rows = [
+        [sql_str(uid), sql_str(page), sql_str(anchor), sql_int(ord_)]
+        for uid, page, anchor, ord_ in sorted(link_set)
+    ]
+    lines.extend(batched_insert("unit_link", ["unit_id", "page", "anchor", "ord"], link_rows))
 
     correction_rows_with_h = [
         row + [sql_str(row_hash(row))] for row in all_correction_rows
@@ -1515,15 +1617,20 @@ def _generate_diff(state, page_bodies, page_h, all_units, unit_bodies, unit_h, u
                                  verb="INSERT OR REPLACE"))
     writes["alias"] = len(del_alias) + len(add_alias)
 
-    old_link = {(r["unit_id"], r["page"], r["ord"]) for r in state["unit_link"]}
+    # anchor は正規化して "" 側に寄せる(移行前の行は列自体が無く NULL で読めるため)。
+    # DELETE の突合キーは (unit_id, page, ord) だけ(anchor は NULL 比較で行に一致しないことがある) —
+    # 同じ (unit_id, page, ord) の行は 1 本しか無いので、anchor を外しても消す行は変わらない。
+    old_link = {(r["unit_id"], r["page"], r.get("anchor") or "", r["ord"]) for r in state["unit_link"]}
     del_link, add_link = diff_set(old_link, link_set)
     if del_link:
         lines.extend(delete_composite_in(
             "unit_link", ["unit_id", "page", "ord"],
-            [[sql_str(u), sql_str(p), sql_int(o)] for u, p, o in del_link],
+            [[sql_str(u), sql_str(p), sql_int(o)] for u, p, _a, o in del_link],
         ))
-    lines.extend(batched_insert("unit_link", ["unit_id", "page", "ord"],
-                                 [[sql_str(u), sql_str(p), sql_int(o)] for u, p, o in add_link]))
+    lines.extend(batched_insert(
+        "unit_link", ["unit_id", "page", "anchor", "ord"],
+        [[sql_str(u), sql_str(p), sql_str(a), sql_int(o)] for u, p, a, o in add_link],
+    ))
     writes["unit_link"] = len(del_link) + len(add_link)
 
     old_note = {(r["name"], r["note"], r.get("state_key")) for r in state["column_note"]}

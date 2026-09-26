@@ -14,6 +14,9 @@ export interface ModelPricing {
 
 export const PRICING: Record<string, ModelPricing> = {
   "claude-haiku-4-5": { input: 1.0, cacheWrite: 1.25, cacheRead: 0.1, output: 5.0 },
+  // 2026-09-26 claude-api skill のモデル表(cached 2026-06-24)。キャッシュは入力の 1.25 倍 / 0.1 倍
+  "claude-sonnet-5": { input: 2.0, cacheWrite: 2.5, cacheRead: 0.2, output: 10.0 },
+  "claude-opus-5-5": { input: 4.0, cacheWrite: 5.0, cacheRead: 0.2, output: 20.0 },
 };
 
 export interface UsageForCost {

@@ -16,6 +16,14 @@ const SLANG: [RegExp, string][] = [[/モブ/g, "モンスター"]];
 /** 検索・索引に使う語として意味を持つか(ひらがなのみ・記号のみは捨てる、1 文字も捨てる)。 */
 const MEANINGFUL = /[一-鿿゠-ヿｦ-ﾟa-zA-Z0-9]/;
 
+/** 漢字 1 字の接頭・接尾を隣とつなげる語か。漢字だけの語。疑問詞の「何」は除く(何|個 → 何個 は雑音)。 */
+function joinable(word: string): boolean {
+  return /^[一-鿿々]+$/u.test(word) && word !== "何";
+}
+
+/** カタカナだけの語(中黒「・」は区切りなので含めない)。 */
+const KATAKANA = /^[ァ-ヺー]+$/u;
+
 /**
  * ゲームの一般語のうち `Intl.Segmenter` が割ってしまうもの(実測: ダンジョン → ダン/ジョン、
  * 好感度 → 好/感度)。ページ名・別名の辞書と一緒に最長一致で確保する。索引と質問の両方に効く。
@@ -58,8 +66,11 @@ export function buildDict(words: Iterable<string>): string[] {
 /**
  * text を分かち書きして語の配列にする(各語は fold 済み)。
  * dict は正規化済みの辞書語(長い順に並んでいる前提。buildDict が用意する)。
+ * query: 質問側。続いたカタカナをつないだ語を出したら、その破片(エル|ソ の「エル」)は出さない。破片は
+ * 別の語(エルシリア・クルーエル)に当たって理解と候補を乱す(実例 2026-09-26)。索引側は部品も残すので、
+ * 質問の語は常に索引の語の部分集合になる。
  */
-export function segment(text: string, dict: readonly string[]): string[] {
+export function segment(text: string, dict: readonly string[], opts: { query?: boolean } = {}): string[] {
   const normalized = normalize(text);
   const tokens: string[] = [];
   const consumed = new Uint8Array(normalized.length);
@@ -90,12 +101,41 @@ export function segment(text: string, dict: readonly string[]): string[] {
   let rest = "";
   const flushRest = (): void => {
     if (!rest) return;
-    for (const { segment: word } of segmenter.segment(rest)) {
-      const trimmed = word.trim();
-      if (trimmed.length <= 1) continue;
-      if (!MEANINGFUL.test(trimmed)) continue;
-      tokens.push(fold(trimmed));
+    const words = [...segmenter.segment(rest)].map(({ segment: word }) => word.trim());
+    // 2 語以上続いたカタカナの破片(質問側では出さない)
+    const katakanaFragment = new Set<number>();
+    for (let i = 0; i < words.length; i += 1) {
+      const inRun = KATAKANA.test(words[i]!) &&
+        ((i > 0 && KATAKANA.test(words[i - 1]!)) || (i + 1 < words.length && KATAKANA.test(words[i + 1]!)));
+      if (inRun) katakanaFragment.add(i);
     }
+    words.forEach((trimmed, i) => {
+      if (opts.query && katakanaFragment.has(i)) return;
+      if (trimmed.length === 1 && joinable(trimmed)) {
+        // Segmenter は漢字 1 字の接頭・接尾を切り離す(新|鉱物、白|魔法、巡礼|者)。1 字のままでは
+        // 捨てるので、隣の漢字語とつないだ複合語を出す(後ろ優先。部品の語はそのまま残る)。
+        const next = words[i + 1];
+        const prev = words[i - 1];
+        if (next !== undefined && joinable(next)) tokens.push(trimmed + next);
+        else if (prev !== undefined && joinable(prev)) tokens.push(prev + trimmed);
+        return;
+      }
+      if (trimmed.length <= 1) return;
+      if (!MEANINGFUL.test(trimmed)) return;
+      tokens.push(fold(trimmed));
+    });
+    // Segmenter はカタカナ語も割る(エル|ソ、ルー|ン、ポー|ション)。続いたカタカナは 1 語につないだものも出す
+    // (索引側は部品の語も上で出したまま)。
+    let run: string[] = [];
+    const flushRun = (): void => {
+      if (run.length > 1) tokens.push(fold(run.join("")));
+      run = [];
+    };
+    for (const word of words) {
+      if (KATAKANA.test(word)) run.push(word);
+      else flushRun();
+    }
+    flushRun();
     rest = "";
   };
   for (let i = 0; i < normalized.length; i += 1) {

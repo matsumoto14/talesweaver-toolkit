@@ -47,6 +47,30 @@ describe("segment", () => {
     expect(tokens).not.toContain("上");
   });
 
+  it("漢字 1 字の接頭・接尾は隣の漢字語とつないだ複合語にする(部品も残す)", () => {
+    // 素の Segmenter: 新|鉱物|の|白|魔法|って|何|?  → 1 字を捨てると「鉱物 / 魔法」しか残らない
+    const tokens = segment("新鉱物の白魔法って何?", []);
+    expect(tokens).toEqual(expect.arrayContaining(["新鉱物", "鉱物", "白魔法", "魔法"]));
+    expect(tokens).not.toContain("何"); // 隣が漢字でない 1 字は従来どおり捨てる
+    expect(segment("巡礼者の村", [])).toContain("巡礼者"); // 接尾は前とつなぐ
+    expect(segment("アビを何個も付けたい", [])).not.toContain("何個"); // 疑問詞はつながない
+  });
+
+  it("続いたカタカナは 1 語につないだものも出す(部品も残す)", () => {
+    // 素の Segmenter: エル|ソ|って|何 / ポー|ション|の|レシピ
+    expect(segment("エルソって何?", [])).toContain("エルソ");
+    expect(segment("ポーションのレシピ", [])).toEqual(expect.arrayContaining(["ポーション", "ポー", "ション", "レシピ"]));
+    expect(segment("ルーンの庭園", [])).toContain("ルーン");
+  });
+
+  it("質問側(query)はつないだカタカナの破片を出さない(エル|ソ の「エル」がエルシリア等に当たるため)", () => {
+    const q = segment("エルソはどこで稼げる?", [], { query: true });
+    expect(q).toContain("エルソ");
+    expect(q).not.toContain("エル");
+    // 索引側は破片も残す(質問の語が常に索引の語の部分集合になる)
+    expect(segment("エルソはどこで稼げる?", [])).toEqual(expect.arrayContaining(["エルソ", "エル"]));
+  });
+
   it("質問例: エタ解放までのクエストの流れわかる?", () => {
     const tokens = segment("エタ解放までのクエストの流れわかる?", ["エタの意志"]);
     expect(tokens.length).toBeGreaterThan(0);

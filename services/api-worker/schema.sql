@@ -53,7 +53,9 @@ CREATE TABLE column_note (                -- 列名辞書。手書き(tools/game
 );
 
 CREATE TABLE alias (name TEXT NOT NULL, page TEXT NOT NULL, PRIMARY KEY (name, page));   -- 別名 → ページ名。ページ名自身も入れる。パスの末尾は複数ページで共有しうる
-CREATE TABLE unit_link (unit_id TEXT NOT NULL, page TEXT NOT NULL, ord INTEGER NOT NULL);   -- [[リンク]] の出現順。「次の一手」のチップの材料
+-- [[リンク]] の出現順。「次の一手」のチップの材料 + 節をたどる材料(get_section が anchor 付きで返す)。
+-- anchor はリンク先の `#アンカー`(節の中の用語が別ページのその節にあるとき)。無ければ ""
+CREATE TABLE unit_link (unit_id TEXT NOT NULL, page TEXT NOT NULL, anchor TEXT NOT NULL DEFAULT '', ord INTEGER NOT NULL);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);         -- synced_at / unit_count / schema_version / imported_at
 
 CREATE TABLE correction (                 -- wiki の外から来る訂正。段階 0 では空のまま(表だけ作る)

@@ -60,7 +60,7 @@ describe("understand() の usage 抽出", () => {
       usage: { input_tokens: 120, output_tokens: 40, cache_read_input_tokens: 10, cache_creation_input_tokens: 5 },
     });
 
-    const result = await understand(ENV, "テシスコアって?", null, []);
+    const result = await understand(ENV, "テシスコアって?", null, [], "【ページ一覧】");
 
     expect(result).not.toBeNull();
     expect(result!.understanding.kind).toBe("wiki");
@@ -73,7 +73,7 @@ describe("understand() の usage 抽出", () => {
   it("refusal は空の理解(NONE_UNDERSTAND)+ call を返す(経路の故障ではない)", async () => {
     mockParse.mockResolvedValue({ stop_reason: "refusal", parsed_output: null, usage: { input_tokens: 30, output_tokens: 1 } });
 
-    const result = await understand(ENV, "x", null, []);
+    const result = await understand(ENV, "x", null, [], "【ページ一覧】");
 
     expect(result).not.toBeNull();
     expect(result!.understanding).toEqual(NONE_UNDERSTAND);
@@ -82,7 +82,7 @@ describe("understand() の usage 抽出", () => {
 
   it("API エラーは null(call も作らない)", async () => {
     mockParse.mockRejectedValue(new Error("timeout"));
-    expect(await understand(ENV, "x", null, [])).toBeNull();
+    expect(await understand(ENV, "x", null, [], "【ページ一覧】")).toBeNull();
   });
 });
 

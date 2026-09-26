@@ -19,10 +19,15 @@ const MAX_STEPS = 4;
 const MAX_UNITS_PER_STEP = 4;
 /** 80 → 120(2026-09-24)。計算の式("{{u03.成功率}} × {{u04.成功率}} ≒ 18%")を書けるぶん少し伸ばす
  *  (地の文の数字は禁止しない方針に変えたため。ADR-020)。参照 `{{…}}` 自体は plain に数えないので、
- *  ここは演算子・計算結果・言い回しの余地。 */
-const MAX_LEAD_LENGTH = 120;
+ *  ここは演算子・計算結果・言い回しの余地。120 → 240(2026-09-26): 結論を 1 文に縛らず 2〜3 文まで許す
+ *  (「最大いくつ?」で式の前提・足りない値に触れられなかった)。 */
+const MAX_LEAD_LENGTH = 240;
 
-const PLACEHOLDER = /\{\{([^.}]+)\.([^}]+)\}\}/g;
+/** `{{ID.列名}}`。ID にはピリオドが入りうる(「喪失の耐魔力 (LV.310)」)ので、最後のピリオドで区切る。 */
+const PLACEHOLDER = /\{\{([^}]+)\.([^.}]+)\}\}/g;
+
+/** 段落への参照を本文で置き換えてよい長さ(短い箇条書き 1 項目ぶん)。 */
+const MAX_INLINE_PARAGRAPH = 40;
 
 /** 半角・全角の数字と、単位が続く漢数字。「一番」「一度」「十分」のような語は通す。 */
 const DIGITS = /[0-9０-９]|[〇一二三四五六七八九十百千万億]+(?=[%％個枚段倍割点]|パーセント|レベル)/;
@@ -76,9 +81,14 @@ export function verify(raw: Selection, ctx: Ctx): VerifyResult {
         const col = conflictsWithState(u, ctx);
         if (col) { dropped.push({ what: "unit", id, why: `state:${col}` }); return; }
         const key = s.key_check[i];
-        if (key === undefined || key !== u.row_key) {
-          dropped.push({ what: "unit", id, why: "key_check" });
-          return;
+        if (key !== undefined && key !== u.row_key) {
+          // 札の写し間違い。同じ表にそのキーの行があればそちらに差し替え、無ければ札のまま残す
+          // (1 件の写し間違いで唯一の根拠を落とし「答えなし」になっていた。実例 q51、2026-09-26)
+          const other = [...ctx.candidates.values()].find(
+            (c) => c.group_key === u.group_key && c.row_key === key && !seen.has(c.id),
+          );
+          dropped.push({ what: "unit", id, why: other ? `key_check:swap:${other.id}` : "key_check:kept" });
+          if (other) { seen.add(other.id); units.push(other); return; }
         }
       }
       seen.add(id);
@@ -86,6 +96,18 @@ export function verify(raw: Selection, ctx: Ctx): VerifyResult {
     });
     if (units.length === 0) { dropped.push({ what: "step", why: "empty" }); continue; }
     steps.push({ units, columns: pickColumns(s.columns, units, dropped) });
+  }
+
+  // 根拠(basis)に挙げたのに手順に入れていないユニットは、手順として足す。LLM が手順を空にして根拠だけ
+  // 書く・手順に入れ忘れる、で答えが落ちていた(実例 v01・s01、2026-09-26)
+  const fromBasis = raw.basis
+    .map((id) => ctx.candidates.get(id))
+    .filter((u): u is Candidate => !!u && !seen.has(u.id) && !(u.kind === "row" && conflictsWithState(u, ctx)));
+  if (fromBasis.length > 0) {
+    for (const u of fromBasis) seen.add(u.id);
+    if (steps.length < MAX_STEPS) steps.push({ units: fromBasis, columns: pickColumns([], fromBasis, dropped) });
+    else steps[steps.length - 1]!.units.push(...fromBasis);
+    dropped.push({ what: "step", why: `from_basis:${fromBasis.length}` });
   }
 
   const missing = [...new Set(raw.missing)];
@@ -185,6 +207,13 @@ function renderLead(raw: Selection, selected: Set<string>, ctx: Ctx, dropped: Dr
     const [whole, id, col] = m;
     const u = ctx.candidates.get(id ?? "");
     if (!id || !selected.has(id) || !u) return fail(`ref_not_selected:${id}`);
+    if (u.kind === "paragraph" && u.text.length <= MAX_INLINE_PARAGRAPH) {
+      // 段落は列を持たないが、LLM は表と同じ形で参照してくる(「{{u02.所持Elso上限}}」)。短い段落は本文そのもの
+      // (候補の文面)なので本文で置き換える。長い段落は何を指したか分からないので今まで通り捨てる(2026-09-26)
+      segs.push({ t: text.slice(last, m.index) + u.text });
+      last = m.index! + whole.length;
+      continue;
+    }
     if (u.kind !== "row" || !u.cells || !(col! in u.cells)) return fail(`ref_col:${col}`);
     segs.push({ t: text.slice(last, m.index) }, { ref: id, col: col! });
     last = m.index! + whole.length;
@@ -194,6 +223,8 @@ function renderLead(raw: Selection, selected: Set<string>, ctx: Ctx, dropped: Dr
 
   const plain = segs.map((s) => ("t" in s ? s.t : "")).join("");
   if (plain.length === 0) return fail("empty");
+  // 列名の無い参照(「{{u32}}」)など、形の崩れた参照がそのまま画面に出ないようにする
+  if (plain.includes("{{") || plain.includes("}}")) return fail("ref_malformed");
   if (plain.length > MAX_LEAD_LENGTH) return fail("too_long");
   const foreign = ctx.pageNames.find(
     (n) => n.length >= 3 && plain.includes(n) && !ctx.candidateText.includes(n),

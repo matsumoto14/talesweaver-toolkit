@@ -15,10 +15,17 @@ import type { Selection } from "../src/schema";
 
 interface FakeRow { [key: string]: unknown }
 
-/** find_pages / search_units / get_rows / get_app_data が触るテーブルだけ持つ最小の D1。 */
-function fakeDb(opts: { aliasHits?: FakeRow[]; unitBatches?: FakeRow[][] } = {}): D1Database {
+/** find_pages / search_units / get_rows / get_section / get_app_data が触るテーブルだけ持つ最小の D1。 */
+function fakeDb(opts: {
+  aliasHits?: FakeRow[];
+  unitBatches?: FakeRow[][];
+  sectionUnits?: FakeRow[];
+  unitLinks?: FakeRow[];
+} = {}): D1Database {
   const aliasHits = opts.aliasHits ?? [];
   const unitBatches = opts.unitBatches ?? [];
+  const sectionUnits = opts.sectionUnits ?? [];
+  const unitLinks = opts.unitLinks ?? [];
   let unitCall = 0;
 
   return {
@@ -32,7 +39,10 @@ function fakeDb(opts: { aliasHits?: FakeRow[]; unitBatches?: FakeRow[][] } = {})
             results = unitBatches[Math.min(unitCall, unitBatches.length - 1)] ?? [];
             unitCall += 1;
           } else if (sql.includes("FROM correction")) results = [];
-          else if (sql.includes("FROM unit WHERE page")) results = [];
+          else if (sql.includes("FROM unit WHERE page") && sql.includes("ORDER BY ord") && !sql.includes("table_idx")) {
+            results = sectionUnits;
+          } else if (sql.includes("FROM unit WHERE page")) results = [];
+          else if (sql.includes("FROM unit_link")) results = unitLinks;
           return { results: results as unknown as T[], success: true, meta: {} } as D1Result<T>;
         },
         first: async () => null,
@@ -105,12 +115,30 @@ describe("runAgentLoop", () => {
     ]);
     vi.mocked(createClient).mockReturnValue({ messages: messagesMock } as never);
 
-    const result = await runAgentLoop({ db: fakeDb(), env: {} as never, ...BASE_INPUT });
+    const result = await runAgentLoop({ db: fakeDb(), env: { SELECT_MODEL: "claude-haiku-4-5" } as never, ...BASE_INPUT });
 
     expect(result).not.toBeNull();
     expect(result!.toolCalls).toBe(5);
     expect(messagesMock.create).toHaveBeenCalledTimes(6);
     expect(messagesMock.calls[5]!.tool_choice).toEqual({ type: "tool", name: "answer" });
+  });
+
+  it("強制できないモデル(Opus 5.5 など)は tool_choice を付けず、ツールを answer 1 本に絞る", async () => {
+    const messagesMock = fakeClient([
+      toolUseResponse("find_pages", { name: "A" }),
+      toolUseResponse("find_pages", { name: "B" }),
+      toolUseResponse("find_pages", { name: "C" }),
+      toolUseResponse("find_pages", { name: "D" }),
+      toolUseResponse("find_pages", { name: "E" }),
+      toolUseResponse("answer", EMPTY_ANSWER),
+    ]);
+    vi.mocked(createClient).mockReturnValue({ messages: messagesMock } as never);
+
+    await runAgentLoop({ db: fakeDb(), env: { SELECT_MODEL: "claude-opus-5-5" } as never, ...BASE_INPUT });
+
+    const last = messagesMock.create.mock.calls[5]![0] as { tools: { name: string }[]; tool_choice?: unknown };
+    expect(last.tool_choice).toBeUndefined();
+    expect(last.tools.map((t) => t.name)).toEqual(["answer"]);
   });
 
   it("同じツールを同じ引数で 2 回呼んだら is_error の tool_result を返し、実行し直さない", async () => {
@@ -162,6 +190,59 @@ describe("runAgentLoop", () => {
     const body = String(toolResults[0]!.content);
     const parsed = JSON.parse(body.slice(body.indexOf("{"))) as { units: unknown[] };
     expect(parsed.units).toHaveLength(0);
+  });
+
+  it("get_section: 節のユニットを自然順で返し、張っているリンクを page#anchor で付ける", async () => {
+    const db = fakeDb({
+      sectionUnits: [
+        { id: "p:エルソ/ce291035/1", kind: "paragraph", page: "エルソ", section: "週間獲得量上限",
+          anchor: "ce291035", ord: 1, table_idx: null, text: "式の説明", truncated: 0,
+          group_key: null, row_key: null, cells: null, nums: null },
+      ],
+      unitLinks: [
+        { unit_id: "p:エルソ/ce291035/1", page: "ミニゲーム/ルミナの回廊", anchor: "CorridorBuff", ord: 0 },
+      ],
+    });
+    const messagesMock = fakeClient([
+      toolUseResponse("get_section", { page: "エルソ", anchor: "ce291035" }),
+      toolUseResponse("answer", EMPTY_ANSWER),
+    ]);
+    vi.mocked(createClient).mockReturnValue({ messages: messagesMock } as never);
+
+    const result = await runAgentLoop({ db, env: {} as never, ...BASE_INPUT });
+
+    expect(result).not.toBeNull();
+    const toolResults = messagesMock.calls[1]!.messages.at(-1)!.content as { content: string }[];
+    const body = String(toolResults[0]!.content);
+    const parsed = JSON.parse(body.slice(body.indexOf("{"))) as {
+      units: { page: string; links?: string[] }[]; remaining?: number;
+    };
+    expect(parsed.units).toHaveLength(1);
+    expect(parsed.units[0]!.links).toEqual(["ミニゲーム/ルミナの回廊#CorridorBuff"]);
+    expect(parsed.remaining).toBeUndefined();
+  });
+
+  it("get_section: 25 件を超えたら自然順の先頭 25 件 + 残り件数だけ返す", async () => {
+    const rows = Array.from({ length: 26 }, (_, i) => ({
+      id: `p:P/a1/${i + 1}`, kind: "paragraph", page: "P", section: "節", anchor: "a1",
+      ord: i + 1, table_idx: null, text: `本文${i + 1}`, truncated: 0,
+      group_key: null, row_key: null, cells: null, nums: null,
+    }));
+    const db = fakeDb({ sectionUnits: rows });
+    const messagesMock = fakeClient([
+      toolUseResponse("get_section", { page: "P", anchor: "a1" }),
+      toolUseResponse("answer", EMPTY_ANSWER),
+    ]);
+    vi.mocked(createClient).mockReturnValue({ messages: messagesMock } as never);
+
+    const result = await runAgentLoop({ db, env: {} as never, ...BASE_INPUT });
+
+    expect(result).not.toBeNull();
+    const toolResults = messagesMock.calls[1]!.messages.at(-1)!.content as { content: string }[];
+    const body = String(toolResults[0]!.content);
+    const parsed = JSON.parse(body.slice(body.indexOf("{"))) as { units: unknown[]; remaining?: number };
+    expect(parsed.units).toHaveLength(25);
+    expect(parsed.remaining).toBe(1);
   });
 
   it("answer の札は安定 ID に resolve される", async () => {

@@ -44,9 +44,10 @@ export const UnderstandSchema = z.object({
   /** damage_calc = ダメージ・DPS が装備やバフでどう変わるかを聞く文。wiki には出せない計算なので
    *  検索せず、アプリの計算タブへ渡す(playbook: "damage_calc"。2026-09-24、ADR-020)。 */
   kind: z.enum(["wiki", "smalltalk", "other", "damage_calc"]),
-  /** 候補(p01〜p10)から 0〜3 件。 */
-  pages: z.array(z.enum(PAGE_SLOTS)),
-  /** 最大 6 語・各 20 字。超過はコードが切る。検索にしか使わない。 */
+  /** ページ名そのまま 0〜3 件(ページ一覧・語が一致したページから)。実在しない名前はコードが捨てる。
+   *  enum にしないのは、一覧が数百件あり取込のたびに変わるため(スキーマのキャッシュが効かなくなる)。 */
+  pages: z.array(z.string()),
+  /** 最大 6 語・各 20 字。超過はコードが切る。検索にしか使わない。wiki 側の書き方(英字・正式名)も含む。 */
   terms: z.array(z.string()),
   /** 1 回の検索で済むか、たどる必要があるか。multi は回す道へ(段階 2 では記録だけ)。 */
   hops: z.enum(["single", "multi"]),
@@ -69,6 +70,12 @@ export const NONE_UNDERSTAND: Understand = {
   mood: "ask",
   trouble: "none",
 };
+
+/** 節選び(理解がページを選んだときだけ)。目次の札(s01…)を 0〜2 件。実在しない札はコードが捨てる。 */
+export const SectionPickSchema = z.object({
+  sections: z.array(z.string()),
+});
+export type SectionPick = z.infer<typeof SectionPickSchema>;
 
 /** 選択(2 回目)の 1 手順ぶん。 */
 export const SelectionStepSchema = z.object({

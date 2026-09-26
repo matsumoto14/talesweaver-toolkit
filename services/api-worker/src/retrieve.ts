@@ -1,4 +1,5 @@
 /** D1 からの読み取り専用の取得関数。src/tools.ts がツールの形にラップする。 */
+import { MAX_SLOTS } from "./schema";
 
 export interface PageRow {
   name: string;
@@ -85,6 +86,35 @@ export async function searchUnits(
       ).bind(query);
 
   const result = await statement.all<SearchHit>();
+  return result.results ?? [];
+}
+
+/** 節(page, anchor)の全ユニットを ord 順で。get_section・節ごと候補足し・リンク先の節を辿る土台。 */
+export async function getSection(db: D1Database, page: string, anchor: string): Promise<UnitRow[]> {
+  const result = await db
+    .prepare(`SELECT * FROM unit WHERE page = ?1 AND anchor = ?2 ORDER BY ord`)
+    .bind(page, anchor)
+    .all<UnitRow>();
+  return result.results ?? [];
+}
+
+/** FTS を 1 節の中だけに絞って引く(リンク先の節の中で、同じ検索語に当たったユニットだけ拾う)。 */
+export async function searchSection(
+  db: D1Database,
+  query: string,
+  page: string,
+  anchor: string,
+): Promise<SearchHit[]> {
+  const result = await db
+    .prepare(
+      `SELECT u.id, u.kind, u.page, u.section, u.anchor, u.ord, u.table_idx, u.text, u.truncated,
+              bm25(unit_fts) AS score
+       FROM unit_fts JOIN unit u ON u.rowid = unit_fts.rowid
+       WHERE unit_fts MATCH ?1 AND u.page = ?2 AND u.anchor = ?3
+       ORDER BY score LIMIT 40`,
+    )
+    .bind(query, page, anchor)
+    .all<SearchHit>();
   return result.results ?? [];
 }
 
@@ -291,22 +321,91 @@ export interface CollectCandidatesInput {
   query: string;
   /** 理解が選んだページ(0〜3 件)。先頭に寄せる加点。 */
   boostPages: string[];
+  /** 節選びが選んだ節(0〜2 件)。検索の当たりに関係なく丸ごと先頭に入れ、そこからリンクをたどる。 */
+  pinnedSections?: { page: string; anchor: string }[];
   state: Record<string, number>;
   columnNotes: Record<string, ColumnNote>;
 }
 
+/** 検索ヒットの最小形から Candidate を作る(cells/nums を持たない paragraph・検索ヒットそのもの用)。 */
+function hitToCandidate(hit: {
+  id: string; kind: string; page: string; section: string; anchor: string; ord: number;
+  truncated: number; text: string; table_idx: number | null;
+}): Candidate {
+  return toCandidate({
+    id: hit.id, kind: hit.kind, page: hit.page, section: hit.section, anchor: hit.anchor,
+    ord: hit.ord, truncated: hit.truncated, text: hit.text, table_idx: hit.table_idx,
+    group_key: null, row_key: null, cells: null, nums: null,
+  });
+}
+
+/** 当たったユニットは必ず残す: 当たったユニットを中心に前後を取り、1 節 25 ユニットまでにする。 */
+function sectionWindow<T extends { id: string }>(rows: T[], hitId: string): T[] {
+  const at = Math.max(0, rows.findIndex((r) => r.id === hitId));
+  const start = Math.max(0, Math.min(at - 12, rows.length - 25));
+  return rows.slice(start, start + 25);
+}
+
+/** リンク先の節を辿るときの上限(§「節の中のリンク先の節」)。 */
+const MAX_LINK_HOPS = 3;
+const MAX_UNITS_PER_LINKED_SECTION = 5;
+
+/**
+ * 起点のユニット(節の窓)が張るアンカー付きリンクを出現順に最大 3 本たどり、リンク先の節の中で
+ * 同じ検索語に当たったユニットを最大 5 件ずつ返す。アンカー無しのリンクはたどらない(節が特定できない)。
+ * 当たらなければそのリンクは足さない。起点は窓(最大 25 件)なので D1 の bind 上限(100)を超えない。
+ */
+async function collectLinkedSectionCandidates(
+  db: D1Database,
+  query: string,
+  sectionUnits: { id: string; ord: number }[],
+): Promise<Candidate[]> {
+  if (sectionUnits.length === 0) return [];
+  const links = await getUnitLinks(db, sectionUnits.map((u) => u.id));
+  const withAnchor = links.filter((l) => l.anchor !== "");
+  if (withAnchor.length === 0) return [];
+
+  // 節内の出現順(ユニットの ord → リンクの ord)。同じ (page, anchor) は先に出た方だけ使う
+  const unitOrd = new Map(sectionUnits.map((u) => [u.id, u.ord] as [string, number]));
+  const sortedLinks = [...withAnchor].sort((a, b) => {
+    const ao = unitOrd.get(a.unit_id) ?? 0;
+    const bo = unitOrd.get(b.unit_id) ?? 0;
+    return ao !== bo ? ao - bo : a.ord - b.ord;
+  });
+  const seenTargets = new Set<string>();
+  const targets: { page: string; anchor: string }[] = [];
+  for (const l of sortedLinks) {
+    const key = `${l.page}\u0000${l.anchor}`;
+    if (seenTargets.has(key)) continue;
+    seenTargets.add(key);
+    targets.push({ page: l.page, anchor: l.anchor });
+    if (targets.length >= MAX_LINK_HOPS) break;
+  }
+
+  const out: Candidate[] = [];
+  for (const t of targets) {
+    const hits = await searchSection(db, query, t.page, t.anchor);
+    for (const h of hits.slice(0, MAX_UNITS_PER_LINKED_SECTION)) out.push(hitToCandidate(h));
+  }
+  return out;
+}
+
 /**
  * §3「検索候補を集める」/ §5「絞り込みの規則」。
- * FTS(terms OR、加点)→ 行が当たったら同じ表の残りの行を足す(1 表 25 行) →
- * state で絞る(0 行になったら絞らない)→ ページ › ord の自然順 → 20 件
- * (溢れは検索スコア順に落とすが、同じ表の行は塊で残す)。
+ * 節選びの節を丸ごと(1 節 25 ユニット)+ そのリンク先を先頭に →
+ * FTS(terms OR、加点)→ boostPages の節のヒットは節ごと足す(1 節 25 ユニット・当たった行は必ず残す。
+ * それ以外の行ヒットは同じ表の残りを足す、1 表 25 行) → 最上位のヒットの節からリンク先の節を最大 3 本
+ * たどって同じ語に当たったユニットを足す(1 節 5 件。節選びの節があればそちらからたどる) → state で絞る(0 行になったら絞らない)→
+ * ページ › ord の自然順 → 40 件(溢れは検索スコア順に落とすが、同じ表・節の行は塊で残す。
+ * リンク先の節から来た候補は発見順が最後尾なので最初に落ちる)。
  */
 export async function collectCandidates(
   db: D1Database,
   input: CollectCandidatesInput,
 ): Promise<Candidate[]> {
   const rawHits = await searchUnits(db, input.query);
-  if (rawHits.length === 0) return [];
+  const pinned = input.pinnedSections ?? [];
+  if (rawHits.length === 0 && pinned.length === 0) return [];
 
   // ページ加点: 理解が選んだページを先頭に寄せる(安定ソート)。
   const boost = new Set(input.boostPages);
@@ -317,9 +416,42 @@ export async function collectCandidates(
   const byId = new Map<string, Candidate>();
   const order: string[] = []; // 発見順(スコア順)。溢れたときの切り方に使う
   const tablesSeen = new Set<string>();
+  const sectionsSeen = new Set<string>();
+  const add = (c: Candidate): void => {
+    if (byId.has(c.id)) return;
+    byId.set(c.id, c);
+    order.push(c.id);
+  };
+
+  // 節選びの節: 検索の当たりが無くても丸ごと入れる(発見順の先頭 = 溢れても最後まで残る)。
+  // リンク先もここでたどり、検索の当たりより先に並べる
+  for (const p of pinned) {
+    sectionsSeen.add(`${p.page}\u0000${p.anchor}`);
+    const window = (await getSection(db, p.page, p.anchor)).slice(0, 25);
+    for (const row of window) add(toCandidate(row));
+    for (const linked of await collectLinkedSectionCandidates(db, input.query, window)) add(linked);
+  }
 
   for (const hit of ordered) {
     if (byId.has(hit.id)) continue;
+    if (boost.has(hit.page)) {
+      const sectionKey = `${hit.page}\u0000${hit.anchor}`;
+      if (!sectionsSeen.has(sectionKey)) {
+        sectionsSeen.add(sectionKey);
+        const rows = await getSection(db, hit.page, hit.anchor);
+        for (const row of sectionWindow(rows, hit.id)) {
+          if (byId.has(row.id)) continue;
+          byId.set(row.id, toCandidate(row));
+          order.push(row.id);
+        }
+      }
+      if (!byId.has(hit.id)) {
+        // 節の窓の外だった(同じ節に離れた 2 つ目のヒットがある等)。それでも当たったユニットは残す
+        byId.set(hit.id, hitToCandidate(hit));
+        order.push(hit.id);
+      }
+      continue;
+    }
     if (hit.kind === "row" && hit.table_idx !== null) {
       const tableKey = `${hit.page}\u0000${hit.anchor}\u0000${hit.table_idx}`;
       if (!tablesSeen.has(tableKey)) {
@@ -336,12 +468,16 @@ export async function collectCandidates(
         continue;
       }
     }
-    byId.set(hit.id, toCandidate({
-      id: hit.id, kind: hit.kind, page: hit.page, section: hit.section, anchor: hit.anchor,
-      ord: hit.ord, truncated: hit.truncated, text: hit.text, table_idx: hit.table_idx,
-      group_key: null, row_key: null, cells: null, nums: null,
-    }));
+    byId.set(hit.id, hitToCandidate(hit));
     order.push(hit.id);
+  }
+
+  // 節選びが無いときは、最上位のヒットの節(boostPages のときだけ)からリンク先を辿る。発見順の最後尾に足す
+  // (溢れたときの切り方が発見順ベースなので、自然と最初に落ちる)。
+  const topHit = ordered[0];
+  if (pinned.length === 0 && topHit && boost.has(topHit.page)) {
+    const window = sectionWindow(await getSection(db, topHit.page, topHit.anchor), topHit.id);
+    for (const linked of await collectLinkedSectionCandidates(db, input.query, window)) add(linked);
   }
 
   // state で絞る。表(group)単位で見て、絞った結果が 0 行になる表は絞らない。
@@ -397,7 +533,7 @@ export async function collectCandidates(
   return natural.filter((c) => pickedIds.has(c.id));
 }
 
-const MAX_CANDIDATES_CAP = 20;
+const MAX_CANDIDATES_CAP = MAX_SLOTS;
 
 /** app_data 由来の疑似候補の上限(段階 3 spec B 7)。 */
 const MAX_APP_DATA_CANDIDATES = 3;
@@ -477,6 +613,8 @@ export async function getPageUrls(db: D1Database, names: string[]): Promise<Map<
 export interface UnitLinkRow {
   unit_id: string;
   page: string;
+  /** リンク先の `#アンカー`。無ければ ""(units.py が正規化して入れる)。 */
+  anchor: string;
   ord: number;
 }
 
@@ -485,7 +623,7 @@ export async function getUnitLinks(db: D1Database, unitIds: string[]): Promise<U
   if (unitIds.length === 0) return [];
   const placeholders = unitIds.map((_, i) => `?${i + 1}`).join(",");
   const result = await db
-    .prepare(`SELECT unit_id, page, ord FROM unit_link WHERE unit_id IN (${placeholders})`)
+    .prepare(`SELECT unit_id, page, anchor, ord FROM unit_link WHERE unit_id IN (${placeholders})`)
     .bind(...unitIds)
     .all<UnitLinkRow>();
   return result.results ?? [];
@@ -513,6 +651,15 @@ export async function getTableInfo(
 }
 
 /** 全ページ名の一覧(結論文の固有名詞照合用)。 */
+/** ページごとの冒頭の段落(ord 最小の paragraph)。理解に渡すページ一覧の 1 行説明に使う。 */
+export async function getPageLeads(db: D1Database): Promise<Map<string, string>> {
+  // SQLite は MIN() と一緒に選んだ裸の列を、その最小の行から取る
+  const result = await db
+    .prepare("SELECT page, text, MIN(ord) AS first_ord FROM unit WHERE kind = 'paragraph' GROUP BY page")
+    .all<{ page: string; text: string }>();
+  return new Map((result.results ?? []).map((r) => [r.page, r.text.replace(/\s+/g, " ")]));
+}
+
 export async function getAllPageNames(db: D1Database): Promise<string[]> {
   const result = await db.prepare("SELECT name FROM page").all<{ name: string }>();
   return (result.results ?? []).map((r) => r.name);

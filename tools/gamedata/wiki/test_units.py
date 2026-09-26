@@ -15,10 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from units import (  # noqa: E402
     REBUILT_TABLES, Heading, ListItem, Paragraph, Table, Unit, apparent_equipment_corrections,
     app_data_correction_rows, build_aliases, build_units, choose_key_columns, correction_rows,
-    detect_repeat_group, diff_keyed, diff_set, fragment, is_excluded_page, is_item_catalog_page,
-    make_row_key, numify, parse_blocks, plan_unit_diff, promote_decorated_header,
-    propagate_name_rows, resolve_correction_unit, resolve_merges, row_hash, strip_decorations,
-    unwind_table,
+    detect_repeat_group, diff_keyed, diff_set, extract_links, fragment, is_excluded_page,
+    is_item_catalog_page, make_row_key, numify, parse_blocks, plan_unit_diff,
+    promote_decorated_header, propagate_name_rows, resolve_correction_unit, resolve_merges,
+    row_hash, strip_decorations, table_row_links, unwind_table,
 )
 import units as units_mod  # noqa: E402
 from store import Store  # noqa: E402
@@ -44,6 +44,53 @@ class Decorations(unittest.TestCase):
     def test_symbol_only_items_are_not_units(self):
         out = build_units("P", "*見出し [#a1]" + chr(10) + "-" + chr(10) + "-&nbsp;" + chr(10) + "-本文" + chr(10))
         self.assertEqual([u.text for u in out.units], ["本文"])
+
+
+class Links(unittest.TestCase):
+    """段落・箇条書き・表の行から、装飾を外す前の原文でリンクを取る(節をたどる下地)。"""
+
+    def test_extract_links_with_and_without_anchor(self):
+        text = "[[エルソ]]と[[回廊効果>ミニゲーム/ルミナの回廊#CorridorBuff]]"
+        self.assertEqual(
+            extract_links(text),
+            [("エルソ", None), ("ミニゲーム/ルミナの回廊", "CorridorBuff")],
+        )
+
+    def test_extract_links_drops_urls(self):
+        self.assertEqual(extract_links("[[公式:https://talesweaver.nexon.co.jp/]]"), [])
+
+    def test_paragraph_link_recorded_with_anchor(self):
+        page_units = build_units(
+            "エルソ",
+            "*週間獲得量上限[#ce291035]\n本文に[[回廊効果>ミニゲーム/ルミナの回廊#CorridorBuff]]あり。\n",
+        )
+        self.assertEqual(len(page_units.links), 1)
+        unit_id, page, anchor, ord_ = page_units.links[0]
+        self.assertEqual(unit_id, page_units.units[0].id)
+        self.assertEqual(page, "ミニゲーム/ルミナの回廊")
+        self.assertEqual(anchor, "CorridorBuff")
+        self.assertEqual(ord_, 0)
+
+    def test_list_item_link_without_anchor_is_empty_string(self):
+        page_units = build_units("P", "*節[#a1]\n-[[エルソ]]を稼ぐ\n")
+        self.assertEqual(page_units.links, [(page_units.units[0].id, "エルソ", "", 0)])
+
+    def test_table_row_link_recorded(self):
+        source = "*節[#a1]\n|名前|効果|h\n|A|[[回廊効果>ミニゲーム/ルミナの回廊#CorridorBuff]]|\n"
+        page_units = build_units("P", source)
+        row_unit = next(u for u in page_units.units if u.kind == "row")
+        self.assertEqual(
+            page_units.links,
+            [(row_unit.id, "ミニゲーム/ルミナの回廊", "CorridorBuff", 0)],
+        )
+
+    def test_table_row_links_align_with_unwound_rows(self):
+        table = Table(header=["名前", "効果"], rows=[
+            ["A", "[[X]]"],
+            ["B", "説明のみ"],
+        ])
+        links = table_row_links(table)
+        self.assertEqual(links, [[("X", None)], []])
 
 
 class ExcludedPages(unittest.TestCase):

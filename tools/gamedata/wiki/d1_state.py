@@ -65,7 +65,9 @@ def collect_state(mode_flags: list[str]) -> dict:
         ),
         "correction": paginate("correction", ["id", "h"], "id", mode_flags),
         "alias": paginate("alias", ["name", "page"], "name, page", mode_flags),
-        "unit_link": paginate("unit_link", ["unit_id", "page", "ord"], "unit_id, page, ord", mode_flags),
+        "unit_link": paginate(
+            "unit_link", ["unit_id", "page", "anchor", "ord"], "unit_id, page, ord", mode_flags,
+        ),
         "column_note": paginate("column_note", ["name", "note", "state_key"], "name", mode_flags),
     }
 
