@@ -580,7 +580,7 @@ class ApparentEquipmentCorrections(unittest.TestCase):
 
 
 class RebuiltTables(unittest.TestCase):
-    """units.sql が触る表は、schema.sql のうち利用者から届くもの以外すべて。全件・差分どちらも同じ。"""
+    """units/*.sql が触る表は、schema.sql のうち利用者から届くもの以外すべて。全件・差分どちらも同じ。"""
 
     USER_TABLES = {"reaction", "ask_log", "ask_call"}
 
@@ -611,7 +611,7 @@ class RebuiltTables(unittest.TestCase):
             out_dir = Path(tmp)
             units_mod.generate(self._store_with_one_page(), out_dir, Path("dummy"), {}, {},
                                 None, None, state=state)
-            return (out_dir / "units.sql").read_text(encoding="utf-8")
+            return "".join(f.read_text(encoding="utf-8") for f in sorted((out_dir / "units").glob("*.sql")))
 
     def test_full_sql_never_touches_user_tables(self) -> None:
         sql = self._generate_sql(state=None)
@@ -860,6 +860,27 @@ class DeleteStatementSize(unittest.TestCase):
         for stmt in stmts:
             self.assertLess(len(stmt.encode("utf-8")), units_mod._MAX_STMT_BYTES)
 
+
+
+
+class SqlSplitting(unittest.TestCase):
+    """D1 が out of memory で落ちた取込(2026-09-28)の再発止め。"""
+
+    def test_delete_in_caps_rows_per_statement(self) -> None:
+        stmts = units_mod.delete_in("unit_fts", "rowid", [str(i) for i in range(2500)])
+        self.assertEqual(len(stmts), 3)
+        self.assertTrue(all(st.count(",") < units_mod._MAX_DELETE_ROWS for st in stmts))
+
+    def test_write_sql_files_splits_by_size_without_cutting_statements(self) -> None:
+        stmts = [f"INSERT INTO t VALUES ('{'x' * 1000}');" for _ in range(20)]
+        with tempfile.TemporaryDirectory() as tmp, patch.object(units_mod, "_MAX_FILE_BYTES", 5000):
+            (Path(tmp) / "units").mkdir()
+            (Path(tmp) / "units" / "999.sql").write_text("stale", encoding="utf-8")
+            paths = units_mod.write_sql_files(Path(tmp) / "units", stmts)
+            self.assertGreater(len(paths), 1)
+            self.assertFalse((Path(tmp) / "units" / "999.sql").exists())
+            joined = "".join(p.read_text(encoding="utf-8") for p in paths)
+            self.assertEqual(joined.count("INSERT INTO t"), 20)
 
 if __name__ == "__main__":
     unittest.main()

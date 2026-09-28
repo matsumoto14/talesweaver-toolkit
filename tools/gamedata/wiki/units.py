@@ -1,5 +1,5 @@
 r"""wiki.sqlite の PukiWiki ソースを D1 の unit / wiki_table / alias / unit_link / column_note /
-meta 行に切り、`tools/gamedata/wiki/out/units.sql` を書き出す。
+meta 行に切り、`tools/gamedata/wiki/out/units/NNN.sql` を書き出す。
 
     python tools/gamedata/wiki/units.py [--cache path] [--out dir] [--segment-cli path]
                                         [--limit N] [--pages 名前,名前,...]
@@ -936,6 +936,12 @@ def build_aliases(page_names: list[str], manual: dict[str, str]) -> dict[str, li
 # --- SQL 書き出し -------------------------------------------------------------------------------
 
 _MAX_STMT_BYTES = 90_000
+# 1 文で消す行数の上限。contentless の FTS5 から 1 文で 1.5 万行を消すと、D1 が out of memory
+# (SQLITE_NOMEM)で取込ごと落ちた(2026-09-28、差分 20 万行の投入)
+_MAX_DELETE_ROWS = 1000
+# 取込 1 回(= wrangler d1 execute --file 1 回、1 トランザクション)ぶんの SQL の大きさ。58 MB を 1 本で
+# 流すと同じく out of memory になったので、ファイルを分けて順に流す
+_MAX_FILE_BYTES = 3_000_000
 
 
 def sql_str(value: str | None) -> str:
@@ -1161,7 +1167,7 @@ def unit_search_text(unit: Unit, page_aliases: dict[str, list[str]]) -> str:
     return f"{prefix} {unit.text}"
 
 
-# units.sql が先頭で空にして入れ直す表(wiki と同梱データから作るもの)。利用者から届いたもの
+# units/*.sql が先頭で空にして入れ直す表(wiki と同梱データから作るもの)。利用者から届いたもの
 # (reaction・ask_log・ask_call)は入れない — 再投入のたびに消えてしまう。
 REBUILT_TABLES = ("correction", "unit_link", "alias", "column_note", "wiki_table", "unit", "page", "meta")
 
@@ -1205,7 +1211,7 @@ def split_by_bytes(parts: list[str], overhead: int) -> list[list[str]]:
     size = overhead
     for part in parts:
         part_bytes = len(part.encode("utf-8")) + 2
-        if chunk and size + part_bytes > _MAX_STMT_BYTES:
+        if chunk and (size + part_bytes > _MAX_STMT_BYTES or len(chunk) >= _MAX_DELETE_ROWS):
             out.append(chunk)
             chunk = []
             size = overhead
@@ -1293,12 +1299,36 @@ def plan_unit_diff(all_units: list[Unit], unit_h: list[str],
     }
 
 
+def write_sql_files(sql_dir: Path, stmts: list[str]) -> list[Path]:
+    """文を `_MAX_FILE_BYTES` ずつ `sql_dir/001.sql …` に分けて書く(文の途中では切らない)。前回の分は消す。
+    取込は名前順に 1 本ずつ流す(api-worker の README)。meta は最後の文なので、最後のファイルまで通ったときだけ
+    更新される。"""
+    sql_dir.mkdir(parents=True, exist_ok=True)
+    for old in sql_dir.glob("*.sql"):
+        old.unlink()
+    files: list[list[str]] = [[]]
+    size = 0
+    for st in stmts:
+        st_bytes = len(st.encode("utf-8")) + 1
+        if files[-1] and size + st_bytes > _MAX_FILE_BYTES:
+            files.append([])
+            size = 0
+        files[-1].append(st)
+        size += st_bytes
+    paths = []
+    for i, part in enumerate(files, 1):
+        path = sql_dir / f"{i:03d}.sql"
+        path.write_text("\n".join(part) + "\n", encoding="utf-8")
+        paths.append(path)
+    return paths
+
+
 def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dict[str, str],
             column_notes: dict[str, dict], limit: int | None, only_pages: list[str] | None,
             corrections: list[dict] | None = None, app_data: list[dict] | None = None,
             state: dict | None = None,
             ) -> dict[str, Any]:
-    """`out_dir/units.sql` を書く。`state` が None なら全件(DELETE 全件 → INSERT)、
+    """`out_dir/units/NNN.sql` を書く。`state` が None なら全件(DELETE 全件 → INSERT)、
     あれば本番の現状と比べた差分だけを書く(d1_state.py が書いた state.json の中身)。
     """
     all_pages = list(store.db.execute("SELECT * FROM page"))
@@ -1425,7 +1455,7 @@ def generate(store: Store, out_dir: Path, segment_cli: Path, aliases_manual: dic
             correction_bodies, correction_h, meta_rows,
         )
 
-    out_dir.joinpath("units.sql").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_sql_files(out_dir / "units", lines)
 
     return {
         "pages": len(ok_rows),
@@ -1687,7 +1717,7 @@ def main() -> int:
         f"(matched: {stats['corrections_matched']}) + app_data={stats['app_data_corrections']}, "
         f"apparent={stats['apparent_corrections']})"
     )
-    print(f"out: {a.out / 'units.sql'}")
+    print(f"out: {a.out / 'units'}/*.sql(名前順に 1 本ずつ流す)")
 
     writes = stats["writes"]
     if writes is not None:

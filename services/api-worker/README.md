@@ -59,8 +59,9 @@ npx wrangler d1 execute tw-wiki --remote --file migrations/002-ask-log-qkey.sql 
 npx wrangler d1 execute tw-wiki --remote --file migrations/003-ask-trace.sql -y
 npx wrangler d1 execute tw-wiki --remote --file migrations/004-diff-import.sql -y   # h 列を足す(schema.sql に無い版へ更新するとき)
 npx wrangler d1 execute tw-wiki --remote --file migrations/005-unit-link-anchor.sql -y   # unit_link にリンク先の節アンカーを足す
-python tools/gamedata/wiki/units.py  # リポジトリルートで。tools/gamedata/wiki/out/units.sql(約 100 MB)を全件投入用に作る
-npx wrangler d1 execute tw-wiki --remote --file ../../tools/gamedata/wiki/out/units.sql -y   # services/api-worker で
+python tools/gamedata/wiki/units.py  # リポジトリルートで。tools/gamedata/wiki/out/units/NNN.sql(計 約 100 MB、3 MB ずつ)を全件投入用に作る
+# services/api-worker で。名前順に 1 本ずつ流す(1 本 = 1 トランザクション。まとめて流すと D1 が out of memory)
+for f in ../../tools/gamedata/wiki/out/units/*.sql; do echo "$f"; npx wrangler d1 execute tw-wiki --remote --file "$f" -y > /dev/null || { echo "FAILED at $f"; break; }; done
 curl https://api.tw-context.dev/health
 ```
 
@@ -71,11 +72,11 @@ cd services/api-worker
 python ../../tools/gamedata/wiki/d1_state.py --out state.json               # 本番の現状を読む
 python ../../tools/gamedata/wiki/units.py --state state.json
 # 標準エラーに書き込み見積り(表ごと・合計)が出る。80,000 行を超えたら警告。見てから流す
-npx wrangler d1 execute tw-wiki --remote --file ../../tools/gamedata/wiki/out/units.sql -y
+for f in ../../tools/gamedata/wiki/out/units/*.sql; do echo "$f"; npx wrangler d1 execute tw-wiki --remote --file "$f" -y > /dev/null || { echo "FAILED at $f"; break; }; done
 ```
 
 `units.py --state` は消えた行を DELETE・変わった行を INSERT OR REPLACE・新しい行を INSERT するだけの
-`units.sql` を書く(meta だけは毎回書き直す)。`unit` の rowid は既存 id が維持し、新しい id は本番の
+`out/units/NNN.sql` を書く(meta だけは毎回書き直す)。`unit` の rowid は既存 id が維持し、新しい id は本番の
 現状の最大 rowid + 1 から連番(state は残っている行しか持たないので、末尾の行が消えれば次回は
 同じ番号がまた振られうる。`unit` と `unit_fts` の両方から同時に消えるので実害は無い)。
 
@@ -86,7 +87,7 @@ npx wrangler d1 execute tw-wiki --remote --file ../../tools/gamedata/wiki/out/un
 欠落(前回 unit だけ書けた rowid)の両方を検知して直せる。
 
 deploy は main への push で `.github/workflows/workers.yml` が行う(型検査 → テスト → `wrangler deploy`)。
-手で出すなら `npx wrangler deploy`。`units.sql` を再投入する前後で deploy し直す必要はない(表の中身だけ変わる)。
+手で出すなら `npx wrangler deploy`。`out/units/*.sql` を再投入する前後で deploy し直す必要はない(表の中身だけ変わる)。
 
 ## 1 日の上限と記録
 
@@ -113,7 +114,7 @@ deploy は main への push で `.github/workflows/workers.yml` が行う(型検
   npx wrangler d1 execute tw-wiki --remote --command "SELECT substr(user,1,8) AS who, count(*) AS n FROM ask_log WHERE at >= date('now') GROUP BY user ORDER BY n DESC"
   ```
 
-`units.sql`(差分投入)は利用者から届く `reaction`・`ask_log`・`ask_call` には一切触らない。
+`out/units/*.sql`(差分投入)は利用者から届く `reaction`・`ask_log`・`ask_call` には一切触らない。
 wiki を再同期(`sync.py`)したら「D1 の作成・投入」の「以降」の手順(`d1_state.py` → `units.py --state`
 → 見積りを見て `--remote`)で更新できる。
 生きている Worker インスタンスは別名の辞書をキャッシュしているので、投入直後は古い辞書で

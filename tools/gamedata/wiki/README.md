@@ -15,7 +15,7 @@ python -m unittest discover -s tools/gamedata/wiki -t tools/gamedata/wiki
 | `talewiki.py` | 取得と解析。EUC-JP + NEC 拡張の復元、`?cmd=source` / `?cmd=list` / RecentChanges |
 | `store.py` | SQLite(`page` / `sync_run`)。最後に成功した版を必ず残す |
 | `sync.py` | 1 コマンド。差分 / 全件 / 状態表示 |
-| `units.py` | `wiki.sqlite` → `out/units.sql`(D1 投入用)。全件・差分(`--state`)の両方 |
+| `units.py` | `wiki.sqlite` → `out/units/NNN.sql`(D1 投入用、3 MB ずつ)。全件・差分(`--state`)の両方 |
 | `d1_state.py` | 本番(または対象の D1)の現状を読み、`units.py --state` の入力(state.json)を書く |
 
 `.claude/skills/talewiki-fetch/scripts/fetch_page.py` は 1 枚だけ見たいとき用の薄い口で、
@@ -75,8 +75,8 @@ mtime が取れなくても必ず取り直す。
 python tools/gamedata/wiki/units.py [--pages 名前,名前,...] [--limit N] [--state state.json]
 ```
 
-`wiki.sqlite` の `page` を段落・表の行・訂正のユニットに切り、`out/units.sql` を書き出す
-(D1 への流し込みは `wrangler d1 execute` に渡す)。`--pages` は開発用に対象ページを先頭に寄せる
+`wiki.sqlite` の `page` を段落・表の行・訂正のユニットに切り、`out/units/NNN.sql` を書き出す
+(D1 への流し込みは名前順に 1 本ずつ `wrangler d1 execute --file` に渡す。手順は services/api-worker/README.md)。`--pages` は開発用に対象ページを先頭に寄せる
 だけで、`--limit` を付けないと全ページ(約 3,400)を処理する。
 
 **`--state` を付けない(既定)と全件(DELETE 全件 → INSERT)。** D1 の無料枠(書き込み 1 日 10 万行)を
