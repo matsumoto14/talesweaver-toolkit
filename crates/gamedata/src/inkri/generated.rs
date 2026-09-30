@@ -67,7 +67,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†真・地神の兜",
         series: "地神装備",
         part: PartSlot::Helm,
-        bianu_seed_cost: Some(15787500),
+        bianu_seed_cost: Some(15862500),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -75,7 +75,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†真・地神の背甲",
         series: "地神装備",
         part: PartSlot::Body,
-        bianu_seed_cost: Some(15787500),
+        bianu_seed_cost: Some(15862500),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -83,7 +83,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†真・地神の目",
         series: "地神装備",
         part: PartSlot::Head,
-        bianu_seed_cost: Some(15787500),
+        bianu_seed_cost: Some(15862500),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -91,7 +91,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†真・地神の心臓",
         series: "地神装備",
         part: PartSlot::Artifact,
-        bianu_seed_cost: Some(15787500),
+        bianu_seed_cost: Some(15862500),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -99,7 +99,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†真・地神の具足",
         series: "地神装備",
         part: PartSlot::Leg,
-        bianu_seed_cost: Some(15787500),
+        bianu_seed_cost: Some(15862500),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -107,7 +107,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†真・地神の指輪",
         series: "地神装備",
         part: PartSlot::Hand,
-        bianu_seed_cost: Some(15787500),
+        bianu_seed_cost: Some(15862500),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -115,7 +115,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†真・地神の鎧",
         series: "地神装備",
         part: PartSlot::Armor,
-        bianu_seed_cost: Some(15787500),
+        bianu_seed_cost: Some(15862500),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -323,7 +323,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アクィルスグラディウス(Sub)",
         series: "アクィルス",
         part: PartSlot::Shield,
-        bianu_seed_cost: Some(11250000),
+        bianu_seed_cost: Some(10500000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -339,7 +339,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アクィルスクリス(Sub)",
         series: "アクィルス",
         part: PartSlot::Shield,
-        bianu_seed_cost: Some(11250000),
+        bianu_seed_cost: Some(10500000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -499,7 +499,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アクィルスガントレット",
         series: "アクィルス",
         part: PartSlot::Hand,
-        bianu_seed_cost: Some(9000000),
+        bianu_seed_cost: Some(11250000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -515,7 +515,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アクィルスアミュレット",
         series: "アクィルス",
         part: PartSlot::Head,
-        bianu_seed_cost: Some(9000000),
+        bianu_seed_cost: Some(11250000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -523,7 +523,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アクィルスウィング",
         series: "アクィルス",
         part: PartSlot::Body,
-        bianu_seed_cost: Some(8250000),
+        bianu_seed_cost: Some(11250000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -531,7 +531,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アクィルスブーツ",
         series: "アクィルス",
         part: PartSlot::Leg,
-        bianu_seed_cost: Some(9000000),
+        bianu_seed_cost: Some(11250000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -731,7 +731,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アビスグラディウス(Sub)",
         series: "アビス",
         part: PartSlot::Shield,
-        bianu_seed_cost: Some(12075000),
+        bianu_seed_cost: Some(11325000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -747,7 +747,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アビスクリス(Sub)",
         series: "アビス",
         part: PartSlot::Shield,
-        bianu_seed_cost: Some(12075000),
+        bianu_seed_cost: Some(11325000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -907,7 +907,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アビスガントレット",
         series: "アビス",
         part: PartSlot::Hand,
-        bianu_seed_cost: Some(10575000),
+        bianu_seed_cost: Some(12075000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -923,7 +923,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アビスアミュレット",
         series: "アビス",
         part: PartSlot::Head,
-        bianu_seed_cost: Some(10575000),
+        bianu_seed_cost: Some(12075000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -931,7 +931,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アビスウィング",
         series: "アビス",
         part: PartSlot::Body,
-        bianu_seed_cost: Some(8325000),
+        bianu_seed_cost: Some(12075000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -939,7 +939,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†アビスブーツ",
         series: "アビス",
         part: PartSlot::Leg,
-        bianu_seed_cost: Some(10575000),
+        bianu_seed_cost: Some(12075000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -1315,7 +1315,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†エクリプスガントレット",
         series: "エクリプス",
         part: PartSlot::Hand,
-        bianu_seed_cost: Some(14325000),
+        bianu_seed_cost: Some(25575000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -1331,7 +1331,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†エクリプスアミュレット",
         series: "エクリプス",
         part: PartSlot::Head,
-        bianu_seed_cost: Some(14325000),
+        bianu_seed_cost: Some(25575000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -1339,7 +1339,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†エクリプスウィング",
         series: "エクリプス",
         part: PartSlot::Body,
-        bianu_seed_cost: Some(14325000),
+        bianu_seed_cost: Some(25575000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -1347,7 +1347,7 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         name: "†エクリプスブーツ",
         series: "エクリプス",
         part: PartSlot::Leg,
-        bianu_seed_cost: Some(14325000),
+        bianu_seed_cost: Some(25575000),
         eta_seed_cost: None,
     },
     InkriTarget {
@@ -1356,6 +1356,22 @@ pub(super) static INKRI_TARGETS: &[InkriTarget] = &[
         series: "アクィルス",
         part: PartSlot::Weapon,
         bianu_seed_cost: Some(10500000),
+        eta_seed_cost: None,
+    },
+    InkriTarget {
+        client_item_id: 1045793,
+        name: "†アビスソードシェイプ",
+        series: "アビス",
+        part: PartSlot::Weapon,
+        bianu_seed_cost: Some(11325000),
+        eta_seed_cost: None,
+    },
+    InkriTarget {
+        client_item_id: 1045794,
+        name: "†エクリプスソードシェイプ",
+        series: "エクリプス",
+        part: PartSlot::Weapon,
+        bianu_seed_cost: Some(25575000),
         eta_seed_cost: None,
     },
     InkriTarget {

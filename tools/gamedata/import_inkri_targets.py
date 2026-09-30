@@ -22,15 +22,15 @@
 1=Helm, 2=Weapon, 3=Armor, 4=Shield, 5=Head, 6=Hand, 7=Body, 8=Leg, 18=Artifact)。
 
 ## 系列ごとの収録・費用の割り当て
-wiki のインクリ費用表は系列によって「武器/防具/AF/エフェクト」の粒度がバラバラ:
-- アクィルス相当(Lv300)・アビス相当(Lv310)は 4 区分(武器・防具・AF・エフェクト)が別価格。
-  実データでは「エフェクト」は Body スロットの「〜ウィング」1 品、「AF」は Head/Hand/Leg の
-  3 品(アミュレット/ガントレット/ブーツ)、「防具」は Helm/Armor/Shield(ヘルム・メイル系・
-  リスト/シールド/クリスタル等)にあたる(id を突き合わせて確認、2026-09-17)。
-- エクリプスは「武器・防具」と「AF」の 2 区分。ウィング(Body)は wiki 表に単独の行が無いため、
-  AF と同額として扱う([仮]。区分自体が無い可能性がある)。
-- セイクリッド・改・セイクリッドは「武器・防具・AF」が同一価格 1 本(部位を問わず同額)。
-- モモンズ・グリーブ・地神装備・ネニャフル学院の鎧は単一価格(部位を問わず同額、あるいは対象が単一部位)。
+基本装備(武器・防具・アミュレット/ガントレット/ブーツ・ウィング)のビアヌ費用は
+`4,500,000 + 7,500 × 必要Lv + 0.375 × 装備の価格(c13_Price)` で決まる。wiki 表の武器・防具の値と、
+エクリプスのアミュレット等が 25,575,000 になる実機の値(利用者報告 2026-10-01)がすべて再現できる。
+アクィルス / アビス / エクリプスはこの式で出す(サブ武器は盾スロットでも武器の価格なので武器の費用になる)。
+- wiki 表の「AF」列はアーティファクト(EquipSlot 18。N = 素 / DF = ディフェンシオ系)で、
+  アミュレット等ではない。「エフェクト」表も効果装備で、ウィングではない。どちらもシミュレータは収録しない。
+- セイクリッド・改・セイクリッドは全部位同額(式とも一致)。
+- 地神は上限255装備の費用増加(公式 no=154725)で式の 2 倍。真・地神は wiki に値が無いので同じく式の 2 倍。
+- モモンズ・グリーブ・ネニャフル学院の鎧は式に合わないが wiki の単一価格のまま。
   デックストシューズ・アベルシューズ・サクヤの雪駄・真ブリニクル武器は収録しない(ユーザー判断 2026-09-18)。
 - Lv185AF・Lv250コラボ靴は実アイテム名が確認できず対象外(判定が曖昧な系列は入れない)。
 
@@ -84,6 +84,7 @@ def default_assets_dir() -> Path:
 class DbItem:
     item_id: int
     equip_slot: str
+    price: int  # c13_Price(装備の価格。ビアヌ費用の式に使う)
 
 
 def load_db_items(assets: Path) -> dict[int, DbItem]:
@@ -97,18 +98,20 @@ def load_db_items(assets: Path) -> dict[int, DbItem]:
             template_col = _col(header, "c1_Template")
             id_col = _col(header, "c2_ItemId")
             slot_col = _col(header, "c35_EquipSlot")
+            price_col = _col(header, "c13_Price")
             synth_col = _col(header, "c51_995dd080")
-            if None in (template_col, id_col, slot_col, synth_col):
+            if None in (template_col, id_col, slot_col, synth_col, price_col):
                 continue
             for row in r:
                 if row[template_col] != "EquippableItemTemplate":
                     continue
                 try:
                     item_id = int(row[id_col])
+                    price = int(row[price_col])
                     int(row[synth_col].strip("[]").split(",")[-1])
                 except (ValueError, IndexError):
                     continue
-                items[item_id] = DbItem(item_id, row[slot_col])
+                items[item_id] = DbItem(item_id, row[slot_col], price)
     return items
 
 
@@ -133,9 +136,9 @@ def load_item_names(assets: Path) -> dict[int, tuple[str, str]]:
 
 
 # ── 系列定義 ──
-# price は part(PartSlot バリアント名文字列) → 価格(SEED)の関数。全部位同額なら定数を返すだけでよい。
+# price は (part(PartSlot バリアント名文字列), 装備の価格 c13_Price) → 費用(SEED)の関数。
 
-Series = tuple[str, object, object]  # (label, matcher(name,id,part)->bool, price(part)->int|None)
+Series = tuple[str, object, object]  # (label, matcher(name,id,part)->bool, price(part,item_price)->int|None)
 
 
 def prefix(*prefixes: str):
@@ -164,11 +167,12 @@ def part_is(*parts: str):
 
 
 def flat(price: int):
-    return lambda part: price
+    return lambda part, item_price: price
 
 
-def by_part(prices: dict[str, int], default: int | None = None):
-    return lambda part: prices.get(part, default)
+def bianu_formula(level: int):
+    """基本装備のビアヌ費用 = 4,500,000 + 7,500 × 必要Lv + 0.375 × 装備の価格。"""
+    return lambda part, item_price: 4_500_000 + 7_500 * level + item_price * 3 // 8
 
 
 # 系列ラベル → エタインクリ費用(SEED)。wiki「エタインクリ費用」節(2026-09-18 転記)
@@ -181,9 +185,11 @@ SERIES: list[Series] = [
     ("モモンズ・グリーブ", exact("†モモンズ・グリーブ"), flat(3_000_000)),
     (
         "地神装備",
-        prefix("†地神の", "†真・地神の"),
+        prefix("†地神の"),
         flat(15_787_500),
     ),
+    # 真・地神は wiki 表で「?」。地神と同じく式(Lv265)の 2 倍(上限255装備の費用増加、公式 no=154725)
+    ("地神装備", prefix("†真・地神の"), flat(15_862_500)),
     (
         "ネニャフル学院の鎧",
         lambda name, item_id, part: "ネニャフル学院の" in name,
@@ -195,51 +201,17 @@ SERIES: list[Series] = [
             prefix("†アクィルス"),
             any_of(id_range(1039515, 1039566), id_range(1045792, 1045792)),
         ),
-        by_part(
-            {
-                "Weapon": 10_500_000,
-                "Helm": 11_250_000,
-                "Armor": 11_250_000,
-                "Shield": 11_250_000,
-                "Head": 9_000_000,
-                "Hand": 9_000_000,
-                "Leg": 9_000_000,
-                "Body": 8_250_000,
-            }
-        ),
+        bianu_formula(300),
     ),
     (
         "アビス",
-        all_of(prefix("†アビス"), id_range(1040995, 1041046)),
-        by_part(
-            {
-                "Weapon": 11_325_000,
-                "Helm": 12_075_000,
-                "Armor": 12_075_000,
-                "Shield": 12_075_000,
-                "Head": 10_575_000,
-                "Hand": 10_575_000,
-                "Leg": 10_575_000,
-                "Body": 8_325_000,
-            }
-        ),
+        all_of(prefix("†アビス"), any_of(id_range(1040995, 1041046), id_range(1045793, 1045793))),
+        bianu_formula(310),
     ),
     (
         "エクリプス",
-        all_of(prefix("†エクリプス"), id_range(1044260, 1044310)),
-        by_part(
-            {
-                "Weapon": 25_575_000,
-                "Helm": 25_575_000,
-                "Armor": 25_575_000,
-                "Shield": 25_575_000,
-                # AF(Head/Hand/Leg)。ウィング(Body)は表に無いので同額を仮に当てる([仮])
-                "Head": 14_325_000,
-                "Hand": 14_325_000,
-                "Leg": 14_325_000,
-                "Body": 14_325_000,
-            }
-        ),
+        all_of(prefix("†エクリプス"), any_of(id_range(1044260, 1044310), id_range(1045794, 1045794))),
+        bianu_formula(310),
     ),
     (
         "セイクリッド",
@@ -301,7 +273,7 @@ def main() -> None:
                         name=name,
                         series=label,
                         part=part,
-                        price=price_fn(part),
+                        price=price_fn(part, db_item.price),
                         eta_price=ETA_SEED_COST.get(label),
                         icon_file=icon_file,
                     )
@@ -315,7 +287,7 @@ def main() -> None:
     copy_icons(assets, targets)
 
     print(f"収録件数: {len(targets)} 件", file=sys.stderr)
-    for label, _matcher, _price in SERIES:
+    for label in dict.fromkeys(label for label, _m, _p in SERIES):
         count = per_series_count.get(label, 0)
         print(f"  {label}: {count} 件", file=sys.stderr)
     uncosted = [t for t in targets if t.price is None]
