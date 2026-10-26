@@ -119,7 +119,7 @@ export type SkillForm = "sword" | "pike" | "axe" | "urumi" | "chisel";
 export type Attacker = "player" | "magic_doll" | "destruction_spirit";
 
 // crates/domain/src/skill.rs の SummonForm(snake_case)。
-export type SummonForm = "mica_bear" | "rucy_bear" | "anferu" | "gureshisu" | "igni";
+export type SummonForm = "earu" | "mica_bear" | "rucy_bear" | "anferu" | "gureshisu" | "igni";
 
 // 属性 8 種。crates/domain/src/element.rs の Element(snake_case)。
 export type Element =
@@ -477,7 +477,7 @@ export interface CharacterSkillDef {
 }
 
 // crates/domain/src/character_skill.rs の SkillRequirement。
-export type SkillRequirement = { form: SkillForm } | "full_charge";
+export type SkillRequirement = { form: SkillForm } | "full_charge" | { skills: string[] };
 
 export interface CharacterSkills {
   /** ON にしている CharacterSkillDef の id */

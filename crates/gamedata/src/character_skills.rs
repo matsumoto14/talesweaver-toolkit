@@ -158,7 +158,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         max_level: 1,
         effects: DELAY_5,
         mastery_overrides: &[],
-        exclusive_with: &[],
+        exclusive_with: &["anais_lucibear_barrier", "anais_fire_aura", "anais_ice_snare"],
         requires: None,
         source_url: WIKI,
         note: "パッシブ",
@@ -380,9 +380,13 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
-        requires: None,
+        requires: Some(SkillRequirement::Skills(&[
+            "lucian_streak",
+            "lucian_warriors_dance",
+            "lucian_whirlwind_sword",
+        ])),
         source_url: WIKI,
-        note: "マスタリー【力を込めた連撃】。この 3 スキルを主軸にするときだけ ON にする",
+        note: "マスタリー【力を込めた連撃】。連撃・無双乱舞・旋風斬を撃つときだけ効く",
     },
     CharacterSkillDef {
         id: "lucian_iron_wall",
@@ -398,7 +402,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         exclusive_with: &[],
         requires: None,
         source_url: WIKI,
-        note: "味方にも",
+        note: "同行ルシアンが盾でボタンを押している間だけ(その間ルシアン本人は攻撃できない)",
     },
     CharacterSkillDef {
         id: "boris_winter_survivor",
@@ -870,7 +874,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             percent: 3.0,
         }],
         mastery_overrides: &[],
-        exclusive_with: &[],
+        exclusive_with: &["anais_hard_weapon", "anais_loki_specialization", "anais_fire_aura", "anais_ice_snare"],
         requires: None,
         source_url: WIKI,
         note: "wiki は +1〜3%。最大値で入れている",
@@ -886,7 +890,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             percent: 5.0,
         }],
         mastery_overrides: &[],
-        exclusive_with: &[],
+        exclusive_with: &["anais_hard_weapon", "anais_loki_specialization", "anais_lucibear_barrier"],
         requires: None,
         source_url: WIKI,
         note: "",
@@ -902,7 +906,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             percent: 20.0,
         }],
         mastery_overrides: &[],
-        exclusive_with: &[],
+        exclusive_with: &["anais_lucibear_barrier", "anais_fire_aura", "anais_ice_snare"],
         requires: None,
         source_url: WIKI,
         note: "wiki は +5,13〜20%。最大値で入れている",
@@ -1219,9 +1223,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
-        requires: None,
+        requires: Some(SkillRequirement::Skills(&["isaac_energy_field"])),
         source_url: WIKI,
-        note: "マスタリー【プリチャージ】",
+        note: "マスタリー【プリチャージ】。エネルギーフィールドにだけ乗る",
     },
     CharacterSkillDef {
         id: "roamini_curse_end",
@@ -1238,9 +1242,9 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             }],
         }],
         exclusive_with: &[],
-        requires: None,
+        requires: Some(SkillRequirement::Skills(&["roamini_mastary2_4"])),
         source_url: WIKI,
-        note: "マスタリー【良心】",
+        note: "マスタリー【良心】。カース・エンドにだけ乗る",
     },
     // --- イェフネンの形態ごとのパッシブ(wiki「Skill/イェフネン」スキル性能一覧 /
     // ステータス各カテゴリ表、2026-09-21 取得)。**効果を技データ側に持つもの**は
@@ -1392,23 +1396,6 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         requires: None,
         source_url: WIKI,
         note: "効果の層・値が wiki のカテゴリ表で確認できていないため記録のみ",
-    },
-    // --- 最終ダメージ(wiki ステータス [L]最終ダメージ。上限 +45%)---
-    CharacterSkillDef {
-        id: "benya_dark_blessing",
-        game_character_id: "benya",
-        name: "ダークブレッシング",
-        audience: SkillAudience::SelfOnly,
-        max_level: 1,
-        effects: &[SkillEffect::Damage {
-            category: DamageCategory::FinalDamageRate,
-            percent: 100.0,
-        }],
-        mastery_overrides: &[],
-        exclusive_with: &[],
-        requires: None,
-        source_url: WIKI,
-        note: "極・ミラクルスピリットの追加効果。上限 +45% で頭打ちになる",
     },
     // --- ステ上昇の自己バフ・味方バフ(wiki ステータス「能力値増加/減少カテゴリー」)---
     CharacterSkillDef {
@@ -1607,7 +1594,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
         exclusive_with: &[],
         requires: None,
         source_url: NOTICE_153335,
-        note: "敵被ダメージ増加(+10%)",
+        note: "敵被ダメージ増加(+10%)。チャネリング中だけ",
     },
     CharacterSkillDef {
         id: "ispin_mark_de_victoire",
@@ -1716,7 +1703,7 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             percent: -10.0,
         }],
         mastery_overrides: &[],
-        exclusive_with: &[],
+        exclusive_with: &["anais_hard_weapon", "anais_loki_specialization", "anais_lucibear_barrier"],
         requires: None,
         source_url: NOTICE_153335,
         note: "敵被ダメージ増加(+10%)。敵攻撃ダメージ減少(-10%)は含めない",
@@ -1874,6 +1861,25 @@ pub fn normalize_character_skill_selection(skills: &mut CharacterSkills) -> bool
     let before = (skills.skill_ids.len(), skills.skill_levels.len());
     skills.skill_ids.retain(|id| known(id));
     skills.skill_levels.retain(|id, _| known(id));
+    // 排他が後から付いた組(アナイスの守護型 / 人形型 / 破壊型)が両方 ON のまま保存されている
+    // と `validate` が弾いて計算が止まる。先に並んでいる方を残し、後から衝突する方を落とす
+    // (並びは保存順なので決定的)
+    let mut kept: Vec<String> = Vec::with_capacity(skills.skill_ids.len());
+    for id in std::mem::take(&mut skills.skill_ids) {
+        let def = CHARACTER_SKILLS.iter().find(|d| d.id == id);
+        let conflicts = kept.iter().any(|k| {
+            def.is_some_and(|d| d.exclusive_with.contains(&k.as_str()))
+                || CHARACTER_SKILLS
+                    .iter()
+                    .any(|d| d.id == k && d.exclusive_with.contains(&id.as_str()))
+        });
+        if conflicts {
+            skills.skill_levels.remove(&id);
+        } else {
+            kept.push(id);
+        }
+    }
+    skills.skill_ids = kept;
     (skills.skill_ids.len(), skills.skill_levels.len()) != before
 }
 
@@ -1907,10 +1913,52 @@ mod tests {
         }
     }
 
+    /// アナイスの守護型 / 人形型 / 破壊型のキャラスキルは互いに排他で、排他は双方向に付く
+    /// (`toggleCharacterSkill` は順方向しか見ない)。
+    #[test]
+    fn アナイスの3つの型は双方向に排他() {
+        let groups: [&[&str]; 3] = [
+            &["anais_hard_weapon", "anais_loki_specialization"],
+            &["anais_lucibear_barrier"],
+            &["anais_fire_aura", "anais_ice_snare"],
+        ];
+        let def = |id: &str| CHARACTER_SKILLS.iter().find(|d| d.id == id).unwrap();
+        for (i, g) in groups.iter().enumerate() {
+            for (j, h) in groups.iter().enumerate() {
+                for a in g.iter() {
+                    for b in h.iter() {
+                        assert_eq!(
+                            def(a).exclusive_with.contains(b),
+                            i != j,
+                            "{a} -> {b}"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(on(&["anais_hard_weapon", "anais_fire_aura"]).validate(CHARACTER_SKILLS, "anais").is_err());
+        assert!(on(&["anais_fire_aura", "anais_hard_weapon"]).validate(CHARACTER_SKILLS, "anais").is_err());
+        assert!(on(&["anais_hard_weapon", "anais_loki_specialization"]).validate(CHARACTER_SKILLS, "anais").is_ok());
+    }
+
+    /// 排他が後から付いた衝突データは、先に並んでいる方を残して落とす。2 回目は何も変えない。
+    #[test]
+    fn 正規化は排他に衝突する選択を先に並んだ方を残して落とす() {
+        let mut skills = on(&["anais_fire_aura", "anais_hard_weapon", "anais_ice_snare", "anais_lucibear_barrier"]);
+        skills.skill_levels.insert("anais_hard_weapon".into(), 1);
+        assert!(normalize_character_skill_selection(&mut skills));
+        assert_eq!(skills.skill_ids, vec!["anais_fire_aura", "anais_ice_snare"]);
+        assert!(skills.skill_levels.is_empty());
+        assert!(skills.validate(CHARACTER_SKILLS, "anais").is_ok());
+        let again = skills.clone();
+        assert!(!normalize_character_skill_selection(&mut skills));
+        assert_eq!(skills, again);
+    }
+
     /// 収録件数。カタログを入れ替えたら数を更新する(黙って増減させない)。
     #[test]
-    fn 収録は102件() {
-        assert_eq!(CHARACTER_SKILLS.len(), 102);
+    fn 収録は101件() {
+        assert_eq!(CHARACTER_SKILLS.len(), 101);
     }
 
     /// 上限はカテゴリ側(`DamageCategory::cap`)が見るので、ここでは
@@ -1933,8 +1981,6 @@ mod tests {
                     DamageCategory::AttackDamageSkill => -20.0..=20.0,
                     // [E1] スキル倍率増加(割合)。イサック/ロアミニの +50% が最大
                     DamageCategory::SkillMultiplierRate => -20.0..=50.0,
-                    // [L] 最終ダメージ。ダークブレッシングの +100%(上限 +45% で頭打ち)
-                    DamageCategory::FinalDamageRate => 0.0..=100.0,
                     // [S4] 敵被ダメージ増加(敵にかけるデバフ)。公式お知らせ no=153335 §6 の
                     // 最大値はロアミニ〈カース・ペンジュラム【シンボルオブスピリット】〉の -20%
                     DamageCategory::TakenDamageReduction => -20.0..=0.0,
@@ -2297,6 +2343,37 @@ mod tests {
         assert!(saved.validate(catalog, "yefnen").is_ok());
         // 2 回目は何も落ちない(冪等)
         assert!(!normalize_character_skill_selection(&mut saved));
+    }
+
+    /// 本人の火力バフではないので外した(ベンヤのダークブレッシングは復活させた仲間に付く
+    /// 効果で、韓国公式では 공격 피해량 −100%)。保存済みの id はカタログを引く正規化で落ちる。
+    #[test]
+    fn ダークブレッシングは収録から消えて保存済みの選択からも落ちる() {
+        let catalog = character_skill_catalog();
+        assert!(catalog.iter().all(|d| d.id != "benya_dark_blessing"));
+        let mut saved = CharacterSkills {
+            skill_ids: vec!["benya_dark_blessing".into(), "benya_soul_gate".into()],
+            skill_levels: [("benya_dark_blessing".to_string(), 1u8)].into_iter().collect(),
+        };
+        assert!(normalize_character_skill_selection(&mut saved));
+        assert_eq!(saved.skill_ids, vec!["benya_soul_gate".to_string()]);
+        assert!(saved.validate(catalog, "benya").is_ok());
+        assert!(!normalize_character_skill_selection(&mut saved));
+    }
+
+    /// `SkillRequirement::Skills` が指す技 id は、そのキャラの技として実在する。
+    #[test]
+    fn 技で絞る条件の技idはそのキャラに実在する() {
+        for def in CHARACTER_SKILLS {
+            let Some(SkillRequirement::Skills(ids)) = def.requires else {
+                continue;
+            };
+            assert!(!ids.is_empty(), "{}", def.id);
+            let owned = crate::skills_for(def.game_character_id);
+            for id in ids {
+                assert!(owned.iter().any(|s| s.id == *id), "{} が指す技 {id} が無い", def.id);
+            }
+        }
     }
 
     /// 敵にかけるデバフが与ダメージ式まで効いているか、実カタログから通しで確かめる。

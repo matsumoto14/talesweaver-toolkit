@@ -879,9 +879,11 @@ pub fn attacker_of(skill_id: &str) -> Attacker {
 /// 主軸スキル → 召喚獣の型、召喚スキル → 自分が属する型(wiki「Skill/アナイス」の型分け、
 /// 2026-09-18 追記)。ベアステップ・陣(本体スキル)は型を「決める」側、召喚スキル 16 件は
 /// 型に「属する」側で、どちらもこの 1 つの表に載せる(フロントに対応表を書き写させない)。
-/// 型を決めない共通スキル(`anais_fairy_light` / `anais_angry_pixie`)と守護精霊
-/// (`anais_dissonance` / `anais_cacophony` 他)はここに載せない = `None`。
+/// 守護型の主軸(ディソナンス / カコフォニー)も型を「決める」側。
+/// 型を決めない共通スキル(`anais_fairy_light` / `anais_angry_pixie`)はここに載せない = `None`。
 const SUMMON_FORMS: &[(&str, SummonForm)] = &[
+    ("anais_dissonance", SummonForm::Earu),
+    ("anais_cacophony", SummonForm::Earu),
     ("anais_mica_bear_step", SummonForm::MicaBear),
     ("anais_thrust", SummonForm::MicaBear),
     ("anais_mica_even_bear", SummonForm::MicaBear),
@@ -984,7 +986,7 @@ pub fn resummon_skill_name(form: SummonForm) -> Option<&'static str> {
         SummonForm::Anferu => Some("極・アンフェル召喚"),
         SummonForm::Gureshisu => Some("極・グレシス召喚"),
         SummonForm::Igni => Some("極・イグニー召喚"),
-        SummonForm::MicaBear | SummonForm::RucyBear => None,
+        SummonForm::Earu | SummonForm::MicaBear | SummonForm::RucyBear => None,
     }
 }
 
@@ -1093,6 +1095,28 @@ pub fn summon_form_of(skill_id: &str) -> Option<SummonForm> {
 /// ・IndexedDB の v7 移行・書き出し JSON の読み込み(`transfer.ts`)が同じこの関数を使う
 /// (3 か所に同じ if を書かない)。`main_skill_id` が未選択、または本体スキルならそのまま返す。
 pub fn normalize_summon_skill_selection(
+    main_skill_id: Option<String>,
+    summon_skill_id: Option<String>,
+) -> (Option<String>, Option<String>) {
+    let (main, summon) = move_summon_skill_out_of_main(main_skill_id, summon_skill_id);
+    // 主軸が決める型と召喚欄の型が食い違う(守護型の主軸にミカベア等)なら召喚欄を空に戻す。
+    // 3 つの型は同時に使えない(主軸を残す: 主軸は火力の入口で、召喚欄は型に従うもの)
+    let summon = match (&main, summon) {
+        (Some(m), Some(s)) if summon_types_conflict(m, &s) => None,
+        (_, summon) => summon,
+    };
+    (main, summon)
+}
+
+/// 2 つのスキルが別々の型(守護 / 人形 / 破壊)に属していれば true。型を持たないものは衝突しない。
+pub fn summon_types_conflict(a: &str, b: &str) -> bool {
+    match (summon_form_of(a), summon_form_of(b)) {
+        (Some(x), Some(y)) => x.summon_type() != y.summon_type(),
+        _ => false,
+    }
+}
+
+fn move_summon_skill_out_of_main(
     main_skill_id: Option<String>,
     summon_skill_id: Option<String>,
 ) -> (Option<String>, Option<String>) {
@@ -1285,8 +1309,8 @@ mod tests {
         assert_eq!(summon_form_of("anais_flare_field"), Some(SummonForm::Igni));
         assert_eq!(summon_form_of("anais_fairy_light"), None);
         assert_eq!(summon_form_of("anais_angry_pixie"), None);
-        assert_eq!(summon_form_of("anais_dissonance"), None);
-        assert_eq!(summon_form_of("anais_cacophony"), None);
+        assert_eq!(summon_form_of("anais_dissonance"), Some(SummonForm::Earu));
+        assert_eq!(summon_form_of("anais_cacophony"), Some(SummonForm::Earu));
     }
 
     /// 召喚スキル(熊 4 件 × 2 体・精霊 8 件)は自分が属する型を持ち、型ごとの候補が
@@ -1355,6 +1379,29 @@ mod tests {
         assert_eq!(
             normalize_summon_skill_selection(None, Some("anais_mica_even_bear".to_string())),
             (None, Some("anais_mica_even_bear".to_string()))
+        );
+    }
+
+    /// 主軸の型と召喚欄の型が食い違うときは召喚欄を空に戻す。同じ型・型なしは触らない。
+    #[test]
+    fn 正規化は型の食い違う召喚欄を空にする() {
+        let sel = |m: &str, s: &str| {
+            normalize_summon_skill_selection(Some(m.to_string()), Some(s.to_string()))
+        };
+        // 守護型の主軸 × 人形 / 破壊の召喚欄
+        assert_eq!(sel("anais_dissonance", "anais_mica_even_bear"), (Some("anais_dissonance".into()), None));
+        assert_eq!(sel("anais_cacophony", "anais_lightning_attack"), (Some("anais_cacophony".into()), None));
+        // 人形型の主軸 × 破壊の召喚欄
+        assert_eq!(sel("anais_mica_bear_step", "anais_flame_attack"), (Some("anais_mica_bear_step".into()), None));
+        // 同じ型(人形 = ミカ + ルシー)は残す
+        assert_eq!(
+            sel("anais_mica_bear_step", "anais_rucy_even_bear"),
+            (Some("anais_mica_bear_step".into()), Some("anais_rucy_even_bear".into()))
+        );
+        // 型を決めない主軸は触らない
+        assert_eq!(
+            sel("anais_angry_pixie", "anais_mica_even_bear"),
+            (Some("anais_angry_pixie".into()), Some("anais_mica_even_bear".into()))
         );
     }
 

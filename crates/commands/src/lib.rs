@@ -7,8 +7,8 @@
 
 use domain::{
     evaluate_contents_for_character, AttackPowerCoefficients, BuffDefinition, BuffSelection,
-    CommonSkills, Content, ContentArea, ContentEvaluation, DamageMaterial, DamageTarget,
-    DamageResult, DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef,
+    CommonSkills, Content, ContentArea, ContentEvaluation, DamageMaterial, DamageResult,
+    DamageTarget, DefenseProfile, DependencyCoefficients, Enemy, EquipmentAbilityDef,
     EquipmentInkriState, EquipmentPart, InkriBatchResult, InkriKind, InkriRng, InkriRunLimit,
     NewCharacter, RandomOptionDef, Skill, SkillEvaluationInput, TitleDef, WristBonusMaterial,
 };
@@ -250,7 +250,13 @@ pub fn inkri_seed_cost(
         InkriKind::Eta => target.eta_seed_cost,
         _ => None,
     };
-    Ok(cost.map(|c| if happy_hour { domain::happy_hour_seed_cost(c) } else { c }))
+    Ok(cost.map(|c| {
+        if happy_hour {
+            domain::happy_hour_seed_cost(c)
+        } else {
+            c
+        }
+    }))
 }
 
 pub fn run_inkri_attempts(request: InkriAttemptRequest) -> CommandResult<InkriBatchResult> {
@@ -531,10 +537,7 @@ pub fn relic_state(part: EquipmentPart) -> Option<domain::RelicState> {
 }
 
 /// レリックの段を 1 つ動かした部位。動かせないときは `None`。
-pub fn relic_step(
-    part: EquipmentPart,
-    direction: domain::RelicDirection,
-) -> Option<EquipmentPart> {
+pub fn relic_step(part: EquipmentPart, direction: domain::RelicDirection) -> Option<EquipmentPart> {
     domain::relic_step(&part, &gamedata::equipment_catalog(), direction)
 }
 
@@ -747,7 +750,9 @@ pub fn normalize_summon_skill_selection(
 /// (`gamedata::normalize_character_skill_selection` 参照)。SQLite の v18 移行は gamedata を
 /// 直接呼ぶのでここを経由しないが、IndexedDB の v10 移行・書き出し JSON の読み込みは
 /// このコマンドを呼ぶ(TS に消えた id の一覧を書き写さないため)。
-pub fn normalize_character_skills(character_skills: domain::CharacterSkills) -> domain::CharacterSkills {
+pub fn normalize_character_skills(
+    character_skills: domain::CharacterSkills,
+) -> domain::CharacterSkills {
     let mut skills = character_skills;
     gamedata::normalize_character_skill_selection(&mut skills);
     skills
@@ -802,6 +807,14 @@ pub fn validate_summon_skill(character: &NewCharacter) -> CommandResult<()> {
         return Err(CommandError::from(format!(
             "本体が撃つスキル '{skill_id}' は召喚スキルに選べません"
         )));
+    }
+    // 守護型 / 人形型 / 破壊型は同時に使えない: 主軸が決めている型と違う召喚獣は選べない
+    if let Some(main_id) = &character.main_skill_id {
+        if gamedata::summon_types_conflict(main_id, skill_id) {
+            return Err(CommandError::from(format!(
+                "主軸スキル '{main_id}' とは別の型の召喚スキル '{skill_id}' は選べません"
+            )));
+        }
     }
     Ok(())
 }
@@ -936,10 +949,7 @@ pub fn preview_effective_stats(
         equipment_base,
         coefficients,
     )?;
-    Ok(StatPreviewPayload {
-        base,
-        part_enhance,
-    })
+    Ok(StatPreviewPayload { base, part_enhance })
 }
 
 /// 「対象ステを選ぶ」バフの、ステごとの実際の効き(最終能力値が何点動くか)。
@@ -1035,14 +1045,17 @@ pub fn preview_versus(
     let equipment_catalog = gamedata::equipment_catalog();
     let abilities = gamedata::equipment_abilities();
     let random_option_catalog = gamedata::random_option_catalog();
-    let resolve_enchant_caps = |equipment: &domain::Equipment| -> Vec<(domain::PartSlot, domain::EquipmentValues)> {
-        equipment
-            .parts
-            .iter()
-            .into_iter()
-            .filter_map(|(slot, part)| Some((slot, part.resolve_enchant_caps(&equipment_catalog)?)))
-            .collect()
-    };
+    let resolve_enchant_caps =
+        |equipment: &domain::Equipment| -> Vec<(domain::PartSlot, domain::EquipmentValues)> {
+            equipment
+                .parts
+                .iter()
+                .into_iter()
+                .filter_map(|(slot, part)| {
+                    Some((slot, part.resolve_enchant_caps(&equipment_catalog)?))
+                })
+                .collect()
+        };
     let weapon_system_of = |equipment: &domain::Equipment| {
         equipment
             .parts
@@ -1100,7 +1113,9 @@ pub fn preview_versus(
             .equipment
             .random_option_totals(&random_option_catalog)
             .accuracy_point;
-        let defender_random_options = defender.equipment.random_option_totals(&random_option_catalog);
+        let defender_random_options = defender
+            .equipment
+            .random_option_totals(&random_option_catalog);
         let evasion_random_option = defender_random_options.evasion_point;
         // 対象の最小回避率補正(wiki #HitRateCap)。ランダムオプション(固定回避・最大回避率)+
         // バフ(テイルズウィーバーのエネルギー)の合計。対人上限 10 のクランプは domain(`hit_rate`)
@@ -1275,10 +1290,11 @@ pub fn get_game_tables() -> GameTablesPayload {
         .collect();
     // 熊の装備係数は dependency を無視する固定値なので、SkillDependency::ALL のどれを渡しても
     // 結果は同じ(gamedata::equipment_coefficients_for の実装参照)。
-    let magic_doll_enchant_keys = domain::enchant_dependency_keys(&gamedata::equipment_coefficients_for(
-        domain::Attacker::MagicDoll,
-        domain::SkillDependency::ALL[0],
-    ));
+    let magic_doll_enchant_keys =
+        domain::enchant_dependency_keys(&gamedata::equipment_coefficients_for(
+            domain::Attacker::MagicDoll,
+            domain::SkillDependency::ALL[0],
+        ));
     GameTablesPayload {
         base: domain::game_tables(),
         enchant_dependency_keys,
@@ -1446,10 +1462,9 @@ fn learnable_accuracy_skill(game_character_id: &str) -> Option<&'static domain::
 /// `AccuracyBoost` をキャラスキルから解決する。ペット集中は今回まだ入力を持たないので
 /// `Concentration` にはならない(`AccuracyBoost::resolve` の型だけ用意)。
 fn resolve_accuracy_boost(stat_sources: &domain::StatSources) -> domain::AccuracyBoost {
-    let skill = stat_sources.character_skills.accuracy_boost(
-        gamedata::character_skill_catalog(),
-        &stat_sources.masteries,
-    );
+    let skill = stat_sources
+        .character_skills
+        .accuracy_boost(gamedata::character_skill_catalog(), &stat_sources.masteries);
     domain::AccuracyBoost::resolve(false, skill)
 }
 
@@ -1725,8 +1740,13 @@ fn build_damage_input(
     let damage_contributions =
         damage_inputs::damage_contributions_of(stat_sources, buffs, &equipment, &skill);
     let skill_added_damage_rate = damage_inputs::added_damage_rate_of(stat_sources, &skill);
-    let element_value =
-        damage_inputs::element_value_for(game_character_id, &equipment, stat_sources, buffs, &skill);
+    let element_value = damage_inputs::element_value_for(
+        game_character_id,
+        &equipment,
+        stat_sources,
+        buffs,
+        &skill,
+    );
     let coefficients = coefficients_for(skill.attacker, skill.dependency);
     Ok((
         material,
@@ -1750,17 +1770,36 @@ fn build_damage_input(
 ///
 /// 通常攻撃を挟まないとコンボボーナスは成立しないので、コンボ扱いなのに通常攻撃が
 /// 渡ってこないとき(そのキャラの通常攻撃が未収録)は、倍率だけ乗った単体計算になる。
+///
+/// 通常攻撃用の入力は主軸の入力から技だけ差し替えて作る。技ごとに絞るキャラスキル
+/// (イサック【プリチャージ】= エネルギーフィールドだけ 等)が主軸のまま通常攻撃に乗らないよう、
+/// 技に依存する寄与(`damage_contributions` / `skill_added_damage_rate`)は通常攻撃で作り直す。
 fn damage_with_optional_combo(
     material: &DamageMaterial,
     target: &DamageTarget,
     combo_count: u32,
     normal_attack_id: Option<&str>,
+    stat_sources: &domain::StatSources,
+    buffs: &BuffSelection,
+    equipment: &domain::Equipment,
 ) -> CommandResult<DamageResult> {
     let Some(id) = normal_attack_id.filter(|_| combo_count > 0) else {
         return Ok(domain::calculate_damage(material, target));
     };
     let normal = find_skill(id)?;
-    Ok(domain::calculate_damage_with_combo(material, target, &normal))
+    // 係数(`coefficients`)・属性値(`element_value`)・装備の基本能力値は主軸のまま。
+    // 通常攻撃の依存・属性で作り直すと全キャラのコンボ値が動くので、別の変更で扱う
+    let mut normal_target = target.clone();
+    normal_target.damage_contributions =
+        damage_inputs::damage_contributions_of(stat_sources, buffs, equipment, &normal);
+    normal_target.skill_added_damage_rate =
+        damage_inputs::added_damage_rate_of(stat_sources, &normal);
+    normal_target.skill = normal;
+    Ok(domain::calculate_damage_with_combo(
+        material,
+        target,
+        &normal_target,
+    ))
 }
 
 /// 召喚獣(熊・破壊精霊)ぶんのダメージ計算結果。`skill` は召喚スキル、`result` は召喚獣の
@@ -2118,7 +2157,11 @@ impl RotationMaterials {
             domain::RotationRole::Candidate(index) => &self.candidates[index].skill,
         }
     }
-    fn result_of<'a>(&'a self, body: &'a DamageResult, role: domain::RotationRole) -> &'a DamageResult {
+    fn result_of<'a>(
+        &'a self,
+        body: &'a DamageResult,
+        role: domain::RotationRole,
+    ) -> &'a DamageResult {
         match role {
             domain::RotationRole::Main => body,
             domain::RotationRole::Candidate(index) => &self.candidates[index].result,
@@ -2177,9 +2220,17 @@ fn rotation_materials(
             None,
             temporary_adjustments.cloned(),
         )?;
-        let result = damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)?;
-        let equipment_magic_attack =
-            target.equipment_base_totals().magic_attack + target.equipment_enhanced_totals().magic_attack;
+        let result = damage_with_optional_combo(
+            &material,
+            &target,
+            combo_count,
+            normal_attack_id,
+            stat_sources,
+            buffs,
+            equipment,
+        )?;
+        let equipment_magic_attack = target.equipment_base_totals().magic_attack
+            + target.equipment_enhanced_totals().magic_attack;
         Ok((target.skill, result, equipment_magic_attack))
     };
     // 候補: 同じキャラ・同じ形態(形態を持つキャラ)のプレイヤー攻撃技。主軸は含めない。
@@ -2188,7 +2239,11 @@ fn rotation_materials(
         .into_iter()
         .filter(|s| s.attacker == domain::Attacker::Player)
         .map(|s| resolve_skill_variants(s, stat_sources))
-        .filter(|s| s.form == skill.form && s.id != skill.id && s.usable_with_summon(summon_skill))
+        .filter(|s| {
+            s.form == skill.form
+                && s.id != skill.id
+                && s.usable_with_summon(Some(skill), summon_skill)
+        })
         .collect();
     // <フラグ> を爆発させる技は、爆発ぶんのダメージと積み直しの回数が付く
     let reapply_uses = |candidate: &Skill| match candidate.form {
@@ -2220,10 +2275,9 @@ fn rotation_materials(
         } else {
             None
         };
-        let summon_hit_bonus_ratio = candidate
-            .summon_hit_bonus
-            .as_ref()
-            .map(|bonus| domain::summon_hit_bonus_ratio(bonus, i64::from(base_stats.int), equipment_magic_attack));
+        let summon_hit_bonus_ratio = candidate.summon_hit_bonus.as_ref().map(|bonus| {
+            domain::summon_hit_bonus_ratio(bonus, i64::from(base_stats.int), equipment_magic_attack)
+        });
         candidates.push(RotationCandidateMaterial {
             minimum_filler_uses: reapply_uses(&candidate),
             skill: candidate,
@@ -2252,7 +2306,9 @@ fn rotation_materials(
             .zip(&damages)
             .map(|(candidate, damage)| domain::RotationCandidate {
                 skill: &candidate.skill,
-                seconds: candidate.skill.insert_seconds(candidate.result.cycle_seconds()),
+                seconds: candidate
+                    .skill
+                    .insert_seconds(candidate.result.cycle_seconds()),
                 // 爆発させる技は、連打している主軸で積んだ <フラグ> を使う技だけ差し込める
                 insertable: !(candidate.skill.detonates_flag && flag_stacks > 0)
                     || gamedata::flag_applier_for(&candidate.skill)
@@ -2274,12 +2330,15 @@ fn rotation_materials(
             .enumerate()
             .find(|(_, c)| c.skill.summon_hit_bonus.is_some())
         {
-            if let (Some(bonus), Some(ratio)) =
-                (extra_candidate.skill.summon_hit_bonus, extra_candidate.summon_hit_bonus_ratio)
-            {
+            if let (Some(bonus), Some(ratio)) = (
+                extra_candidate.skill.summon_hit_bonus,
+                extra_candidate.summon_hit_bonus_ratio,
+            ) {
                 let insert_of = |role: domain::RotationRole| -> domain::RotationInsert {
                     let (s, seconds, minimum_filler_uses) = match role {
-                        domain::RotationRole::Main => (skill, body.cycle_seconds(), reapply_uses(skill)),
+                        domain::RotationRole::Main => {
+                            (skill, body.cycle_seconds(), reapply_uses(skill))
+                        }
                         domain::RotationRole::Candidate(index) => (
                             &candidates[index].skill,
                             candidates[index].result.cycle_seconds(),
@@ -2295,9 +2354,10 @@ fn rotation_materials(
                 let absent_of = |role: domain::RotationRole| -> f64 {
                     let (s, seconds) = match role {
                         domain::RotationRole::Main => (skill, body.cycle_seconds()),
-                        domain::RotationRole::Candidate(index) => {
-                            (&candidates[index].skill, candidates[index].result.cycle_seconds())
-                        }
+                        domain::RotationRole::Candidate(index) => (
+                            &candidates[index].skill,
+                            candidates[index].result.cycle_seconds(),
+                        ),
                     };
                     s.summon_absent_seconds(seconds)
                 };
@@ -2315,18 +2375,22 @@ fn rotation_materials(
                 };
                 let base_inserts: Vec<domain::RotationInsert> =
                     roles.inserts.iter().map(|&role| insert_of(role)).collect();
-                let base_absent_seconds: Vec<f64> = roles.inserts.iter().map(|&role| absent_of(role)).collect();
+                let base_absent_seconds: Vec<f64> =
+                    roles.inserts.iter().map(|&role| absent_of(role)).collect();
                 let base_damages: Vec<&[domain::RotationDamage]> =
                     roles.inserts.iter().map(|&role| damage_of(role)).collect();
-                let base_body_expected_dps = match domain::plan_rotation(filler_seconds, &base_inserts) {
-                    Some(plan) => domain::rotation_dps(&plan, &base_damages, filler)
-                        .map(|(_, expected)| expected)
-                        .unwrap_or(0.0),
-                    None => filler
-                        .filter(|(_, seconds)| *seconds > 0.0)
-                        .map(|(damage, seconds)| damage.total.expected(damage.critical_chance) / seconds)
-                        .unwrap_or(0.0),
-                };
+                let base_body_expected_dps =
+                    match domain::plan_rotation(filler_seconds, &base_inserts) {
+                        Some(plan) => domain::rotation_dps(&plan, &base_damages, filler)
+                            .map(|(_, expected)| expected)
+                            .unwrap_or(0.0),
+                        None => filler
+                            .filter(|(_, seconds)| *seconds > 0.0)
+                            .map(|(damage, seconds)| {
+                                damage.total.expected(damage.critical_chance) / seconds
+                            })
+                            .unwrap_or(0.0),
+                    };
                 let extra_insert = insert_of(domain::RotationRole::Candidate(extra_index));
                 if domain::resolve_summon_hit_bonus(
                     filler_seconds,
@@ -2337,13 +2401,18 @@ fn rotation_materials(
                     base_body_expected_dps,
                     extra_insert,
                     &bonus,
-                    summon.result.per_hit.expected(summon.result.critical_chance),
+                    summon
+                        .result
+                        .per_hit
+                        .expected(summon.result.critical_chance),
                     interval,
                     ratio,
                 )
                 .is_some()
                 {
-                    roles.inserts.push(domain::RotationRole::Candidate(extra_index));
+                    roles
+                        .inserts
+                        .push(domain::RotationRole::Candidate(extra_index));
                 }
             }
         }
@@ -2431,8 +2500,12 @@ fn build_rotation(
     }
     // 明示指定があれば既定の差し込みを置き換える(規則は domain。ホーム評価と同じ 1 本)。
     // 候補に無い id(形態違い・改名・消えた技)は domain が黙って落とす
-    let insert_roles =
-        domain::apply_explicit_inserts(roles, insert_skill_ids, &skill.id, &materials.candidate_ids());
+    let insert_roles = domain::apply_explicit_inserts(
+        roles,
+        insert_skill_ids,
+        &skill.id,
+        &materials.candidate_ids(),
+    );
 
     // 差し込む技 1 つぶんの材料(技・1 回の結果・爆発・CT・積み直しの回数)
     struct Insert {
@@ -2451,7 +2524,8 @@ fn build_rotation(
         minimum_filler_uses: u32,
     }
     let skill_of = |role: domain::RotationRole| -> &Skill { materials.skill_of(skill, role) };
-    let result_of = |role: domain::RotationRole| -> &DamageResult { materials.result_of(body, role) };
+    let result_of =
+        |role: domain::RotationRole| -> &DamageResult { materials.result_of(body, role) };
     let mut inserts: Vec<Insert> = Vec::with_capacity(insert_roles.len());
     for role in insert_roles {
         let insert_skill = skill_of(role);
@@ -2472,7 +2546,9 @@ fn build_rotation(
             seconds: insert_skill.insert_seconds(result_of(role).cycle_seconds()),
             cooldown_seconds: insert_skill.cooldown_seconds.unwrap_or(0.0),
             is_field: insert_skill.field.is_some(),
-            summon_hit_bonus_seconds: insert_skill.summon_hit_bonus.map_or(0.0, |b| b.duration_seconds),
+            summon_hit_bonus_seconds: insert_skill
+                .summon_hit_bonus
+                .map_or(0.0, |b| b.duration_seconds),
             resummon_seconds: insert_skill.field.map_or(0.0, |f| f.resummon_seconds),
             resummon_skill_name: insert_skill
                 .field
@@ -2480,7 +2556,8 @@ fn build_rotation(
                 .and_then(|_| insert_skill.summon_form)
                 .and_then(gamedata::resummon_skill_name)
                 .map(str::to_string),
-            summon_absent_seconds: insert_skill.summon_absent_seconds(result_of(role).cycle_seconds()),
+            summon_absent_seconds: insert_skill
+                .summon_absent_seconds(result_of(role).cycle_seconds()),
             minimum_filler_uses,
         });
     }
@@ -2581,7 +2658,10 @@ fn build_rotation(
                 let slot = plan.slots.iter().find(|s| s.insert == index)?;
                 domain::summon_hit_bonus_dps(
                     &bonus,
-                    summon.result.per_hit.expected(summon.result.critical_chance),
+                    summon
+                        .result
+                        .per_hit
+                        .expected(summon.result.critical_chance),
                     interval,
                     ratio,
                     slot.interval_seconds,
@@ -2633,7 +2713,13 @@ fn build_rotation(
                 expected_dps_gain: (!insert.is_main)
                     .then(|| gain_of(slot.insert))
                     .flatten()
-                    .map(|gain| if insert.summon_hit_bonus_seconds > 0.0 { gain + summon_hit_bonus_dps } else { gain }),
+                    .map(|gain| {
+                        if insert.summon_hit_bonus_seconds > 0.0 {
+                            gain + summon_hit_bonus_dps
+                        } else {
+                            gain
+                        }
+                    }),
                 skill_id: insert.skill_id,
                 skill_name: insert.skill_name,
                 is_main: insert.is_main,
@@ -2660,11 +2746,8 @@ fn build_rotation(
         })
         .collect();
     Ok(Some(Rotation {
-        filler: roles
-            .filler
-            .zip(filler_seconds)
-            .zip(shares.filler)
-            .map(|((role, seconds), share)| {
+        filler: roles.filler.zip(filler_seconds).zip(shares.filler).map(
+            |((role, seconds), share)| {
                 let filler_skill = skill_of(role);
                 RotationFiller {
                     skill_id: filler_skill.id.clone(),
@@ -2676,7 +2759,8 @@ fn build_rotation(
                     dps_share: dps_share(&share),
                     uses_per_minute: share.uses_per_second * 60.0,
                 }
-            }),
+            },
+        ),
         inserts,
         filler_share: plan.filler_share,
         crowded: plan.crowded,
@@ -2752,9 +2836,15 @@ fn combine_damage(
             summon.result.expected_dps.map(|e| e * present),
             (summon_hit_bonus_dps != 0.0).then_some(summon_hit_bonus_dps),
         );
-        summon_absent_loss = (absent > 0.0).then(|| summon.result.expected_dps.map(|e| e * absent)).flatten();
+        summon_absent_loss = (absent > 0.0)
+            .then(|| summon.result.expected_dps.map(|e| e * absent))
+            .flatten();
         summon_rotation_gain = (absent > 0.0 || summon_hit_bonus_dps > 0.0)
-            .then(|| summon_expected_dps.zip(summon.result.expected_dps).map(|(with, alone)| with - alone))
+            .then(|| {
+                summon_expected_dps
+                    .zip(summon.result.expected_dps)
+                    .map(|(with, alone)| with - alone)
+            })
             .flatten();
         summon_dps = summon.result.dps.map(scale);
         dps = domain::combine_dps(dps, summon_dps);
@@ -2767,7 +2857,14 @@ fn combine_damage(
         expected_dps,
         defeat_seconds,
         reach: domain::ReachTier::of_defeat_seconds(defeat_seconds),
-        parts: CombinedParts { body_expected_dps, rotation_gain, summon_expected_dps, summon_absent_loss, summon_rotation_gain, summon_dps },
+        parts: CombinedParts {
+            body_expected_dps,
+            rotation_gain,
+            summon_expected_dps,
+            summon_absent_loss,
+            summon_rotation_gain,
+            summon_dps,
+        },
     }
 }
 
@@ -2816,7 +2913,15 @@ pub fn damage_for_character(
         combo_skill_type,
         temporary_adjustments.clone(),
     )?;
-    let body = damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)?;
+    let body = damage_with_optional_combo(
+        &material,
+        &target,
+        combo_count,
+        normal_attack_id,
+        stat_sources,
+        buffs,
+        &equipment,
+    )?;
     // <フラグ>(技とは別枠のダメージ)。積んでいなければ None。爆発は主軸が
     // スレイ / クラッシュ(`Skill::detonates_flag`)のときだけ出す
     let stacks = gamedata::flag_stacks(&stat_sources.character_skills);
@@ -2906,16 +3011,14 @@ pub fn damage_for_character(
         }
     }
     let flag = match gamedata::flag_multiplier(stacks) {
-        Some(multiplier) => {
-            duration.map(|duration| FlagDamage {
-                stacks,
-                multiplier,
-                duration,
-                burst,
-                tick_seconds: gamedata::FLAG_TICK_SECONDS,
-                lasts_seconds: gamedata::FLAG_DURATION_SECONDS,
-            })
-        }
+        Some(multiplier) => duration.map(|duration| FlagDamage {
+            stacks,
+            multiplier,
+            duration,
+            burst,
+            tick_seconds: gamedata::FLAG_TICK_SECONDS,
+            lasts_seconds: gamedata::FLAG_DURATION_SECONDS,
+        }),
         None => None,
     };
     let combined = combine_damage(&body, summon.as_ref(), flag.as_ref(), rotation.as_ref());
@@ -3063,7 +3166,15 @@ pub fn list_rotation_choices(
         combo_skill_type,
         temporary_adjustments.clone(),
     )?;
-    let body = damage_with_optional_combo(&material, &target, combo_count, normal_attack_id)?;
+    let body = damage_with_optional_combo(
+        &material,
+        &target,
+        combo_count,
+        normal_attack_id,
+        &character.stat_sources,
+        &buffs,
+        &character.equipment,
+    )?;
     let main = &target.skill;
     let flag_stacks = gamedata::flag_stacks(&character.stat_sources.character_skills);
     let main_burst = if main.detonates_flag && flag_stacks > 0 {
@@ -3125,7 +3236,12 @@ pub fn list_rotation_choices(
         combo_count,
         normal_attack_id,
         temporary_adjustments.as_ref(),
-        character.summon_skill_id.as_deref().map(find_skill).transpose()?.as_ref(),
+        character
+            .summon_skill_id
+            .as_deref()
+            .map(find_skill)
+            .transpose()?
+            .as_ref(),
         summon.as_ref(),
     )?;
     let roles = &materials.roles;
@@ -3182,7 +3298,8 @@ pub fn list_rotation_choices(
     // いまの選択どおりに組んだ回しの期待 DPS(損得を割合で見せるための分母)。
     // 計算タブが出している `Rotation::expected_dps` と同じ材料・同じ規則
     let expected_dps_of = |ids: &[String]| -> Option<f64> {
-        let insert_roles = domain::apply_explicit_inserts(roles, Some(ids), &main.id, &candidate_ids);
+        let insert_roles =
+            domain::apply_explicit_inserts(roles, Some(ids), &main.id, &candidate_ids);
         let inserts: Vec<domain::RotationInsert> =
             insert_roles.iter().map(|role| insert_of(*role)).collect();
         let owned_parts: Vec<Vec<domain::RotationDamage>> =
@@ -3221,7 +3338,10 @@ pub fn list_rotation_choices(
                     .collect();
                 domain::summon_hit_bonus_dps(
                     &bonus,
-                    summon.result.per_hit.expected(summon.result.critical_chance),
+                    summon
+                        .result
+                        .per_hit
+                        .expected(summon.result.critical_chance),
                     summon.interval_seconds?,
                     ratio,
                     slot.interval_seconds,
@@ -3259,8 +3379,7 @@ pub fn list_rotation_choices(
             insert_roles.iter().map(|role| insert_of(*role)).collect();
         let owned_parts: Vec<Vec<domain::RotationDamage>> =
             insert_roles.iter().map(|role| parts_of(*role)).collect();
-        let parts: Vec<&[domain::RotationDamage]> =
-            owned_parts.iter().map(Vec::as_slice).collect();
+        let parts: Vec<&[domain::RotationDamage]> = owned_parts.iter().map(Vec::as_slice).collect();
         let expected_dps_gain = (|| {
             let plan = domain::plan_rotation(filler_seconds, &inserts)?;
             let (_, expected) = domain::rotation_dps(&plan, &parts, filler_damage)?;
@@ -3388,21 +3507,32 @@ pub fn evaluate_contents(
     let flag_input_of = |base: &Skill, part| {
         gamedata::flag_skill(base, flag_stacks, part).map(|flag_skill| {
             let mut input = input_of(flag_skill);
-            input.damage_contributions.extend(
-                gamedata::flag_damage_contributions(&character.stat_sources.masteries, part),
-            );
+            input
+                .damage_contributions
+                .extend(gamedata::flag_damage_contributions(
+                    &character.stat_sources.masteries,
+                    part,
+                ));
             Box::new(input)
         })
     };
     // 速剣・最大チャージは技データ側の差し替えなので、評価に使う技も解決してから入れる。
     // 召喚獣(熊・破壊精霊)が撃つスキルは本体が自分で振れないので入れない
-    let summon_skill = character.summon_skill_id.as_deref().map(find_skill).transpose()?;
+    let summon_skill = character
+        .summon_skill_id
+        .as_deref()
+        .map(find_skill)
+        .transpose()?;
+    let main_skill = character
+        .main_skill_id
+        .as_deref()
+        .and_then(gamedata::find_skill);
     let player_skills: Vec<Skill> = skills
         .iter()
         .filter(|skill| skill.attacker == domain::Attacker::Player)
         .map(|skill| resolve_skill_variants(skill.clone(), &character.stat_sources))
         // 陣はその型の精霊を出しているときだけ回しの候補になる(計算タブと同じ規則)
-        .filter(|skill| skill.usable_with_summon(summon_skill.as_ref()))
+        .filter(|skill| skill.usable_with_summon(main_skill.as_ref(), summon_skill.as_ref()))
         .collect();
     // 差し込んだときに付いてくるもの(<フラグ> の爆発と積み直しの回数)。
     // 計算タブ(`build_rotation`)と同じ組み立て
@@ -3421,7 +3551,12 @@ pub fn evaluate_contents(
     let rotation_of = |skill: &Skill| -> Option<domain::RotationEvaluationInput> {
         let candidates: Vec<domain::RotationCandidateEvaluationInput> = player_skills
             .iter()
-            .filter(|s| s.form == skill.form && s.id != skill.id)
+            // 評価する技の型(アナイスの守護 / 人形 / 破壊)にも合わせる(計算タブと同じ規則)
+            .filter(|s| {
+                s.form == skill.form
+                    && s.id != skill.id
+                    && s.usable_with_summon(Some(skill), summon_skill.as_ref())
+            })
             .map(|candidate| domain::RotationCandidateEvaluationInput {
                 // 爆発させる技は、連打している主軸で積んだ <フラグ> を使う技だけ差し込める
                 insertable: !(candidate.detonates_flag && flag_stacks > 0)
@@ -3537,7 +3672,9 @@ fn weapon_update_changes(
     let Some(weapon_class) = current.weapon_class else {
         return Vec::new();
     };
-    let sum = |v: domain::EquipmentValues| -> i64 { v.fields().into_iter().map(|(_, value)| value).sum() };
+    let sum = |v: domain::EquipmentValues| -> i64 {
+        v.fields().into_iter().map(|(_, value)| value).sum()
+    };
     let current_sum = sum(current.values_max);
     let mut upgrades: Vec<&EquipmentItem> = catalog
         .iter()
@@ -3859,10 +3996,9 @@ mod tests {
     };
     use domain::{
         AccuracyBoost, AccuracyBoostSource, Awakening, BaseStats, BuffSelection, ComboSkillType,
-        CommonSkills, DamageCategory,
-        EnhanceGrade, Equipment, EquipmentEnhanceType, EquipmentPart, EquipmentValues,
-        GrowthAction, NewCharacter, PetSkillTier, SoulLinkStatus, StatFixedSource, StatKind,
-        StatSources,
+        CommonSkills, DamageCategory, EnhanceGrade, Equipment, EquipmentEnhanceType, EquipmentPart,
+        EquipmentValues, GrowthAction, NewCharacter, PetSkillTier, SoulLinkStatus, StatFixedSource,
+        StatKind, StatSources,
     };
 
     #[test]
@@ -3951,6 +4087,35 @@ mod tests {
         assert!(super::validate_summon_skill(&c).is_ok());
     }
 
+    #[test]
+    fn 主軸と型の違う召喚スキルは拒否される() {
+        let mut c = anais();
+        c.main_skill_id = Some("anais_dissonance".to_string());
+        c.summon_skill_id = Some("anais_mica_even_bear".to_string());
+        let error = super::validate_summon_skill(&c).unwrap_err();
+        assert!(error.message.contains("別の型"));
+        // 人形型の中(ミカ主軸 × ルシー召喚)は通る
+        c.main_skill_id = Some("anais_mica_bear_step".to_string());
+        c.summon_skill_id = Some("anais_rucy_even_bear".to_string());
+        assert!(super::validate_summon_skill(&c).is_ok());
+    }
+
+    #[test]
+    fn 差し込み候補に他の型の技は入らない() {
+        let skill = |id: &str| gamedata::find_skill(id).unwrap();
+        let dissonance = skill("anais_dissonance");
+        let mica_step = skill("anais_mica_bear_step");
+        let tesla = skill("anais_tesla_coil");
+        // 守護型の主軸: 人形型・破壊型の本体スキルは差し込めない
+        assert!(!mica_step.usable_with_summon(Some(&dissonance), None));
+        assert!(!tesla.usable_with_summon(Some(&dissonance), Some(&skill("anais_ice_age"))));
+        // 人形型の主軸: 守護型の技は差し込めないが、同じ型は可
+        assert!(!dissonance.usable_with_summon(Some(&mica_step), None));
+        assert!(skill("anais_rucy_bear_step").usable_with_summon(Some(&mica_step), None));
+        // 型を決めない主軸 + 召喚獣なし: 型を持つ技もそのまま通る(従来どおり)
+        assert!(mica_step.usable_with_summon(Some(&skill("anais_angry_pixie")), None));
+    }
+
     /// 差し込む CT 技は「そのキャラが自分で撃つ」「CT を持つ」技だけ。
     #[test]
     fn 差し込むct技の検証は他キャラとct無しを拒否する() {
@@ -3958,11 +4123,19 @@ mod tests {
         // 他キャラのスキル
         c.rotation_skill_ids = Some(vec!["yefnen_slay".to_string()]);
         let error = super::validate_rotation_skills(&c).unwrap_err();
-        assert!(error.message.contains("のスキルではありません"), "{}", error.message);
+        assert!(
+            error.message.contains("のスキルではありません"),
+            "{}",
+            error.message
+        );
         // CT を持たないスキル
         c.rotation_skill_ids = Some(vec!["anais_angry_pixie".to_string()]);
         let error = super::validate_rotation_skills(&c).unwrap_err();
-        assert!(error.message.contains("クールタイムの無い"), "{}", error.message);
+        assert!(
+            error.message.contains("クールタイムの無い"),
+            "{}",
+            error.message
+        );
         // 召喚獣が撃つスキル
         c.rotation_skill_ids = Some(vec!["anais_mica_even_bear".to_string()]);
         assert!(super::validate_rotation_skills(&c).is_err());
@@ -4063,8 +4236,12 @@ mod tests {
                 target: PetSkillTier::TrueLv4,
             },
         }];
-        let (attacker_for_both, defender_for_both, buffs_for_both, attacker_tries_for_both) =
-            (attacker.clone(), defender.clone(), buffs.clone(), attacker_tries.clone());
+        let (attacker_for_both, defender_for_both, buffs_for_both, attacker_tries_for_both) = (
+            attacker.clone(),
+            defender.clone(),
+            buffs.clone(),
+            attacker_tries.clone(),
+        );
         let with_tries = preview_versus(
             attacker,
             buffs.clone(),
@@ -4084,8 +4261,7 @@ mod tests {
             without_tries.accuracy_max_hit_rate
         );
         assert_eq!(
-            with_tries.accuracy_max_hit_rate_gain,
-            without_tries.accuracy_max_hit_rate_gain,
+            with_tries.accuracy_max_hit_rate_gain, without_tries.accuracy_max_hit_rate_gain,
             "accuracy_max_hit_rate_gain も base 由来(押した場所は動かない)"
         );
         assert_eq!(with_tries.evasion_growth, without_tries.evasion_growth);
@@ -4342,7 +4518,10 @@ mod tests {
         .unwrap();
         assert_eq!(bear_target.coefficients.equipment.base.thrust, 0.0);
         assert_eq!(bear_target.coefficients.equipment.base.magic_attack, 23.75);
-        assert_eq!(bear_target.coefficients.attack.primary, (StatKind::Int, 2.1));
+        assert_eq!(
+            bear_target.coefficients.attack.primary,
+            (StatKind::Int, 2.1)
+        );
 
         let (_, body_target) = build_damage_input(
             &base_stats,
@@ -4362,7 +4541,10 @@ mod tests {
         )
         .unwrap();
         // anais_angry_pixie は Int 依存(本体スキル)。攻撃力係数は従来どおり Int×2.4(熊は 2.1)。
-        assert_eq!(body_target.coefficients.attack.primary, (StatKind::Int, 2.4));
+        assert_eq!(
+            body_target.coefficients.attack.primary,
+            (StatKind::Int, 2.4)
+        );
     }
 
     /// summon_skill_id があるキャラは summon が Some になり、合計 DPS は本体+熊、
@@ -4398,18 +4580,30 @@ mod tests {
         )
         .unwrap();
         assert!(with_summon.summon.is_some());
-        let summon_dps = with_summon.summon.as_ref().unwrap().result.expected_dps.unwrap();
+        let summon_dps = with_summon
+            .summon
+            .as_ref()
+            .unwrap()
+            .result
+            .expected_dps
+            .unwrap();
         // 本体ぶんは回しがあればその DPS、無ければ主軸単独。熊(ミカベア)を出しているときは陣を
         // 置けない(陣は精霊の型に合うときだけ候補)ので、召喚獣の不在は無く present = 1
-        let (body_dps, summon_present) = with_summon.rotation.as_ref().map_or(
-            (with_summon.body.expected_dps.unwrap(), 1.0),
-            |r| (r.expected_dps, 1.0 - r.summon_absent_share),
-        );
+        let (body_dps, summon_present) = with_summon
+            .rotation
+            .as_ref()
+            .map_or((with_summon.body.expected_dps.unwrap(), 1.0), |r| {
+                (r.expected_dps, 1.0 - r.summon_absent_share)
+            });
         assert!((summon_present - 1.0).abs() < 1e-12, "{summon_present}");
         assert!(
-            (with_summon.combined.expected_dps.unwrap() - (body_dps + summon_dps * summon_present)).abs() < 1e-6
+            (with_summon.combined.expected_dps.unwrap() - (body_dps + summon_dps * summon_present))
+                .abs()
+                < 1e-6
         );
-        assert!(with_summon.combined.defeat_seconds.unwrap() < with_summon.body.defeat_seconds.unwrap());
+        assert!(
+            with_summon.combined.defeat_seconds.unwrap() < with_summon.body.defeat_seconds.unwrap()
+        );
 
         // summon_skill_id が無いキャラ(他キャラ)は summon が None で combined = 本体(回帰)。
         let without_summon = super::damage_for_character(
@@ -4440,8 +4634,14 @@ mod tests {
         )
         .unwrap();
         assert!(without_summon.summon.is_none());
-        assert_eq!(without_summon.combined.expected_dps, without_summon.body.expected_dps);
-        assert_eq!(without_summon.combined.defeat_seconds, without_summon.body.defeat_seconds);
+        assert_eq!(
+            without_summon.combined.expected_dps,
+            without_summon.body.expected_dps
+        );
+        assert_eq!(
+            without_summon.combined.defeat_seconds,
+            without_summon.body.defeat_seconds
+        );
     }
 
     /// 陣(テスラコイル)は「置く 1.1s → 27s 持続 → 置き直す」の差し込む技として回しに入る
@@ -4450,7 +4650,15 @@ mod tests {
     /// 間隔は持続の 27s、1 回ぶんの与ダメは 15 tick。
     #[test]
     fn テスラコイルは持続を間隔にした差し込む技として回しに入る() {
-        let base_stats = BaseStats { stab: 1, hack: 1, int: 300, def: 1, mr: 1, dex: 1, agi: 1 };
+        let base_stats = BaseStats {
+            stab: 1,
+            hack: 1,
+            int: 300,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
         let calc = super::damage_for_character(
             &base_stats,
             "anais",
@@ -4479,20 +4687,35 @@ mod tests {
         assert!((tesla.cooldown_seconds - 27.0).abs() < 1e-9);
         // 置き直しは持続 27s が切れてから。連打技の切れ目で置くので 27s 以上・27s + 連打 1 回未満
         let filler_seconds = rotation.filler.as_ref().unwrap().seconds;
-        assert!(tesla.interval_seconds >= 27.0 && tesla.interval_seconds < 27.0 + filler_seconds, "{}", tesla.interval_seconds);
+        assert!(
+            tesla.interval_seconds >= 27.0 && tesla.interval_seconds < 27.0 + filler_seconds,
+            "{}",
+            tesla.interval_seconds
+        );
         // 置く動作(中ディレイ 1.1s)+ アンフェルの呼び直し 0.3s。27s のうち残りはピクシー連打に回る
         assert!(tesla.seconds < 2.0, "{}", tesla.seconds);
         let place = tesla.result.as_ref().unwrap().cycle_seconds().unwrap();
-        assert!((tesla.seconds - (place + 0.3)).abs() < 1e-9, "{} vs {place}", tesla.seconds);
+        assert!(
+            (tesla.seconds - (place + 0.3)).abs() < 1e-9,
+            "{} vs {place}",
+            tesla.seconds
+        );
         // 精霊が居ない割合 = (置く + 呼び直し) / 間隔
         let absent = (place + 0.3) / tesla.interval_seconds;
-        assert!((rotation.summon_absent_share - absent).abs() < 1e-9, "{}", rotation.summon_absent_share);
+        assert!(
+            (rotation.summon_absent_share - absent).abs() < 1e-9,
+            "{}",
+            rotation.summon_absent_share
+        );
         let result = tesla.result.as_ref().unwrap();
         assert_eq!(result.channeling_ticks, Some(15));
         assert_eq!(result.cycle_total().max, result.total.max * 15);
         // 陣単独の DPS は 15 tick ぶんを持続 27s で割った値(置く動作の 1.1s で割らない)
         let alone = result.dps.as_ref().unwrap().max;
-        assert!((alone - result.total.max as f64 * 15.0 / 27.0).abs() < 1e-6, "{alone}");
+        assert!(
+            (alone - result.total.max as f64 * 15.0 / 27.0).abs() < 1e-6,
+            "{alone}"
+        );
         assert!(tesla.expected_dps_gain.unwrap() > 0.0);
     }
 
@@ -4501,18 +4724,39 @@ mod tests {
     /// ホームの到達評価も同じ規則で、合計 DPS(討伐時間)が計算タブと一致する。
     #[test]
     fn 陣は出している精霊の型に合うものだけ差し込める() {
-        let base_stats = BaseStats { stab: 1, hack: 1, int: 300, def: 1, mr: 1, dex: 1, agi: 1 };
+        let base_stats = BaseStats {
+            stab: 1,
+            hack: 1,
+            int: 300,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
         let character = |summon: Option<&str>| NewCharacter {
-            name: "a".into(), game_character_id: "anais".into(), base_stats: base_stats.clone(),
-            awakening: domain::Awakening::default(), stat_sources: StatSources::default(),
-            equipment: Equipment::default(), common_skills: CommonSkills::default(),
-            main_skill_id: Some("anais_angry_pixie".into()), summon_skill_id: summon.map(String::from),
-            rotation_skill_ids: None, goal_content_id: None, default_buff_set_id: None,
+            name: "a".into(),
+            game_character_id: "anais".into(),
+            base_stats: base_stats.clone(),
+            awakening: domain::Awakening::default(),
+            stat_sources: StatSources::default(),
+            equipment: Equipment::default(),
+            common_skills: CommonSkills::default(),
+            main_skill_id: Some("anais_angry_pixie".into()),
+            summon_skill_id: summon.map(String::from),
+            rotation_skill_ids: None,
+            goal_content_id: None,
+            default_buff_set_id: None,
         };
         let ids = |summon: Option<&str>| -> Vec<String> {
             super::list_rotation_choices(
-                character(summon), BuffSelection::default(), "ringo".into(),
-                Some("anais_angry_pixie".into()), 0, None, None, None,
+                character(summon),
+                BuffSelection::default(),
+                "ringo".into(),
+                Some("anais_angry_pixie".into()),
+                0,
+                None,
+                None,
+                None,
             )
             .unwrap()
             .candidates
@@ -4521,8 +4765,14 @@ mod tests {
             .collect()
         };
         // 極・ダメージプラスも破壊精霊がいれば常に候補になる(3 種どれでもよい)
-        assert_eq!(ids(Some("anais_chain_lightning")), vec!["anais_tesla_coil", "anais_damage_plus"]);
-        assert_eq!(ids(Some("anais_crystal_sprinter")), vec!["anais_ice_age", "anais_damage_plus"]);
+        assert_eq!(
+            ids(Some("anais_chain_lightning")),
+            vec!["anais_tesla_coil", "anais_damage_plus"]
+        );
+        assert_eq!(
+            ids(Some("anais_crystal_sprinter")),
+            vec!["anais_ice_age", "anais_damage_plus"]
+        );
         assert!(ids(None).is_empty(), "{:?}", ids(None));
 
         // ホーム(evaluate_contents)と計算タブで討伐時間が一致する(精霊が不在のぶんも同じ足し算)
@@ -4531,15 +4781,33 @@ mod tests {
         let eval = evals.iter().find(|e| e.content_id == "ringo").unwrap();
         let best = eval.damage.as_ref().unwrap();
         let calc = super::damage_for_character(
-            &c.base_stats, &c.game_character_id, c.main_skill_id.as_deref(), c.summon_skill_id.as_deref(),
-            &c.stat_sources, &BuffSelection::default(), c.equipment.clone(), c.common_skills, c.awakening,
-            &best.skill_id, "ringo", 0, None, None, None, None,
+            &c.base_stats,
+            &c.game_character_id,
+            c.main_skill_id.as_deref(),
+            c.summon_skill_id.as_deref(),
+            &c.stat_sources,
+            &BuffSelection::default(),
+            c.equipment.clone(),
+            c.common_skills,
+            c.awakening,
+            &best.skill_id,
+            "ringo",
+            0,
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap();
         let rotation = calc.rotation.as_ref().unwrap();
-        assert!(rotation.inserts.iter().any(|i| i.skill_id == "anais_ice_age"));
+        assert!(rotation
+            .inserts
+            .iter()
+            .any(|i| i.skill_id == "anais_ice_age"));
         assert!(rotation.summon_absent_share > 0.0);
-        assert!((best.defeat_seconds.unwrap() - calc.combined.defeat_seconds.unwrap()).abs() < 1e-6);
+        assert!(
+            (best.defeat_seconds.unwrap() - calc.combined.defeat_seconds.unwrap()).abs() < 1e-6
+        );
     }
 
     /// 極・ダメージプラスは、合計(本体の損 + 精霊の得)が上がるときだけ既定で差し込まれる
@@ -4548,23 +4816,50 @@ mod tests {
     #[test]
     fn 極ダメージプラスは合計が上がるときだけ既定で差し込まれる() {
         let character = |int: u32| NewCharacter {
-            name: "a".into(), game_character_id: "anais".into(),
-            base_stats: BaseStats { stab: 1, hack: 1, int, def: 1, mr: 1, dex: 1, agi: 1 },
-            awakening: domain::Awakening::default(), stat_sources: StatSources::default(),
-            equipment: Equipment::default(), common_skills: CommonSkills::default(),
+            name: "a".into(),
+            game_character_id: "anais".into(),
+            base_stats: BaseStats {
+                stab: 1,
+                hack: 1,
+                int,
+                def: 1,
+                mr: 1,
+                dex: 1,
+                agi: 1,
+            },
+            awakening: domain::Awakening::default(),
+            stat_sources: StatSources::default(),
+            equipment: Equipment::default(),
+            common_skills: CommonSkills::default(),
             main_skill_id: Some("anais_angry_pixie".into()),
             summon_skill_id: Some("anais_chain_lightning".into()),
-            rotation_skill_ids: None, goal_content_id: None, default_buff_set_id: None,
+            rotation_skill_ids: None,
+            goal_content_id: None,
+            default_buff_set_id: None,
         };
         let run = |int: u32| {
             let c = character(int);
-            let evals = super::evaluate_contents(c.clone(), BuffSelection::default(), None).unwrap();
+            let evals =
+                super::evaluate_contents(c.clone(), BuffSelection::default(), None).unwrap();
             let eval = evals.iter().find(|e| e.content_id == "ringo").unwrap();
             let best = eval.damage.as_ref().unwrap();
             let calc = super::damage_for_character(
-                &c.base_stats, &c.game_character_id, c.main_skill_id.as_deref(), c.summon_skill_id.as_deref(),
-                &c.stat_sources, &BuffSelection::default(), c.equipment.clone(), c.common_skills, c.awakening,
-                &best.skill_id, "ringo", 0, None, None, None, None,
+                &c.base_stats,
+                &c.game_character_id,
+                c.main_skill_id.as_deref(),
+                c.summon_skill_id.as_deref(),
+                &c.stat_sources,
+                &BuffSelection::default(),
+                c.equipment.clone(),
+                c.common_skills,
+                c.awakening,
+                &best.skill_id,
+                "ringo",
+                0,
+                None,
+                None,
+                None,
+                None,
             )
             .unwrap();
             (best.defeat_seconds, calc)
@@ -4573,18 +4868,41 @@ mod tests {
         let (home_defeat, calc) = run(300);
         let rotation = calc.rotation.as_ref().unwrap();
         assert!(
-            rotation.inserts.iter().any(|i| i.skill_id == "anais_damage_plus"),
-            "{:?}", rotation.inserts.iter().map(|i| &i.skill_id).collect::<Vec<_>>()
+            rotation
+                .inserts
+                .iter()
+                .any(|i| i.skill_id == "anais_damage_plus"),
+            "{:?}",
+            rotation
+                .inserts
+                .iter()
+                .map(|i| &i.skill_id)
+                .collect::<Vec<_>>()
         );
         assert!(rotation.summon_hit_bonus_dps > 0.0);
         // 損得の表示も精霊の得込み(本体だけだと必ず「下がる」に見えて、既定 ON と食い違う)
-        let insert = rotation.inserts.iter().find(|i| i.summon_hit_bonus_seconds > 0.0).unwrap();
+        let insert = rotation
+            .inserts
+            .iter()
+            .find(|i| i.summon_hit_bonus_seconds > 0.0)
+            .unwrap();
         assert!(insert.expected_dps_gain.unwrap() > 0.0);
         let choices = super::list_rotation_choices(
-            character(300), BuffSelection::default(), "ringo".into(), Some("anais_angry_pixie".into()), 0, None, None, None,
+            character(300),
+            BuffSelection::default(),
+            "ringo".into(),
+            Some("anais_angry_pixie".into()),
+            0,
+            None,
+            None,
+            None,
         )
         .unwrap();
-        let choice = choices.candidates.iter().find(|c| c.skill_id == "anais_damage_plus").unwrap();
+        let choice = choices
+            .candidates
+            .iter()
+            .find(|c| c.skill_id == "anais_damage_plus")
+            .unwrap();
         assert!(choice.default_on);
         assert!(choice.expected_dps_gain.unwrap() > 0.0);
         assert!(calc.combined.parts.summon_expected_dps.is_some());
@@ -4600,9 +4918,22 @@ mod tests {
         let eval = evals.iter().find(|e| e.content_id == "ringo").unwrap();
         let best = eval.damage.as_ref().unwrap();
         let off = super::damage_for_character(
-            &c.base_stats, &c.game_character_id, c.main_skill_id.as_deref(), c.summon_skill_id.as_deref(),
-            &c.stat_sources, &BuffSelection::default(), c.equipment.clone(), c.common_skills, c.awakening,
-            &best.skill_id, "ringo", 0, None, None, None, Some(&[]),
+            &c.base_stats,
+            &c.game_character_id,
+            c.main_skill_id.as_deref(),
+            c.summon_skill_id.as_deref(),
+            &c.stat_sources,
+            &BuffSelection::default(),
+            c.equipment.clone(),
+            c.common_skills,
+            c.awakening,
+            &best.skill_id,
+            "ringo",
+            0,
+            None,
+            None,
+            None,
+            Some(&[]),
         )
         .unwrap();
         assert!(off.combined.expected_dps.unwrap() < calc.combined.expected_dps.unwrap());
@@ -4629,30 +4960,41 @@ mod tests {
             .flat_map(|area| area.contents)
             .find(|content| content.id == "ringo")
             .unwrap();
-        let base_stats = BaseStats { stab: 100, hack: 100, int: 100, def: 1, mr: 1, dex: 1, agi: 1 };
-        let build = |skill_id: &str, character: &str, skills: &[&str], masteries: &[&str], combo_type| {
-            let mut stat_sources = StatSources::default();
-            stat_sources.character_skills.skill_ids = skills.iter().map(|s| (*s).to_string()).collect();
-            stat_sources.masteries.picked = masteries.iter().map(|s| (*s).to_string()).collect();
-            let (_, target) = build_damage_input(
-                &base_stats,
-                character,
-                None,
-                &stat_sources,
-                &BuffSelection::default(),
-                Equipment::default(),
-                CommonSkills::default(),
-                domain::Awakening::default(),
-                gamedata::find_skill(skill_id).unwrap(),
-                gamedata::find_enemy("ringo_boss").unwrap(),
-                &content,
-                0,
-                combo_type,
-                None,
-            )
-            .unwrap();
-            target.skill
+        let base_stats = BaseStats {
+            stab: 100,
+            hack: 100,
+            int: 100,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
         };
+        let build =
+            |skill_id: &str, character: &str, skills: &[&str], masteries: &[&str], combo_type| {
+                let mut stat_sources = StatSources::default();
+                stat_sources.character_skills.skill_ids =
+                    skills.iter().map(|s| (*s).to_string()).collect();
+                stat_sources.masteries.picked =
+                    masteries.iter().map(|s| (*s).to_string()).collect();
+                let (_, target) = build_damage_input(
+                    &base_stats,
+                    character,
+                    None,
+                    &stat_sources,
+                    &BuffSelection::default(),
+                    Equipment::default(),
+                    CommonSkills::default(),
+                    domain::Awakening::default(),
+                    gamedata::find_skill(skill_id).unwrap(),
+                    gamedata::find_enemy("ringo_boss").unwrap(),
+                    &content,
+                    0,
+                    combo_type,
+                    None,
+                )
+                .unwrap();
+                target.skill
+            };
 
         // 速剣: ソードシェイプ系の倍率 ×0.9・段数 +1(wiki スキル性能一覧の「(速剣適用時)」行)
         let plain = build("yefnen_slay", "yefnen", &[], &[], None);
@@ -4662,7 +5004,13 @@ mod tests {
         assert!((swift.multiplier - 6.3).abs() < 1e-9);
         assert_eq!(swift.hit_count, 13);
         // チャージ: 段数が伸び、チャージ時間が中ディレイの外に乗る(【アックス特化】で半減)
-        let charged = build("yefnen_slay_axe", "yefnen", &["yefnen_full_charge"], &[], None);
+        let charged = build(
+            "yefnen_slay_axe",
+            "yefnen",
+            &["yefnen_full_charge"],
+            &[],
+            None,
+        );
         assert_eq!(charged.hit_count, 17);
         assert!((charged.charge_seconds - 1.0).abs() < 1e-9);
         let halved = build(
@@ -4696,7 +5044,10 @@ mod tests {
         fn yefnen(stacks: Option<u8>) -> NewCharacter {
             let mut stat_sources = StatSources::default();
             if let Some(stacks) = stacks {
-                stat_sources.character_skills.skill_ids.push("yefnen_flag".to_string());
+                stat_sources
+                    .character_skills
+                    .skill_ids
+                    .push("yefnen_flag".to_string());
                 stat_sources
                     .character_skills
                     .skill_levels
@@ -4705,7 +5056,15 @@ mod tests {
             NewCharacter {
                 name: "イェフネン".to_string(),
                 game_character_id: "yefnen".to_string(),
-                base_stats: BaseStats { stab: 1, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1 },
+                base_stats: BaseStats {
+                    stab: 1,
+                    hack: 300,
+                    int: 1,
+                    def: 1,
+                    mr: 1,
+                    dex: 1,
+                    agi: 1,
+                },
                 awakening: Awakening::default(),
                 stat_sources,
                 equipment: Equipment::default(),
@@ -4726,7 +5085,13 @@ mod tests {
                 name: "マクシミン".to_string(),
                 game_character_id: "maximin".to_string(),
                 base_stats: BaseStats {
-                    stab: 300, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1,
+                    stab: 300,
+                    hack: 300,
+                    int: 1,
+                    def: 1,
+                    mr: 1,
+                    dex: 1,
+                    agi: 1,
                 },
                 awakening: Awakening::default(),
                 stat_sources,
@@ -4819,7 +5184,10 @@ mod tests {
             let insert_damage = insert_result
                 .cycle_total()
                 .expected(insert_result.critical_chance);
-            let filler_damage = combo.body.cycle_total().expected(combo.body.critical_chance);
+            let filler_damage = combo
+                .body
+                .cycle_total()
+                .expected(combo.body.critical_chance);
             let hand = insert_damage / insert.interval_seconds
                 + rotation.filler_share / filler.seconds * filler_damage;
             assert!(
@@ -4836,8 +5204,104 @@ mod tests {
             );
         }
 
+        /// イサックの【プリチャージ】(+50%)はエネルギーフィールドにだけ乗る。主軸が別の技なら乗らず、
+        /// 主軸がエネルギーフィールドなら乗る。コンボの通常攻撃には主軸の補正が乗らない。
+        /// 差し込み候補としてエネルギーフィールドを回しに入れたときも、その 1 回に乗る。
+        #[test]
+        fn 技で絞るキャラスキルは対象の技にだけ乗る() {
+            let isaac = |main: &str, on: bool| {
+                let mut c = character_of("isaac", main, INT_300);
+                if on {
+                    c.stat_sources.masteries.picked = vec!["isaac_m2_2".to_string()];
+                    c.stat_sources.character_skills.skill_ids =
+                        vec!["isaac_energy_field".to_string()];
+                }
+                c
+            };
+            let other = gamedata::skills_for("isaac")
+                .into_iter()
+                .find(|s| {
+                    s.id != "isaac_energy_field"
+                        && !s.normal_attack
+                        && s.attacker == domain::Attacker::Player
+                })
+                .expect("EF 以外の技")
+                .id;
+            let normal = gamedata::skills_for("isaac")
+                .into_iter()
+                .find(|s| s.normal_attack)
+                .expect("通常攻撃")
+                .id;
+
+            // E1(スキル倍率増加(割合))が計算に入ったか。ダメージ値は敵の防御で潰れるので寄与で見る
+            let has_e1 = |r: &domain::DamageResult| {
+                r.trace
+                    .category_contributions
+                    .iter()
+                    .any(|c| c.category == domain::DamageCategory::SkillMultiplierRate)
+            };
+            // 主軸が別の技: ON にしても乗らない
+            assert!(!has_e1(&calc(&isaac(&other, true), &other, 0, None).body));
+            // 主軸がエネルギーフィールド: +50% が乗る(OFF なら乗らない)
+            assert!(!has_e1(
+                &calc(
+                    &isaac("isaac_energy_field", false),
+                    "isaac_energy_field",
+                    0,
+                    None
+                )
+                .body
+            ));
+            assert!(has_e1(
+                &calc(
+                    &isaac("isaac_energy_field", true),
+                    "isaac_energy_field",
+                    0,
+                    None
+                )
+                .body
+            ));
+
+            // コンボ: 主軸 EF の +50% は通常攻撃に乗らない(通常攻撃の 1 発は ON/OFF で同じ)
+            let off = calc(
+                &isaac("isaac_energy_field", false),
+                "isaac_energy_field",
+                3,
+                Some(&normal),
+            );
+            let on = calc(
+                &isaac("isaac_energy_field", true),
+                "isaac_energy_field",
+                3,
+                Some(&normal),
+            );
+            assert!(has_e1(&on.body));
+            assert_eq!(
+                off.body.combo.as_ref().unwrap().normal_attack_total,
+                on.body.combo.as_ref().unwrap().normal_attack_total
+            );
+
+            // 差し込み候補の EF には乗る(主軸には乗らない)
+            let mut c = isaac(&other, true);
+            c.rotation_skill_ids = Some(vec!["isaac_energy_field".to_string()]);
+            let r = calc(&c, &other, 0, None);
+            assert!(!has_e1(&r.body));
+            let insert = r
+                .rotation
+                .expect("回し")
+                .inserts
+                .into_iter()
+                .find(|i| i.skill_id == "isaac_energy_field")
+                .expect("EF を差し込む");
+            assert!(has_e1(&insert.result.expect("差し込み 1 回ぶん")));
+        }
+
         /// 検証用のキャラ(主軸だけ差し替える)。
-        fn character_of(game_character_id: &str, main_skill_id: &str, stats: BaseStats) -> NewCharacter {
+        fn character_of(
+            game_character_id: &str,
+            main_skill_id: &str,
+            stats: BaseStats,
+        ) -> NewCharacter {
             NewCharacter {
                 name: game_character_id.to_string(),
                 game_character_id: game_character_id.to_string(),
@@ -4853,13 +5317,34 @@ mod tests {
                 default_buff_set_id: None,
             }
         }
-        const INT_300: BaseStats =
-            BaseStats { stab: 1, hack: 1, int: 300, def: 1, mr: 1, dex: 1, agi: 1 };
-        const HACK_300: BaseStats =
-            BaseStats { stab: 1, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+        const INT_300: BaseStats = BaseStats {
+            stab: 1,
+            hack: 1,
+            int: 300,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
+        const HACK_300: BaseStats = BaseStats {
+            stab: 1,
+            hack: 300,
+            int: 1,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
 
-        const STAB_300: BaseStats =
-            BaseStats { stab: 300, hack: 1, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+        const STAB_300: BaseStats = BaseStats {
+            stab: 300,
+            hack: 1,
+            int: 1,
+            def: 1,
+            mr: 1,
+            dex: 1,
+            agi: 1,
+        };
 
         /// 中ディレイ減少 45%(フルスロットル)のルシアン。極・連撃(持続 10s = CT 10s)は
         /// 減少で 5.5s になり、**実効 CT を持つ差し込み技**に変わる境界。
@@ -4884,9 +5369,16 @@ mod tests {
             // 減少なし: 持続 10s ≥ CT 10s なので「連打できる技」= 差し込み候補に出ない
             let plain = choices(character_of("lucian", "lucian_vortex", STAB_300));
             assert!(
-                !plain.candidates.iter().any(|c| c.skill_id == "lucian_streak"),
+                !plain
+                    .candidates
+                    .iter()
+                    .any(|c| c.skill_id == "lucian_streak"),
                 "{:?}",
-                plain.candidates.iter().map(|c| &c.skill_id).collect::<Vec<_>>()
+                plain
+                    .candidates
+                    .iter()
+                    .map(|c| &c.skill_id)
+                    .collect::<Vec<_>>()
             );
 
             let mut character = character_of("lucian", "lucian_vortex", STAB_300);
@@ -4923,8 +5415,11 @@ mod tests {
                 .filter(|c| c.default_on)
                 .map(|c| c.skill_id.as_str())
                 .collect();
-            let inserted: Vec<&str> =
-                rotation.inserts.iter().map(|i| i.skill_id.as_str()).collect();
+            let inserted: Vec<&str> = rotation
+                .inserts
+                .iter()
+                .map(|i| i.skill_id.as_str())
+                .collect();
             assert_eq!(inserted, default_on);
             // 差し込めるようになった(損得が出る)。既定 ON になるのは `Skill::power` が
             // 最大の技なので、極・連撃そのものが既定とは限らない(ADR-019 決定 5)
@@ -5014,7 +5509,11 @@ mod tests {
                     .iter()
                     .any(|c| c.skill_id == "tichiel_sparkling_kite"),
                 "{:?}",
-                choices.candidates.iter().map(|c| &c.skill_id).collect::<Vec<_>>()
+                choices
+                    .candidates
+                    .iter()
+                    .map(|c| &c.skill_id)
+                    .collect::<Vec<_>>()
             );
             // ティチエルの CT 技はどれも差し込むと下がるので、既定で ON になる技は無い
             assert!(choices.candidates.iter().all(|c| !c.default_on));
@@ -5054,7 +5553,15 @@ mod tests {
             let mut tichiel = NewCharacter {
                 name: "ティチエル".to_string(),
                 game_character_id: "tichiel".to_string(),
-                base_stats: BaseStats { stab: 1, hack: 1, int: 300, def: 1, mr: 1, dex: 1, agi: 1 },
+                base_stats: BaseStats {
+                    stab: 1,
+                    hack: 1,
+                    int: 300,
+                    def: 1,
+                    mr: 1,
+                    dex: 1,
+                    agi: 1,
+                },
                 awakening: Awakening::default(),
                 stat_sources: StatSources::default(),
                 equipment: Equipment::default(),
@@ -5120,7 +5627,15 @@ mod tests {
             let boris = NewCharacter {
                 name: "ボリス".to_string(),
                 game_character_id: "boris".to_string(),
-                base_stats: BaseStats { stab: 300, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1 },
+                base_stats: BaseStats {
+                    stab: 300,
+                    hack: 300,
+                    int: 1,
+                    def: 1,
+                    mr: 1,
+                    dex: 1,
+                    agi: 1,
+                },
                 main_skill_id: Some("boris_blur_sword".to_string()),
                 ..tichiel.clone()
             };
@@ -5221,7 +5736,15 @@ mod tests {
             // ならないので、手で ON にしたときの符号を見る
             let down = ["tichiel_giga_blaze".to_string()];
             let tichiel = super::super::damage_for_character(
-                &BaseStats { stab: 1, hack: 1, int: 300, def: 1, mr: 1, dex: 1, agi: 1 },
+                &BaseStats {
+                    stab: 1,
+                    hack: 1,
+                    int: 300,
+                    def: 1,
+                    mr: 1,
+                    dex: 1,
+                    agi: 1,
+                },
                 "tichiel",
                 Some("tichiel_beating"),
                 None,
@@ -5246,7 +5769,8 @@ mod tests {
             assert!(gain < 0.0, "{} {gain}", insert.skill_id);
             // 差し込まなければその分だけ DPS が高い(= 主軸を連打しているだけの値)
             assert!(
-                (tichiel.combined.expected_dps.unwrap() - gain
+                (tichiel.combined.expected_dps.unwrap()
+                    - gain
                     - tichiel.body.expected_dps.unwrap())
                 .abs()
                     < 1e-6
@@ -5254,10 +5778,24 @@ mod tests {
 
             // イェフネン: 連 を連打 + スレイ(<フラグ> を爆発させる)は差し込むほうが高い
             let mut stat_sources = StatSources::default();
-            stat_sources.character_skills.skill_ids.push("yefnen_flag".to_string());
-            stat_sources.character_skills.skill_levels.insert("yefnen_flag".to_string(), 10);
+            stat_sources
+                .character_skills
+                .skill_ids
+                .push("yefnen_flag".to_string());
+            stat_sources
+                .character_skills
+                .skill_levels
+                .insert("yefnen_flag".to_string(), 10);
             let yefnen = super::super::damage_for_character(
-                &BaseStats { stab: 1, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1 },
+                &BaseStats {
+                    stab: 1,
+                    hack: 300,
+                    int: 1,
+                    def: 1,
+                    mr: 1,
+                    dex: 1,
+                    agi: 1,
+                },
                 "yefnen",
                 Some("yefnen_continuous"),
                 None,
@@ -5367,7 +5905,9 @@ mod tests {
         }
 
         /// 主軸(スレイ)の 1 回ぶんを取り出す。回しの中で主軸は差し込む技
-        fn main_insert(result: &super::super::CharacterDamageResult) -> &super::super::RotationInsert {
+        fn main_insert(
+            result: &super::super::CharacterDamageResult,
+        ) -> &super::super::RotationInsert {
             result
                 .rotation
                 .as_ref()
@@ -5476,7 +6016,14 @@ mod tests {
             let sword = calc("yefnen_slay", Some(10), &[]);
             let sword_insert = main_insert(&sword);
             assert_eq!(
-                sword.rotation.as_ref().unwrap().filler.as_ref().unwrap().skill_id,
+                sword
+                    .rotation
+                    .as_ref()
+                    .unwrap()
+                    .filler
+                    .as_ref()
+                    .unwrap()
+                    .skill_id,
                 "yefnen_continuous"
             );
             assert!(sword_insert.filler_uses >= 5);
@@ -5485,7 +6032,14 @@ mod tests {
             let urumi = calc("yefnen_slay_urumi", Some(10), &[]);
             let urumi_insert = main_insert(&urumi);
             assert_eq!(
-                urumi.rotation.as_ref().unwrap().filler.as_ref().unwrap().skill_id,
+                urumi
+                    .rotation
+                    .as_ref()
+                    .unwrap()
+                    .filler
+                    .as_ref()
+                    .unwrap()
+                    .skill_id,
                 "yefnen_continuous_urumi"
             );
             // 爆発しても半分(5)残るので積み直しは 1 回ぶんだが、CT 10 秒に届かず回数が増える
@@ -5496,7 +6050,14 @@ mod tests {
             // 範囲技(クラッシュ)は同じ形態の 爆 で積み直す
             let crash = calc("yefnen_crash_axe", Some(10), &[]);
             assert_eq!(
-                crash.rotation.as_ref().unwrap().filler.as_ref().unwrap().skill_id,
+                crash
+                    .rotation
+                    .as_ref()
+                    .unwrap()
+                    .filler
+                    .as_ref()
+                    .unwrap()
+                    .skill_id,
                 "yefnen_explosion_axe"
             );
 
@@ -5588,8 +6149,11 @@ mod tests {
             .unwrap();
             let rotation = two.rotation.as_ref().unwrap();
             assert_eq!(rotation.inserts.len(), 2);
-            let mut names: Vec<&str> =
-                rotation.inserts.iter().map(|i| i.skill_id.as_str()).collect();
+            let mut names: Vec<&str> = rotation
+                .inserts
+                .iter()
+                .map(|i| i.skill_id.as_str())
+                .collect();
             names.sort_unstable();
             assert_eq!(names, ["yefnen_crash", "yefnen_slay"]);
             // 既定(未設定)は火力最大の 1 件だけ
@@ -5625,10 +6189,7 @@ mod tests {
             };
             // 未設定 = 既定で 1 件差し込む
             let default_preview = preview(&character);
-            assert_eq!(
-                default_preview.rotation.as_ref().unwrap().inserts.len(),
-                1
-            );
+            assert_eq!(default_preview.rotation.as_ref().unwrap().inserts.len(), 1);
             // 明示的に差し込まない → 回しを組まない = 技そのものの DPS
             character.rotation_skill_ids = Some(Vec::new());
             let none_preview = preview(&character);
@@ -5654,12 +6215,24 @@ mod tests {
                 inserts: vec![RotationRole::Main],
             };
             // 主軸を連打しながら爆発させる = 爆発をどの間隔で入れるか決まらない
-            assert!(super::super::flag_burst_blocks_rotation(true, &filler_is_main));
+            assert!(super::super::flag_burst_blocks_rotation(
+                true,
+                &filler_is_main
+            ));
             // 主軸が差し込み側なら爆発の間隔は決まる
-            assert!(!super::super::flag_burst_blocks_rotation(true, &main_is_insert));
+            assert!(!super::super::flag_burst_blocks_rotation(
+                true,
+                &main_is_insert
+            ));
             // 爆発が無ければどちらでも組める
-            assert!(!super::super::flag_burst_blocks_rotation(false, &filler_is_main));
-            assert!(!super::super::flag_burst_blocks_rotation(false, &main_is_insert));
+            assert!(!super::super::flag_burst_blocks_rotation(
+                false,
+                &filler_is_main
+            ));
+            assert!(!super::super::flag_burst_blocks_rotation(
+                false,
+                &main_is_insert
+            ));
         }
 
         /// 候補の「上がる / 下がる / 不明」は Rust が振り分ける(画面が境界を持たない)。
@@ -5747,8 +6320,8 @@ mod tests {
             let filler = rotation.filler.as_ref().unwrap();
             assert!(!rotation.crowded);
             assert!(!rotation.inserts.is_empty());
-            let sum: f64 = filler.expected_dps
-                + rotation.inserts.iter().map(|i| i.expected_dps).sum::<f64>();
+            let sum: f64 =
+                filler.expected_dps + rotation.inserts.iter().map(|i| i.expected_dps).sum::<f64>();
             assert!(
                 (sum - rotation.expected_dps).abs() < 1e-6,
                 "{sum} vs {}",
@@ -5761,7 +6334,8 @@ mod tests {
             let insert = &rotation.inserts[0];
             assert!((insert.uses_per_minute - 60.0 / insert.interval_seconds).abs() < 1e-9);
             assert!(
-                (filler.uses_per_minute - rotation.filler_share * 60.0 / filler.seconds).abs() < 1e-9
+                (filler.uses_per_minute - rotation.filler_share * 60.0 / filler.seconds).abs()
+                    < 1e-9
             );
         }
 
@@ -5825,7 +6399,10 @@ mod tests {
                 let r = calc(id, Some(10), &[]);
                 assert!(r.flag.as_ref().unwrap().burst.is_none(), "{id}");
                 // 持続は積む技でも乗る
-                assert!(r.flag.as_ref().unwrap().duration.expected_dps.is_some(), "{id}");
+                assert!(
+                    r.flag.as_ref().unwrap().duration.expected_dps.is_some(),
+                    "{id}"
+                );
                 assert_eq!(r.combined.total_primary, r.body.total_primary, "{id}");
             }
             for id in [
@@ -5902,8 +6479,14 @@ mod tests {
         fn yefnen(stacks: Option<u8>) -> NewCharacter {
             let mut stat_sources = StatSources::default();
             if let Some(stacks) = stacks {
-                stat_sources.character_skills.skill_ids.push("yefnen_flag".to_string());
-                stat_sources.character_skills.skill_levels.insert("yefnen_flag".to_string(), stacks);
+                stat_sources
+                    .character_skills
+                    .skill_ids
+                    .push("yefnen_flag".to_string());
+                stat_sources
+                    .character_skills
+                    .skill_levels
+                    .insert("yefnen_flag".to_string(), stacks);
             }
             NewCharacter {
                 name: "イェフネン".to_string(),
@@ -5955,7 +6538,10 @@ mod tests {
         fn ホームの討伐時間は計算タブの合算と一致する() {
             let (home, calc) = home_and_calc(Some(10));
             assert!(home.is_some() && calc.is_some());
-            assert!((home.unwrap() - calc.unwrap()).abs() < 1e-6, "home={home:?} calc={calc:?}");
+            assert!(
+                (home.unwrap() - calc.unwrap()).abs() < 1e-6,
+                "home={home:?} calc={calc:?}"
+            );
         }
 
         #[test]
@@ -5972,7 +6558,15 @@ mod tests {
             let mut boris = anais();
             boris.name = "ボリス".to_string();
             boris.game_character_id = "boris".to_string();
-            boris.base_stats = BaseStats { stab: 300, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1 };
+            boris.base_stats = BaseStats {
+                stab: 300,
+                hack: 300,
+                int: 1,
+                def: 1,
+                mr: 1,
+                dex: 1,
+                agi: 1,
+            };
             let evals =
                 super::super::evaluate_contents(boris.clone(), BuffSelection::default(), None)
                     .unwrap();
@@ -6022,14 +6616,26 @@ mod tests {
                     candidate.id
                 );
                 // <フラグ> の爆発ぶんが入っている(技単独ではない)
-                assert!(candidate.total_primary > applied.body.total_primary, "{}", candidate.id);
+                assert!(
+                    candidate.total_primary > applied.body.total_primary,
+                    "{}",
+                    candidate.id
+                );
             }
         }
 
         #[test]
         fn 他キャラの結果は変わらない() {
             let before = super::super::damage_for_character(
-                &BaseStats { stab: 300, hack: 300, int: 1, def: 1, mr: 1, dex: 1, agi: 1 },
+                &BaseStats {
+                    stab: 300,
+                    hack: 300,
+                    int: 1,
+                    def: 1,
+                    mr: 1,
+                    dex: 1,
+                    agi: 1,
+                },
                 "boris",
                 None,
                 None,
@@ -6064,16 +6670,32 @@ mod tests {
         let mut c = anais();
         c.main_skill_id = Some("anais_angry_pixie".to_string());
         c.summon_skill_id = Some("anais_mica_even_bear".to_string());
-        let ctx = super::candidate_context(&c, &BuffSelection::default(), "anais_angry_pixie", "ringo").unwrap();
-        assert!(ctx.enchant_allowed_keys.contains(&domain::EquipmentStatKind::Slash));
-        assert!(ctx.enchant_allowed_keys.contains(&domain::EquipmentStatKind::MagicAttack));
-        assert!(ctx.enchant_allowed_keys.contains(&domain::EquipmentStatKind::MagicDefense));
+        let ctx =
+            super::candidate_context(&c, &BuffSelection::default(), "anais_angry_pixie", "ringo")
+                .unwrap();
+        assert!(ctx
+            .enchant_allowed_keys
+            .contains(&domain::EquipmentStatKind::Slash));
+        assert!(ctx
+            .enchant_allowed_keys
+            .contains(&domain::EquipmentStatKind::MagicAttack));
+        assert!(ctx
+            .enchant_allowed_keys
+            .contains(&domain::EquipmentStatKind::MagicDefense));
 
         // 召喚スキル未選択なら本体(Int 依存)だけ。斬りは本体側に無い成分なので含まれない(回帰)。
         let mut without_summon = anais();
         without_summon.main_skill_id = Some("anais_angry_pixie".to_string());
-        let ctx_without = super::candidate_context(&without_summon, &BuffSelection::default(), "anais_angry_pixie", "ringo").unwrap();
-        assert!(!ctx_without.enchant_allowed_keys.contains(&domain::EquipmentStatKind::Slash));
+        let ctx_without = super::candidate_context(
+            &without_summon,
+            &BuffSelection::default(),
+            "anais_angry_pixie",
+            "ringo",
+        )
+        .unwrap();
+        assert!(!ctx_without
+            .enchant_allowed_keys
+            .contains(&domain::EquipmentStatKind::Slash));
     }
 
     #[test]
@@ -6149,7 +6771,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn 防御と対人が通る経路にも手首補正が入る() {
         // ベンヤはバンドの敏捷 × 0.7 が HACK と MR の大小で 斬り / 魔防 へ行く
@@ -6194,7 +6815,6 @@ mod tests {
         assert!(combat_stats_of(&character, &BuffSelection::default()).is_ok());
     }
 
-
     #[test]
     fn 全属性バフと回廊は属性値の内訳に出る() {
         // 迅速の秘薬(全属性 +15)を ON、回廊の全属性増加を Lv10(各属性 +10)にすると、
@@ -6230,5 +6850,4 @@ mod tests {
         // アナイスの基礎属性値(火 10)も足した合計
         assert_eq!(elements.total.fire, elements.base.fire + 25);
     }
-
 }

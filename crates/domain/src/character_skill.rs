@@ -188,6 +188,8 @@ pub enum SkillRequirement {
     Form(SkillForm),
     /// チャージで段数が増える技(`Skill::full_charge`)を主軸にしているときだけ効く
     FullCharge,
+    /// この技(`Skill::id`)を撃つときだけ効く(イサック【プリチャージ】= エネルギーフィールド 等)
+    Skills(&'static [&'static str]),
 }
 
 impl SkillRequirement {
@@ -199,6 +201,7 @@ impl SkillRequirement {
         match self {
             SkillRequirement::Form(form) => skill.form == Some(form),
             SkillRequirement::FullCharge => skill.full_charge.is_some(),
+            SkillRequirement::Skills(ids) => ids.contains(&skill.id.as_str()),
         }
     }
 }
@@ -724,6 +727,17 @@ mod tests {
         let rates = skills.stat_rates(CATALOG, &picked(&["mira_m4_2"]));
         assert_eq!(rates.len(), 1);
         assert_eq!(rates[0].0, StatKind::Agi);
+    }
+
+    #[test]
+    fn 技で絞る条件は列挙した技だけ通す() {
+        let mut skill = Skill::for_test("a", crate::skill::SkillDependency::Hack);
+        let req = SkillRequirement::Skills(&["a", "b"]);
+        skill.id = "a".into();
+        assert!(req.matches(Some(&skill)));
+        skill.id = "c".into();
+        assert!(!req.matches(Some(&skill)));
+        assert!(!req.matches(None));
     }
 
     #[test]

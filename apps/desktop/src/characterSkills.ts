@@ -140,16 +140,22 @@ export function toggleCharacterSkill(
 export function skillRequirementMet(def: CharacterSkillDef, skill: Skill | null): boolean {
   if (def.requires === null) return true;
   if (skill === null) return false;
-  return def.requires === "full_charge"
-    ? skill.full_charge !== null
-    : skill.form === def.requires.form;
+  if (def.requires === "full_charge") return skill.full_charge !== null;
+  if ("skills" in def.requires) return def.requires.skills.includes(skill.id);
+  return skill.form === def.requires.form;
 }
 
+/** 主軸スキルの隣に出す条件か(形態・チャージ)。技 id で絞るもの(`skills`)は
+ * 効く技が複数のキャラタブ一覧に残す — 回しの差し込み候補にも効くので、主軸の隣だけには置かない */
+const bindsToMainSkill = (def: CharacterSkillDef) =>
+  def.requires !== null && typeof def.requires === "object" && !("skills" in def.requires)
+  || def.requires === "full_charge";
+
 /** このキャラが ON にできるスキル(自分のスキル / 味方から受けるスキル)。
- * 形態で絞るスキル(`requires`)はキャラタブの一覧からは外し、主軸スキルの隣に出す */
+ * 形態・チャージで絞るスキル(`requires`)はキャラタブの一覧からは外し、主軸スキルの隣に出す */
 export const ownSkills = (catalog: CharacterSkillDef[], gameCharacterId: string) =>
   catalog.filter((d) =>
-    d.audience === "self_only" && d.game_character_id === gameCharacterId && d.requires === null);
+    d.audience === "self_only" && d.game_character_id === gameCharacterId && !bindsToMainSkill(d));
 
 /** いまの技でだけ意味がある自分のスキル(速剣・最大までチャージ・後方から攻撃)。
  * 主軸スキルの隣に出す(§00②「要らないものを見せない」) */
@@ -158,7 +164,7 @@ export const skillBoundSkills = (
 ) =>
   catalog.filter((d) =>
     d.audience === "self_only" && d.game_character_id === gameCharacterId
-    && d.requires !== null && skillRequirementMet(d, skill));
+    && bindsToMainSkill(d) && skillRequirementMet(d, skill));
 export const allySkills = (catalog: CharacterSkillDef[]) =>
   catalog.filter((d) => d.audience === "ally");
 /** 敵にかけるデバフ。同行者がかける前提なので誰でも ON にできる */

@@ -335,11 +335,35 @@ pub struct Skill {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SummonForm {
+    /// 守護精霊(エアル召喚)。ディソナンス / カコフォニーが属する
+    Earu,
     MicaBear,
     RucyBear,
     Anferu,
     Gureshisu,
     Igni,
+}
+
+/// アナイスの 3 つの型(wiki「Skill/アナイス」の守護型 / 人形型 / 破壊型)。
+/// エアル召喚・ミカベア召喚・アンフェル召喚は互いに習得不可で、型をまたいで使えない。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SummonType {
+    /// 守護型(エアル召喚)
+    Guardian,
+    /// 人形型(ミカベア召喚 / ルシベア召喚)
+    Doll,
+    /// 破壊型(アンフェル / グレシス / イグニー召喚)
+    Destruction,
+}
+
+impl SummonForm {
+    pub fn summon_type(self) -> SummonType {
+        match self {
+            Self::Earu => SummonType::Guardian,
+            Self::MicaBear | Self::RucyBear => SummonType::Doll,
+            Self::Anferu | Self::Gureshisu | Self::Igni => SummonType::Destruction,
+        }
+    }
 }
 
 impl Skill {
@@ -381,8 +405,19 @@ impl Skill {
     /// 出しているときだけ置ける(wiki: テスラコイルは「アンフェルスキル」で、使用時にアンフェル消滅)。
     /// 召喚獣を出していない・型が違う(グレシスを出していてテスラコイル)なら候補にしない。
     /// 召喚獣命中時の追加ダメージ(`summon_hit_bonus`)は破壊精霊(3 種どれでも)を
-    /// 出しているときだけ候補にする(熊・召喚なしでは出さない)。それ以外は常に可
-    pub fn usable_with_summon(&self, summon: Option<&Skill>) -> bool {
+    /// 出しているときだけ候補にする(熊・召喚なしでは出さない)。
+    /// 型を持つ技(ベアステップ・ディソナンス等)は、主軸・召喚欄が決めている型と
+    /// 同じときだけ可(3 つの型は同時に使えない)。それ以外は常に可
+    pub fn usable_with_summon(&self, main: Option<&Skill>, summon: Option<&Skill>) -> bool {
+        if let Some(own) = self.summon_form.map(SummonForm::summon_type) {
+            let anchors = [main, summon].into_iter().flatten();
+            if anchors
+                .filter_map(|s| s.summon_form)
+                .any(|f| f.summon_type() != own)
+            {
+                return false;
+            }
+        }
         if self.summon_hit_bonus.is_some() {
             return summon.is_some_and(|s| {
                 matches!(

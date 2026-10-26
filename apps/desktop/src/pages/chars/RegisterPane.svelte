@@ -2,7 +2,8 @@
   // キャラ登録(v4): 呼び名 + 19 職のアイコン選択だけ。詳細は登録後にワークスペースで育てる
   // (docs/ux-guidelines.md 原則3)。「コピー」は選択中キャラの補正源・装備を引き継ぐ。
   import {
-    createCharacter, errorMessage, getNewCharacterCommonSkills, getNewCharacterStatSources, retainCharacterSkills,
+    createCharacter, errorMessage, getNewCharacterCommonSkills, getNewCharacterStatSources,
+    normalizeSummonSkillSelection, retainCharacterSkills,
   } from "../../api/commands";
   import { mainSkillOptions as buildMainSkillOptions } from "../../characterSkills";
   import type { NewCharacter } from "../../api/types";
@@ -82,6 +83,11 @@
             gameCharacterId,
           );
         }
+        // 主軸を差し替えると、引き継いだ召喚欄が別の型(アナイスの守護 / 人形 / 破壊)になりうる。
+        // 保存の検証に弾かれないよう、登録前に主軸と召喚欄の組を正規化する(規則は Rust 側)
+        const normalized = await normalizeSummonSkillSelection(payload.main_skill_id, payload.summon_skill_id);
+        payload.main_skill_id = normalized.main_skill_id;
+        payload.summon_skill_id = normalized.summon_skill_id;
       } else {
         payload = {
           name: name.trim() || selectedGame.name,

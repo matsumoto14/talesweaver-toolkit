@@ -169,7 +169,7 @@ pub use siena::{
 };
 pub use skill::{
     Attacker, Channeling, ComboSkillType, Field, ComboSkillTypeError, ComboSkillVariant, FullCharge, Skill,
-    SkillDependency, SkillForm, SkillTarget, SummonForm, SummonHitBonus, SwiftSword,
+    SkillDependency, SkillForm, SkillTarget, SummonForm, SummonHitBonus, SummonType, SwiftSword,
 };
 pub use soul_link::{SoulLinkError, SoulLinkPreview, SoulLinkStatus};
 pub use stat_sources::{

@@ -80,8 +80,6 @@ ICON_OVERRIDES = {
     # 自身用と味方用を別行にした同一スキル
     "benya_altruistic_spirit_party": "ScytheSkill16.png",
     "leeche_attack_fever_party": "AnaroseSkill_3.png",
-    # ミラクルスピリットで付く状態。Wiki に独立したスキルアイコンはない
-    "benya_dark_blessing": "HammerSkill7.png",
     # フラグへのマスタリー別追加効果
     "yefnen_sharp_shard": "Mastary3_2.png",
     "yefnen_sticky_shard": "Mastary3_3.png",

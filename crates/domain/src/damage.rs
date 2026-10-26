@@ -785,20 +785,23 @@ pub fn combine_expected_dps(body: Option<f64>, summon: Option<f64>) -> Option<f6
 ///
 /// 中ディレイが出せない(wiki の「動作」列が秒で読めない)スキル・通常攻撃では、
 /// サイクルを作れないので `calculate_damage` と同じ結果を返す。
+///
+/// `normal_target` は通常攻撃用の入力(`skill` が通常攻撃)。主軸の `damage_contributions` /
+/// `skill_added_damage_rate` は技ごとに絞るスキルがあり通常攻撃には乗らないので、
+/// 呼び出し側が通常攻撃の技で作り直して渡す。
 pub fn calculate_damage_with_combo(
     material: &DamageMaterial,
     target: &DamageTarget,
-    normal_attack: &Skill,
+    normal_target: &DamageTarget,
 ) -> DamageResult {
+    let normal_attack = &normal_target.skill;
     let mut result = calculate_damage(material, target);
     // 陣は置いたら手が空くので、通常攻撃を挟む「コンボ」の 1 サイクルにならない(置く動作の
     // DPS を通常攻撃込みで出しても意味が無い)。置く技としての DPS(持続で割った値)のまま返す
     if target.skill.field.is_some() {
         return result;
     }
-    let mut normal_target = target.clone();
-    normal_target.skill = normal_attack.clone();
-    let normal = calculate_damage(material, &normal_target);
+    let normal = calculate_damage(material, normal_target);
 
     let (Some(skill_delay), Some(normal_delay)) =
         (result.actual_delay.as_ref(), normal.actual_delay.as_ref())
@@ -2595,6 +2598,13 @@ mod tests {
 
     // --- コンボ(間に通常攻撃を挟む)-------------------------------------
 
+    /// テスト用: 主軸の入力から通常攻撃用の入力を作る(寄与は主軸のまま)
+    fn normal_target(base: &DamageTarget, normal: Skill) -> DamageTarget {
+        let mut t = base.clone();
+        t.skill = normal;
+        t
+    }
+
     /// テスト用の通常攻撃。基本中ディレイ 0.6s、CI は引数で変える
     fn normal_attack(combo_interval: Option<f64>) -> Skill {
         let mut skill = target().skill;
@@ -2606,12 +2616,37 @@ mod tests {
         skill
     }
 
+    /// 通常攻撃用の入力は呼び出し側が作る。主軸の寄与(技で絞るスキルの +50% 等)が
+    /// 通常攻撃に乗らないよう、渡した `normal_target` の寄与だけが通常攻撃に効く。
+    #[test]
+    fn コンボの通常攻撃は渡された入力の寄与で計算される() {
+        let m = material();
+        let mut main = target();
+        main.damage_contributions = vec![DamageContribution {
+            source: "テスト".into(),
+            category: DamageCategory::SkillMultiplierRate,
+            value: 0.5,
+        }];
+        let normal = normal_attack(Some(0.32));
+        // 主軸の寄与を引き継いだ入力 / 通常攻撃用に作り直した(寄与なし)入力
+        let inherited = calculate_damage_with_combo(&m, &main, &normal_target(&main, normal.clone()));
+        let mut clean = normal_target(&main, normal);
+        clean.damage_contributions = Vec::new();
+        let rebuilt = calculate_damage_with_combo(&m, &main, &clean);
+        // 主軸ぶんは同じで、通常攻撃ぶんだけが下がる
+        assert_eq!(inherited.total, rebuilt.total);
+        assert!(
+            rebuilt.combo.unwrap().normal_attack_total.max
+                < inherited.combo.unwrap().normal_attack_total.max
+        );
+    }
+
     #[test]
     fn コンボのdpsは通常攻撃を挟んだ1サイクルで割る() {
         let m = material();
         let tg = target();
         let normal = normal_attack(Some(0.32));
-        let result = calculate_damage_with_combo(&m, &tg, &normal);
+        let result = calculate_damage_with_combo(&m, &tg, &normal_target(&tg, normal.clone()));
         let combo = result.combo.clone().expect("コンボ");
 
         // 通常攻撃 1 発ぶんのダメージが乗り、時間は 通常攻撃の中ディレイ + max(スキル, CI)
@@ -2631,8 +2666,8 @@ mod tests {
             source: "テスト".into(),
             rate: 0.7,
         }];
-        let short = calculate_damage_with_combo(&m, &tg, &normal_attack(Some(0.3)));
-        let long = calculate_damage_with_combo(&m, &tg, &normal_attack(Some(0.55)));
+        let short = calculate_damage_with_combo(&m, &tg, &normal_target(&tg, normal_attack(Some(0.3))));
+        let long = calculate_damage_with_combo(&m, &tg, &normal_target(&tg, normal_attack(Some(0.55))));
 
         assert!(!short.combo.clone().unwrap().interval_binding);
         let long_combo = long.combo.clone().unwrap();
@@ -2644,7 +2679,7 @@ mod tests {
 
     #[test]
     fn コンボの回数は1分をサイクルで割った値() {
-        let result = calculate_damage_with_combo(&material(), &target(), &normal_attack(Some(0.32)));
+        let result = calculate_damage_with_combo(&material(), &target(), &normal_target(&target(), normal_attack(Some(0.32))));
         let combo = result.combo.unwrap();
         assert!((combo.uses_per_minute - 60.0 / combo.seconds).abs() < 1e-12);
         assert!((combo.skill_gap - combo.skill_delay.max(0.32)).abs() < 1e-12);
@@ -2654,7 +2689,7 @@ mod tests {
     fn コンボインターバルが未収録なら下限なしで出す() {
         let m = material();
         let tg = target();
-        let result = calculate_damage_with_combo(&m, &tg, &normal_attack(None));
+        let result = calculate_damage_with_combo(&m, &tg, &normal_target(&tg, normal_attack(None)));
         let combo = result.combo.unwrap();
         assert_eq!(combo.interval, None);
         assert!(!combo.interval_binding);
@@ -2667,10 +2702,10 @@ mod tests {
     fn チャージ時間はコンボの1サイクルにも乗る() {
         let m = material();
         let normal = normal_attack(Some(0.32));
-        let plain = calculate_damage_with_combo(&m, &target(), &normal);
+        let plain = calculate_damage_with_combo(&m, &target(), &normal_target(&target(), normal.clone()));
         let mut charged_target = target();
         charged_target.skill.charge_seconds = 1.0;
-        let charged = calculate_damage_with_combo(&m, &charged_target, &normal);
+        let charged = calculate_damage_with_combo(&m, &charged_target, &normal_target(&charged_target, normal.clone()));
 
         let plain_combo = plain.combo.clone().unwrap();
         let charged_combo = charged.combo.clone().unwrap();
@@ -2696,7 +2731,7 @@ mod tests {
         channeling.skill.base_actual_delay = Some(10.0);
         channeling.skill.actual_delay_fixed = false;
         channeling.skill.channeling = Some(crate::skill::Channeling { ticks: 10, tick_seconds: 1.0 });
-        let combo = calculate_damage_with_combo(&m, &channeling, &normal);
+        let combo = calculate_damage_with_combo(&m, &channeling, &normal_target(&channeling, normal.clone()));
         let cycle = combo.combo.clone().unwrap();
         // 持続 10s がそのまま 1 サイクルの中に入る(×0.5 が掛からない)
         assert_eq!(combo.actual_delay.as_ref().unwrap().combo_rate, 1.0);
@@ -2716,7 +2751,7 @@ mod tests {
         let tg = target();
         let mut normal = normal_attack(Some(0.32));
         normal.base_actual_delay = None;
-        let result = calculate_damage_with_combo(&m, &tg, &normal);
+        let result = calculate_damage_with_combo(&m, &tg, &normal_target(&tg, normal.clone()));
         assert!(result.combo.is_none());
         // DPS はスキル単体のまま
         assert_eq!(result.dps, calculate_damage(&m, &tg).dps);

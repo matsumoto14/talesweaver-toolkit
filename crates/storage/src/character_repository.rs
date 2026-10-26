@@ -2780,6 +2780,62 @@ mod tests {
         );
     }
 
+    /// アナイスの 3 つの型が排他になる前に保存された選択(守護型 + 破壊型を同時 ON、
+    /// 守護型の主軸に人形型の召喚)は、先に並んだ方を残して落とす。2 回開いても同じ。
+    #[test]
+    fn 型が排他になる前の保存データは衝突を落とし2回開いても変わらない() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE characters (
+                id                  INTEGER PRIMARY KEY,
+                name                TEXT    NOT NULL,
+                game_character_id   TEXT    NOT NULL,
+                stab                INTEGER NOT NULL,
+                hack                INTEGER NOT NULL,
+                int                 INTEGER NOT NULL,
+                def                 INTEGER NOT NULL,
+                mr                  INTEGER NOT NULL,
+                dex                 INTEGER NOT NULL,
+                agi                 INTEGER NOT NULL,
+                awakening_stage     INTEGER NOT NULL,
+                eternal_level       INTEGER NOT NULL,
+                stat_sources        TEXT    NOT NULL,
+                equipment           TEXT    NOT NULL,
+                common_skills       TEXT    NOT NULL,
+                main_skill_id       TEXT,
+                summon_skill_id     TEXT,
+                goal_content_id     TEXT,
+                default_buff_set_id INTEGER,
+                updated_at          TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO characters (name, game_character_id, stab, hack, int, def, mr, dex, agi, awakening_stage, eternal_level, stat_sources, equipment, common_skills, main_skill_id, summon_skill_id)
+            VALUES ('全部乗せ', 'anais', 300, 250, 10, 200, 150, 280, 250, 5, 40,
+                '{\"character_skills\":{\"skill_ids\":[\"anais_hard_weapon\",\"anais_fire_aura\",\"anais_ice_snare\"],\"skill_levels\":{}}}',
+                '{\"parts\":{}}', '{}', 'anais_dissonance', 'anais_mica_even_bear');
+            PRAGMA user_version = 19;
+            ",
+        )
+        .unwrap();
+
+        let repo = CharacterRepository::from_connection(conn).unwrap();
+        let before = repo.list().unwrap();
+        assert_eq!(
+            before[0].stat_sources.character_skills.skill_ids,
+            vec!["anais_hard_weapon".to_string()]
+        );
+        assert_eq!(before[0].main_skill_id.as_deref(), Some("anais_dissonance"));
+        assert_eq!(before[0].summon_skill_id, None);
+        let reopened = CharacterRepository::from_connection(repo.conn).unwrap();
+        let after = reopened.list().unwrap();
+        assert_eq!(
+            after[0].stat_sources.character_skills,
+            before[0].stat_sources.character_skills
+        );
+        assert_eq!(after[0].summon_skill_id, None);
+    }
+
     /// v4 の DB(`main_skill_id` 列が無い)を開いても落ちず、既存キャラは主軸スキル未選択で読める。
     #[test]
     fn main_skill_id列の無いdbを開くと既存キャラは未選択で読める() {
