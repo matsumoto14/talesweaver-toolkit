@@ -43,6 +43,8 @@ pub struct SkillEvaluationInput {
     /// キャラスキルの割合追加ダメージ(§5 新-割合)。形態で絞るスキルはこのスキルで
     /// 解決済み(`CharacterSkills::added_damage_rate`)
     pub skill_added_damage_rate: f64,
+    /// キャラスキルの敵ステータス防御の増減率(`CharacterSkills::enemy_stat_defense_rate`)
+    pub skill_enemy_stat_defense_rate: f64,
     pub element_value: i64,
     /// <フラグ>(イェフネンの、技とは別枠のダメージ)の持続ぶんの入力。
     /// **技ごとに付く** — <フラグ> の技データは積んだ技から命中・Cri値を引き継ぐため。
@@ -267,6 +269,7 @@ fn evaluate_one_content(
         title_added_damage_rate,
         damage_contributions: entry.damage_contributions.clone(),
         skill_added_damage_rate: entry.skill_added_damage_rate,
+        skill_enemy_stat_defense_rate: entry.skill_enemy_stat_defense_rate,
         element_value: entry.element_value,
     };
 
@@ -707,6 +710,7 @@ mod tests {
             id: "e".into(),
             name: "テスト敵".into(),
             defense: 990,
+            stat_defense: None,
             damage_reduction: 0,
             cut_rate_a: 1.0,
             element_threshold: 90,
@@ -813,6 +817,7 @@ mod tests {
             coefficients: coefficients(),
             damage_contributions: Vec::new(),
             skill_added_damage_rate: 0.0,
+            skill_enemy_stat_defense_rate: 0.0,
             element_value: 0,
             flag: None,
             rotation: None,
@@ -857,6 +862,7 @@ mod tests {
             coefficients: coefficients(),
             damage_contributions: Vec::new(),
             skill_added_damage_rate: 0.0,
+            skill_enemy_stat_defense_rate: 0.0,
             element_value: 0,
             flag: None,
             rotation: None,
@@ -919,6 +925,7 @@ mod tests {
             title_added_damage_rate: 0.0,
             damage_contributions: Vec::new(),
             skill_added_damage_rate: 0.0,
+            skill_enemy_stat_defense_rate: 0.0,
             element_value: 0,
         };
         let filler = calculate_damage(&material, &to_target_for(&input(filler_skill)));
@@ -969,6 +976,7 @@ mod tests {
             coefficients: coefficients(),
             damage_contributions: Vec::new(),
             skill_added_damage_rate: 0.0,
+            skill_enemy_stat_defense_rate: 0.0,
             element_value: 0,
             flag: None,
             rotation: None,
@@ -1023,6 +1031,7 @@ mod tests {
             coefficients: coefficients(),
             damage_contributions: Vec::new(),
             skill_added_damage_rate: 0.0,
+            skill_enemy_stat_defense_rate: 0.0,
             element_value: 0,
             flag: None,
             rotation: None,
@@ -1038,6 +1047,7 @@ mod tests {
             coefficients: coefficients(),
             damage_contributions: Vec::new(),
             skill_added_damage_rate: 0.0,
+            skill_enemy_stat_defense_rate: 0.0,
             element_value: 0,
             flag: None,
             rotation: None,

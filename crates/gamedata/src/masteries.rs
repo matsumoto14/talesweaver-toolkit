@@ -1223,6 +1223,7 @@ const MASTERIES: &[MasteryDef] = &[
             },
         note: "攻撃ダメージが増加する。(+3%)",
     },
+    // 効果は character_skills.rs の maximin_invective_insult が持つ(二重計上防止)。
     MasteryDef {
         id: "maximin_m2_1",
         game_character_id: "maximin",

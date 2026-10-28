@@ -38,6 +38,9 @@ export function singleEffectLabel(e: SkillEffect): string | null {
   if ("added_damage_rate" in e) {
     return t("追加ダメージ(割合) {v}", { v: fmtSigned(e.added_damage_rate.percent, { max: 2 }, "%") });
   }
+  if ("enemy_stat_defense_rate" in e) {
+    return t("敵のステータス防御 {v}", { v: fmtSigned(e.enemy_stat_defense_rate.percent, { max: 2 }, "%") });
+  }
   if ("damage_per_level" in e) {
     const { category, percent } = e.damage_per_level;
     if (category === "taken_damage_reduction" && percent < 0) {

@@ -1740,6 +1740,7 @@ fn build_damage_input(
     let damage_contributions =
         damage_inputs::damage_contributions_of(stat_sources, buffs, &equipment, &skill);
     let skill_added_damage_rate = damage_inputs::added_damage_rate_of(stat_sources, &skill);
+    let skill_enemy_stat_defense_rate = damage_inputs::enemy_stat_defense_rate_of(stat_sources, &skill);
     let element_value = damage_inputs::element_value_for(
         game_character_id,
         &equipment,
@@ -1760,6 +1761,7 @@ fn build_damage_input(
             title_attack_damage_rate: title_damage_rate,
             title_added_damage_rate,
             skill_added_damage_rate,
+            skill_enemy_stat_defense_rate,
             damage_contributions,
             element_value,
         },
@@ -1794,6 +1796,8 @@ fn damage_with_optional_combo(
         damage_inputs::damage_contributions_of(stat_sources, buffs, equipment, &normal);
     normal_target.skill_added_damage_rate =
         damage_inputs::added_damage_rate_of(stat_sources, &normal);
+    normal_target.skill_enemy_stat_defense_rate =
+        damage_inputs::enemy_stat_defense_rate_of(stat_sources, &normal);
     normal_target.skill = normal;
     Ok(domain::calculate_damage_with_combo(
         material,
@@ -3487,6 +3491,10 @@ pub fn evaluate_contents(
             &skill,
         ),
         skill_added_damage_rate: damage_inputs::added_damage_rate_of(
+            &character.stat_sources,
+            &skill,
+        ),
+        skill_enemy_stat_defense_rate: damage_inputs::enemy_stat_defense_rate_of(
             &character.stat_sources,
             &skill,
         ),

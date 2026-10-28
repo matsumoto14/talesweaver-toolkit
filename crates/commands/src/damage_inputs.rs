@@ -48,6 +48,15 @@ pub fn added_damage_rate_of(sources: &domain::StatSources, skill: &domain::Skill
     )
 }
 
+/// キャラスキルによる敵のステータス防御の増減率(毒舌【侮辱】)。
+pub fn enemy_stat_defense_rate_of(sources: &domain::StatSources, skill: &domain::Skill) -> f64 {
+    sources.character_skills.enemy_stat_defense_rate(
+        gamedata::character_skill_catalog(),
+        &sources.masteries,
+        Some(skill),
+    )
+}
+
 /// 中ディレイ減少の寄与(キャラスキル + マスタリー)。
 /// キャラスキルとマスタリーはカタログが別なので、ここでまとめる。
 pub fn actual_delay_contributions(

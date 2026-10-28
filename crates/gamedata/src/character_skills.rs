@@ -1511,10 +1511,23 @@ const CHARACTER_SKILLS: &[CharacterSkillDef] = &[
             percent: -10.0,
         }],
         mastery_overrides: &[],
-        exclusive_with: &[],
+        exclusive_with: &["maximin_invective_insult"],
         requires: None,
         source_url: NOTICE_153335,
         note: "<毒舌>にマスタリー【暴言】を乗せた形。敵被ダメージ増加(+10%)",
+    },
+    CharacterSkillDef {
+        id: "maximin_invective_insult",
+        game_character_id: "maximin",
+        name: "毒舌【侮辱】",
+        audience: SkillAudience::Enemy,
+        max_level: 1,
+        effects: &[SkillEffect::EnemyStatDefenseRate { percent: -10.0 }],
+        mastery_overrides: &[],
+        exclusive_with: &["maximin_invective_abuse"],
+        requires: None,
+        source_url: WIKI,
+        note: "<毒舌>にマスタリー【侮辱】を乗せた形。敵の全能力値 −10%。防御力はステータス分だけが下がる(固定防御は不変。wiki カテゴリ C)。暴言とは同時に取れない",
     },
     CharacterSkillDef {
         id: "joshua_weaken",
@@ -1916,6 +1929,35 @@ mod tests {
     /// アナイスの守護型 / 人形型 / 破壊型のキャラスキルは互いに排他で、排他は双方向に付く
     /// (`toggleCharacterSkill` は順方向しか見ない)。
     #[test]
+    fn マキシミンの暴言と侮辱は双方向に排他() {
+        let def = |id: &str| CHARACTER_SKILLS.iter().find(|d| d.id == id).unwrap();
+        assert!(def("maximin_invective_abuse")
+            .exclusive_with
+            .contains(&"maximin_invective_insult"));
+        assert!(def("maximin_invective_insult")
+            .exclusive_with
+            .contains(&"maximin_invective_abuse"));
+    }
+
+    /// 侮辱の効き先は敵のステータス防御(聖域14 は 1500 が対象なので −150)。
+    #[test]
+    fn 侮辱はステータス防御の10パーセント減として聖域14に効く() {
+        let skills = CharacterSkills {
+            skill_ids: vec!["maximin_invective_insult".to_string()],
+            skill_levels: Default::default(),
+        };
+        let rate = skills.enemy_stat_defense_rate(
+            CHARACTER_SKILLS,
+            &Masteries::default(),
+            None,
+        );
+        assert!((rate - -0.10).abs() < 1e-12);
+        let e = crate::find_enemy("relic_sanctuary_14").unwrap();
+        assert_eq!((e.stat_defense.unwrap() as f64 * -rate).floor(), 150.0);
+        assert_eq!(crate::find_enemy("goitia_h").unwrap().stat_defense, None);
+    }
+
+    #[test]
     fn アナイスの3つの型は双方向に排他() {
         let groups: [&[&str]; 3] = [
             &["anais_hard_weapon", "anais_loki_specialization"],
@@ -1957,8 +1999,8 @@ mod tests {
 
     /// 収録件数。カタログを入れ替えたら数を更新する(黙って増減させない)。
     #[test]
-    fn 収録は101件() {
-        assert_eq!(CHARACTER_SKILLS.len(), 101);
+    fn 収録は102件() {
+        assert_eq!(CHARACTER_SKILLS.len(), 102);
     }
 
     /// 上限はカテゴリ側(`DamageCategory::cap`)が見るので、ここでは

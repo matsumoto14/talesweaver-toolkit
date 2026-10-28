@@ -8,6 +8,11 @@ pub struct Enemy {
     pub name: String,
     /// 防御力(wiki: カテゴリC)
     pub defense: i64,
+    /// 防御力のうちステータス分(敵の DEF×3 相当。`defense` = これ + 固定防御)。
+    /// 「敵の全能力値 −n%」のデバフ(毒舌【侮辱】)はこの分だけを下げる。
+    /// `None` = 出典で確認できない
+    #[serde(default)]
+    pub stat_defense: Option<i64>,
     /// 被害減少(wiki: カテゴリM、固定値)。与ダメージに加算するので減少は負値で持つ(旧リポ af63 の符号反転)
     pub damage_reduction: i64,
     /// カット率A(wiki: カテゴリV1)。乗数そのもの(1.0 = 減少なし)。旧リポ af64

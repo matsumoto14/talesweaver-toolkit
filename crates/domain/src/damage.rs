@@ -194,6 +194,9 @@ pub struct DamageTarget {
     /// キャラスキルの割合追加ダメージ(§5 新-割合)。形態で絞るスキルの解決は呼び出し側
     /// (`CharacterSkills::added_damage_rate`)
     pub skill_added_damage_rate: f64,
+    /// キャラスキルによる敵のステータス防御の増減率(小数、−0.10 = −10%。
+    /// `CharacterSkills::enemy_stat_defense_rate`)。効くのは `Enemy::stat_defense` の分だけ
+    pub skill_enemy_stat_defense_rate: f64,
     /// キャラスキル・マスタリー・バフの、与ダメージ式のカテゴリへの寄与(カタログの解決は
     /// 呼び出し側)。効き先はカテゴリごとに違う(X4 攻撃ダメージ(スキル)、L 最終ダメージ、
     /// E1/E2 スキル倍率増加 …)ので、値だけでなく**どのカテゴリか**を持つ。`source` は
@@ -881,6 +884,23 @@ pub fn calculate_damage(material: &DamageMaterial, target: &DamageTarget) -> Dam
         "敵の防御力",
         target.enemy.defense as f64,
     );
+    // 侮辱など「敵の全能力値 −n%」: wiki カテゴリ C「防御力(ステータス)を下げるデバフ(固定値には
+    // 影響しない)」。減るのはステータス分だけなので、その内訳が分かる敵にだけ効く
+    // (`None` は 0 扱いにせず何も足さない)
+    if target.skill_enemy_stat_defense_rate < 0.0 {
+        if let Some(stat_defense) = target.enemy.stat_defense {
+            let reduced = (stat_defense as f64 * -target.skill_enemy_stat_defense_rate).floor();
+            if reduced > 0.0 {
+                add_traced(
+                    &mut totals,
+                    &mut category_contributions,
+                    TargetDefense,
+                    "毒舌【侮辱】",
+                    -reduced,
+                );
+            }
+        }
+    }
     add_traced(
         &mut totals,
         &mut category_contributions,
@@ -1448,6 +1468,7 @@ mod tests {
             title_attack_damage_rate: 0.0,
             title_added_damage_rate: 0.0,
             skill_added_damage_rate: 0.0,
+            skill_enemy_stat_defense_rate: 0.0,
             damage_contributions: Vec::new(),
             skill: Skill {
                 id: "s".into(),
@@ -1490,6 +1511,7 @@ mod tests {
                 id: "e".into(),
                 name: "テスト敵".into(),
                 defense: 990,
+                stat_defense: None,
                 damage_reduction: 0,
                 cut_rate_a: 1.0,
                 element_threshold: 90,
@@ -2054,6 +2076,7 @@ mod tests {
             id: "brothers_forge".into(),
             name: "兄弟の鍛冶場".into(),
             defense: 7050,
+            stat_defense: None,
             damage_reduction: -5850,
             cut_rate_a: 0.405,
             agi: Some(1552),
@@ -2854,6 +2877,30 @@ mod tests {
             calculate_damage(&m, &tg).total,
             calculate_damage(&material(), &tg).total
         );
+    }
+
+    /// 敵の全能力値 −10%(毒舌【侮辱】)は、敵のステータス防御の分だけを下げる。
+    /// 内訳が分からない敵(`stat_defense = None`)には何も足さない。
+    #[test]
+    fn 敵のステータス防御減少はステータス分だけに効く() {
+        let m = material();
+        let defense_of = |stat_defense: Option<i64>, rate: f64| {
+            let mut tg = target();
+            tg.enemy.defense = 77_790;
+            tg.enemy.stat_defense = stat_defense;
+            tg.skill_enemy_stat_defense_rate = rate;
+            let r = calculate_damage(&m, &tg);
+            r.trace
+                .category_contributions
+                .iter()
+                .filter(|c| c.category == DamageCategory::TargetDefense)
+                .map(|c| c.value)
+                .sum::<f64>()
+        };
+        assert_eq!(defense_of(Some(1500), 0.0), 77_790.0);
+        assert_eq!(defense_of(Some(1500), -0.10), 77_790.0 - 150.0);
+        assert_eq!(defense_of(Some(1555), -0.10), 77_790.0 - 155.0); // 切り捨て
+        assert_eq!(defense_of(None, -0.10), 77_790.0);
     }
 
     /// カテゴリ供給源内訳(トレースの掘り下げ用)は、非 0 の供給源だけを積み、

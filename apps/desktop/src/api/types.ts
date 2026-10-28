@@ -129,6 +129,8 @@ export interface Enemy {
   id: string;
   name: string;
   defense: number;
+  /** 防御力のうちステータス分(侮辱などの全能力値減少が効く分)。null = 出典で確認できない */
+  stat_defense: number | null;
   damage_reduction: number;
   cut_rate_a: number;
   element_threshold: number;
@@ -421,6 +423,8 @@ export type SkillEffect =
   | { accuracy_rate: { per_level: number; shift: number[] } }
   /** 割合追加ダメージ(§5 新-割合)。与ダメージ式の外で、合計ダメージに乗る */
   | { added_damage_rate: { percent: number } }
+  /** 敵のステータス防御の増減(% 表記、−10 = −10%)。固定防御には効かない(Enemy.stat_defense の分だけ) */
+  | { enemy_stat_defense_rate: { percent: number } }
   /** SLv(= スタック数)に比例する与ダメージカテゴリへの加算(`percent × SLv`) */
   | { damage_per_level: { category: DamageCategory; percent: number } }
   /** 技とは別枠のダメージ(<フラグ>)。与ダメージ式のカテゴリには何も足さない */

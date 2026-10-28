@@ -86,6 +86,9 @@ pub enum SkillEffect {
     /// **合計ダメージ**(与ダメージ合計 + 武器強化追加合計)に乗る。シャープネスビジョン・
     /// 武器のランダムOP・称号と同じ枠に合流する
     AddedDamageRate { percent: f64 },
+    /// 敵のステータス防御(`Enemy::stat_defense`)の増減。% 表記(−10.0 = −10%)。
+    /// 固定防御には効かない(wiki カテゴリ C)。毒舌【侮辱】の「敵の全能力値 −10%」
+    EnemyStatDefenseRate { percent: f64 },
     /// SLv(= スタック数)に比例する与ダメージカテゴリへの加算。`percent × SLv`。
     /// SLv は `CharacterSkills::skill_levels` から引き、上限は `CharacterSkillDef::max_level`
     /// (ブレンドの「敵の被ダメージ +1% × スタック(最大 10)」)
@@ -143,6 +146,9 @@ impl SkillEffect {
             }
             SkillEffect::AddedDamageRate { percent } => {
                 format!("追加ダメージ(割合) {}%", signed(*percent))
+            }
+            SkillEffect::EnemyStatDefenseRate { percent } => {
+                format!("敵のステータス防御 {}%", signed(*percent))
             }
             SkillEffect::DamagePerLevel { category, percent } => {
                 if *category == DamageCategory::TakenDamageReduction && *percent < 0.0 {
@@ -390,6 +396,24 @@ impl CharacterSkills {
             .flat_map(|(_, effects)| effects.iter())
             .filter_map(|e| match e {
                 SkillEffect::AddedDamageRate { percent } => Some(percent / 100.0),
+                _ => None,
+            })
+            .sum()
+    }
+
+    /// 敵のステータス防御の増減率 Σ(小数表現、−0.10 = −10%)。形態で絞るスキルは条件に合う技のときだけ。
+    pub fn enemy_stat_defense_rate(
+        &self,
+        catalog: &CharacterSkillCatalog,
+        masteries: &Masteries,
+        skill: Option<&Skill>,
+    ) -> f64 {
+        self.resolved(catalog, masteries)
+            .into_iter()
+            .filter(|(def, _)| def.effective_for(skill))
+            .flat_map(|(_, effects)| effects.iter())
+            .filter_map(|e| match e {
+                SkillEffect::EnemyStatDefenseRate { percent } => Some(percent / 100.0),
                 _ => None,
             })
             .sum()
