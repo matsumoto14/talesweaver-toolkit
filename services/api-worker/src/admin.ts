@@ -6,9 +6,15 @@ import { verifyAccess } from "./access";
 import type { AccessEnv } from "./access";
 import { costUsd } from "./pricing";
 import { ADMIN_HTML } from "./admin-html";
+import { EFFORT_CHOICES, MODEL_CHOICES, loadSettings, resetSettings, saveSettings, validateSettings } from "./settings";
+import type { Settings } from "./settings";
 
 export interface AdminEnv extends AccessEnv {
   WIKI: D1Database;
+  API?: KVNamespace;
+  SELECT_MODEL?: string;
+  UNDERSTAND_MODEL?: string;
+  SELECT_EFFORT?: string;
 }
 
 function json(value: unknown, status = 200): Response {
@@ -35,6 +41,35 @@ export async function handleAdmin(request: Request, env: AdminEnv, url: URL): Pr
     return json(detail);
   }
   if (url.pathname === "/api/summary" && request.method === "GET") return json(await getSummary(env.WIKI, url.searchParams));
+  if (url.pathname === "/api/settings") return handleSettings(request, env);
+  return json({ error: "not found" }, 404);
+}
+
+// --- 設定(モデル・effort) ------------------------------------------------------
+
+async function handleSettings(request: Request, env: AdminEnv): Promise<Response> {
+  if (!env.API) return json({ error: "KV が未設定です" }, 503);
+  if (request.method === "GET") {
+    return json({ ...(await loadSettings(env)), choices: { models: MODEL_CHOICES, efforts: EFFORT_CHOICES } });
+  }
+  // 別サイトからのフォーム送信を通さないよう JSON だけ受ける(JSON の POST は CORS の事前確認で止まる)
+  if (!(request.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "JSON で送ってください" }, 415);
+  if (request.method === "PUT") {
+    const body = (await request.json().catch(() => null)) as Partial<Settings> | null;
+    const next: Settings = {
+      understandModel: String(body?.understandModel ?? ""),
+      selectModel: String(body?.selectModel ?? ""),
+      selectEffort: String(body?.selectEffort ?? ""),
+    };
+    const error = validateSettings(next);
+    if (error) return json({ error }, 400);
+    await saveSettings(env.API, next);
+    return json(await loadSettings(env));
+  }
+  if (request.method === "DELETE") {
+    await resetSettings(env.API);
+    return json({ ok: true });
+  }
   return json({ error: "not found" }, 404);
 }
 

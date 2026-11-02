@@ -3,7 +3,7 @@
  * 差し替える(`vi.mock("../src/claude")`)。env から client を作る関数はここ 1 か所
  * (`createClient`)にまとめる。
  *
- * モデルは wrangler.toml の UNDERSTAND_MODEL / SELECT_MODEL(既定は両方 claude-haiku-4-5)。キャッシュは理解のページ一覧だけ。AI Gateway 経由なら
+ * モデルは wrangler.toml の UNDERSTAND_MODEL / SELECT_MODEL(既定は両方 claude-haiku-5-5)。キャッシュは理解のページ一覧だけ。AI Gateway 経由なら
  * `cf-aig-collect-log: false` を毎回付ける(質問文をログに残さない)。
  */
 import Anthropic from "@anthropic-ai/sdk";
@@ -47,10 +47,11 @@ const AI_GATEWAY_HEADERS = { "cf-aig-collect-log": "false" };
 /** 理解・節選びの system(eval/harness.test.ts もこれを使う。プロンプトを二重に持たない)。 */
 export const UNDERSTAND_SYSTEM = "wiki への質問かどうかと、検索の手がかりを内部用に決めるだけ。ここで書く文字は画面に出ない。";
 export const SECTION_SYSTEM = "wiki の目次から、質問の答えが書いてある節を内部用に選ぶだけ。ここで書く文字は画面に出ない。";
-const UNDERSTAND_TIMEOUT_MS = 4_000;
+// Haiku 5.5 は既定で思考が走る。思考も時間と max_tokens に数えるので余裕を持たせる
+const UNDERSTAND_TIMEOUT_MS = 15_000;
 const SELECT_TIMEOUT_MS = 30_000;
-const UNDERSTAND_MAX_TOKENS = 1024;
-const SECTION_MAX_TOKENS = 256;
+const UNDERSTAND_MAX_TOKENS = 8_000;
+const SECTION_MAX_TOKENS = 4_000;
 // 思考が走るモデル(Sonnet 5 / Opus 5.5)は思考も max_tokens に数えるので余裕を持たせる
 const SELECT_MAX_TOKENS = 16_000;
 

@@ -25,6 +25,7 @@ import { PAGE_SLOTS } from "./schema";
 import type { Understand } from "./schema";
 import { wikiUrl } from "./wiki-url";
 import { verify } from "./verify";
+import { withSettings } from "./settings";
 import type { Ctx, Dropped } from "./verify";
 import { buildAnswer } from "./answer";
 import type { AnswerResponse, Playbook } from "./answer";
@@ -204,7 +205,7 @@ export default {
       if (url.pathname === "/ask" && request.method === "POST") {
         const missing = missingSecrets(env, ["ANTHROPIC_API_KEY", "NONCE_SECRET"]);
         if (missing.length > 0) return cors(json({ error: `中継サーバーが未設定です: ${missing.join(", ")}` }, 503));
-        return cors(await ask(request, env as AskEnv, ctx));
+        return cors(await ask(request, (await withSettings(env)) as AskEnv, ctx));
       }
       if (url.pathname === "/react" && request.method === "POST") {
         const missing = missingSecrets(env, ["NONCE_SECRET"]);

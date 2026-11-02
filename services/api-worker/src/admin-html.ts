@@ -97,6 +97,9 @@ export const ADMIN_HTML = `<!doctype html>
   pre { white-space: pre-wrap; word-break: break-word; background: var(--inset); border-radius: 6px; padding: 8px; max-height: 300px; overflow: auto; font-size: 12px; }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
   .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  .settings { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .settings label { display: flex; gap: 6px; align-items: center; }
+  .settings select { font: inherit; }
   .conv { list-style: none; padding: 0; margin: 0; }
   .conv li { padding: 3px 0; }
   .conv li.cur { font-weight: 700; }
@@ -113,6 +116,12 @@ export const ADMIN_HTML = `<!doctype html>
   <section class="panel">
     <h2>いまの状態</h2>
     <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section class="panel">
+    <h2>設定</h2>
+    <div class="settings" id="settings"></div>
+    <div class="muted" style="font-size:12px;margin-top:6px">変えた瞬間に保存。/ask への反映は最大 60 秒遅れます(KV)。既定値は wrangler.toml。</div>
   </section>
 
   <section class="panel">
@@ -165,6 +174,51 @@ export const ADMIN_HTML = `<!doctype html>
     const res = await fetch(path, { headers: { accept: "application/json" } });
     if (!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
+  }
+
+  // ---- 設定 ---------------------------------------------------------------------
+
+  async function sendSettings(method, body) {
+    const res = await fetch("/api/settings", {
+      method, headers: { "content-type": "application/json", accept: "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+    return data;
+  }
+
+  async function loadSettings() {
+    const box = qs("settings");
+    try {
+      const data = await api("/api/settings");
+      const s = data.settings, d = data.defaults, c = data.choices;
+      function select(key, label, options) {
+        return "<label>" + esc(label) + " <select data-k='" + key + "'>" +
+          options.map((o) => "<option value='" + esc(o) + "'" + (o === s[key] ? " selected" : "") + ">" +
+            esc(o === "" ? "(モデルの既定)" : o) + (o === d[key] ? " ・既定" : "") + "</option>").join("") +
+          "</select></label>";
+      }
+      box.innerHTML =
+        select("understandModel", "理解", c.models) +
+        select("selectModel", "選択・回す道", c.models) +
+        select("selectEffort", "effort", c.efforts) +
+        (data.saved ? "<button id='settings-reset'>既定に戻す</button>" : "<span class='muted'>既定値で動作中</span>") +
+        "<span class='muted' id='settings-msg'></span>";
+      box.querySelectorAll("select").forEach((el) => el.addEventListener("change", async () => {
+        const next = { ...s };
+        box.querySelectorAll("select").forEach((x) => { next[x.dataset.k] = x.value; });
+        try { await sendSettings("PUT", next); await loadSettings(); qs("settings-msg").textContent = "保存しました"; }
+        catch (e) { await loadSettings(); qs("settings-msg").textContent = "保存できません: " + e.message; }
+      }));
+      const reset = qs("settings-reset");
+      if (reset) reset.addEventListener("click", async () => {
+        try { await sendSettings("DELETE"); await loadSettings(); qs("settings-msg").textContent = "既定に戻しました"; }
+        catch (e) { qs("settings-msg").textContent = "戻せません: " + e.message; }
+      });
+    } catch (e) {
+      box.innerHTML = "<span class='muted'>設定を読めません: " + esc(e.message) + "</span>";
+    }
   }
 
   // ---- いまの状態 + グラフ -------------------------------------------------------
@@ -555,6 +609,7 @@ export const ADMIN_HTML = `<!doctype html>
   document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.t)));
   qs("more").addEventListener("click", () => loadLogs(false));
 
+  loadSettings();
   loadSummary();
   loadLogs(true);
 })();

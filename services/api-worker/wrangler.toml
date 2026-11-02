@@ -38,8 +38,8 @@ namespace_id = "1001"
 [vars]
 # 空文字なら SDK 既定(直接 Anthropic API)。値があれば Anthropic クライアントの baseURL に渡す。
 AI_GATEWAY_URL = ""
-SELECT_MODEL = "claude-haiku-4-5"
-UNDERSTAND_MODEL = "claude-haiku-4-5"
+SELECT_MODEL = "claude-haiku-5-5"
+UNDERSTAND_MODEL = "claude-haiku-5-5"
 RATE_LIMIT_PER_DAY = "20"
 
 # 管理画面(admin.tw-context.dev)の Cloudflare Access。Zero Trust でアプリを作ったあとに書く。
