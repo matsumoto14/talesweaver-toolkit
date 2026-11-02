@@ -32,7 +32,24 @@ export const ADMIN_HTML = `<!doctype html>
   .seg button { border: 0; background: var(--panel); color: var(--muted); padding: 4px 10px; font: inherit; cursor: pointer; }
   .seg button.on { background: var(--accent); color: #fff; }
   main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 12px 16px; }
-  @media (min-width: 1100px) { main.with-detail { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } #detail { grid-column: 2; grid-row: 1 / span 3; } }
+  .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  #detail.idle { display: none; }
+  /* PC: 左に概要と一覧、右に詳細を常設。詳細は画面に追従し、中だけスクロールする(行を押しても視線が上に飛ばない) */
+  @media (min-width: 1100px) {
+    /* 左: 概要 → 一覧。右: グラフ → 詳細(一覧が概要のすぐ下から始まる) */
+    main { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "kpi chart" "list chart" "list detail"; grid-template-rows: auto auto 1fr; align-items: start; }
+    .col { display: contents; }
+    #p-kpi { grid-area: kpi; }
+    #p-kpi .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    #p-chart { grid-area: chart; }
+    #p-list { grid-area: list; }
+    #detail { grid-area: detail; }
+    #detail { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+    #detail.idle { display: block; }
+    .item .sub { grid-column: 2 / span 2; }
+  }
+  #detail .placeholder { color: var(--muted); padding: 40px 0; text-align: center; }
+  kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
   .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; min-width: 0; }
   h2 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 0 10px; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -97,7 +114,7 @@ export const ADMIN_HTML = `<!doctype html>
   pre { white-space: pre-wrap; word-break: break-word; background: var(--inset); border-radius: 6px; padding: 8px; max-height: 300px; overflow: auto; font-size: 12px; }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
   .kv dt { color: var(--muted); } .kv dd { margin: 0; }
-  .settings { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .settings { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 12px; }
   .settings label { display: flex; gap: 6px; align-items: center; }
   .settings select { font: inherit; }
   .conv { list-style: none; padding: 0; margin: 0; }
@@ -110,21 +127,17 @@ export const ADMIN_HTML = `<!doctype html>
   <h1>wiki に聞く — 監視</h1>
   <span class="muted" id="status"></span>
   <span class="spacer"></span>
+  <div class="settings" id="settings" title="変えた瞬間に保存。/ask への反映は最大 60 秒遅れます(KV)。既定値は wrangler.toml"></div>
   <span class="seg" id="range"><button data-d="7">7 日</button><button data-d="30" class="on">30 日</button><button data-d="90">90 日</button></span>
 </header>
 <main id="main">
-  <section class="panel">
+  <div class="col">
+  <section class="panel" id="p-kpi">
     <h2>いまの状態</h2>
     <div class="kpis" id="kpis"></div>
   </section>
 
-  <section class="panel">
-    <h2>設定</h2>
-    <div class="settings" id="settings"></div>
-    <div class="muted" style="font-size:12px;margin-top:6px">変えた瞬間に保存。/ask への反映は最大 60 秒遅れます(KV)。既定値は wrangler.toml。</div>
-  </section>
-
-  <section class="panel">
+  <section class="panel" id="p-chart">
     <h2>日別の結果</h2>
     <div class="legend" id="legend"></div>
     <div id="chart-outcome"></div>
@@ -132,15 +145,17 @@ export const ADMIN_HTML = `<!doctype html>
     <div id="chart-cost"></div>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="p-list">
     <div class="tabs" id="tabs">
       <button data-t="problem" class="on">直すべきもの</button>
       <button data-t="all">すべて</button>
-      <span class="muted" style="font-size:12px">行を押すと、どこで落ちたかが右に出ます</span>
+      <span class="muted" style="font-size:12px">行を押すと、どこで落ちたかが右に出ます。<kbd>↑</kbd><kbd>↓</kbd> で前後へ</span>
     </div>
     <div class="list" id="list"></div>
     <button id="more">さらに読む</button>
   </section>
+  </div>
+  <section class="panel idle" id="detail"><p class="placeholder">一覧の行を選ぶと、ここに処理の流れが出ます</p></section>
 </main>
 
 <script>
@@ -567,14 +582,12 @@ export const ADMIN_HTML = `<!doctype html>
   async function selectLog(id) {
     state.selectedId = id;
     document.querySelectorAll("#list .item").forEach((el) => el.classList.toggle("sel", Number(el.dataset.id) === id));
-    qs("main").classList.add("with-detail");
-    let detail = qs("detail");
-    if (!detail) {
-      detail = document.createElement("section");
-      detail.className = "panel";
-      detail.id = "detail";
-      qs("main").appendChild(detail);
-    }
+    const detail = qs("detail");
+    const wasIdle = detail.classList.contains("idle");
+    detail.classList.remove("idle");
+    detail.scrollTop = 0;
+    // 狭い画面では詳細が一覧の下に出るので、初回だけそこまで送る
+    if (wasIdle && !matchMedia("(min-width: 1100px)").matches) detail.scrollIntoView({ block: "start" });
     detail.innerHTML = "<p class='muted'>読み込み中…</p>";
     try {
       const data = await api("/api/logs/" + id);
@@ -608,6 +621,18 @@ export const ADMIN_HTML = `<!doctype html>
   }));
   document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.t)));
   qs("more").addEventListener("click", () => loadLogs(false));
+  // ↑↓ で一覧の前後へ(入力欄・選択欄にいるときは奪わない)
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    if (e.target.closest && e.target.closest("select, input, textarea")) return;
+    const items = [...document.querySelectorAll("#list .item")];
+    if (items.length === 0) return;
+    e.preventDefault();
+    const i = items.findIndex((el) => Number(el.dataset.id) === state.selectedId);
+    const next = items[i < 0 ? 0 : Math.min(items.length - 1, Math.max(0, i + (e.key === "ArrowDown" ? 1 : -1)))];
+    next.scrollIntoView({ block: "nearest" });
+    selectLog(Number(next.dataset.id));
+  });
 
   loadSettings();
   loadSummary();
